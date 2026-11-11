@@ -4,7 +4,7 @@ The public app is https://theforcebe.github.io/onslaught/. Source lives in `thef
 
 The gateway is deployed at `https://onslaught-gateway.onslaught-raid.workers.dev`. D1 is initialized, and `IDENTITY_KEY` has been generated directly into Cloudflare secret storage. Do not regenerate that key during onboarding. Cloudflare CLI authentication uses encrypted storage backed by Windows Credential Manager.
 
-Remaining activation: install `BNET_CLIENT_ID`, `BNET_CLIENT_SECRET`, and the private-repository `GITHUB_TOKEN`; connect the public gateway URL to Pages; establish the owner using `ADMIN_BNET_IDS`; verify real sign-in. The public roster remains empty. The demo is fictional and browser-local. Public GitHub issues are no longer an editing channel.
+The Battle.net client credentials and private-repository `GITHUB_TOKEN` are installed as Cloudflare secrets. Pages is connected to the gateway. Live checks confirm an empty public roster and HTTP 401 for anonymous private reads and writes. Remaining activation: verify real sign-in and establish the owner using `ADMIN_BNET_IDS`. The demo is fictional and browser-local. Public GitHub issues are no longer an editing channel.
 
 ## 1. Connect Cloudflare
 
@@ -55,6 +55,8 @@ Create a dedicated [fine-grained GitHub token](https://github.com/settings/perso
 - An expiration date you can maintain. No Actions, administration, organization, or public app repository permissions.
 
 Store it directly as Cloudflare secret `GITHUB_TOKEN`. Do not reuse a developer's GitHub CLI credential. The current `IDENTITY_KEY` is already installed. For a fresh independent deployment, generate at least 32 random bytes with a password manager; changing an existing key requires migrating member and character-owner IDs.
+
+The current repository token expires **February 8, 2027**. Renew it with the same repository and permissions, update the Cloudflare secret, and verify a private save before that date.
 
 ```sh
 npx wrangler secret put GITHUB_TOKEN
