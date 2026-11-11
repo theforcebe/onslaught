@@ -84,5 +84,78 @@ it("rejects malformed searches without upstream calls and bounds outage caching"
     rate,
   );
   expect(r.headers.get("Cache-Control")).toContain("max-age=60");
-  expect(await r.json()).toEqual({ available: false, results: [] });
+  expect(await r.json()).toMatchObject({
+    available: false,
+    results: [],
+    retryAfter: 60,
+  });
+  const again = await serveItemSearch(
+    new Request("https://gateway.example/api/items/search?q=dreamfoil"),
+    c,
+    rate,
+  );
+  expect(again.headers.get("Cache-Control")).toContain("max-age=60");
+});
+it("uses a credential-free Forever fallback with attribution when Wowhead declines requests", async () => {
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(new Response("Unavailable", { status: 403 }))
+    .mockResolvedValueOnce(
+      Response.json({
+        version: "forever",
+        results: [
+          {
+            kind: "item",
+            version: "forever",
+            id: 13463,
+            name: "Dreamfoil",
+            quality: "common",
+          },
+          { kind: "item", version: "retail", id: 999, name: "Wrong version" },
+        ],
+      }),
+    );
+  vi.stubGlobal("fetch", fetch);
+  const c = cache(),
+    r = await serveItemSearch(
+      new Request("https://gateway.example/api/items/search?q=dreamfoil"),
+      c,
+      async () => {},
+    ),
+    data = await r.json();
+  expect(data).toMatchObject({
+    available: true,
+    provider: "thewowdb",
+    results: [{ id: 13463, name: "Dreamfoil", source: "thewowdb" }],
+  });
+  expect(r.headers.get("Cache-Control")).toContain("max-age=3600");
+  expect(fetch.mock.calls[1][0]).toBe(
+    "https://thewowdb.com/api/v1/forever/item/?q=dreamfoil&per_page=100",
+  );
+  expect(fetch.mock.calls[1][1].headers).toEqual({
+    Accept: "application/json",
+  });
+});
+it("respects fallback rate-limit backoff in cached errors", async () => {
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(new Response("Unavailable", { status: 403 }))
+    .mockResolvedValueOnce(
+      new Response("Slow down", {
+        status: 429,
+        headers: { "Retry-After": "180" },
+      }),
+    );
+  vi.stubGlobal("fetch", fetch);
+  const c = cache(),
+    req = new Request("https://gateway.example/api/items/search?q=flask"),
+    r = await serveItemSearch(req, c, async () => {});
+  expect(r.headers.get("Cache-Control")).toContain("max-age=180");
+  expect((await r.json()).available).toBe(false);
+  expect(
+    (await serveItemSearch(req, c, async () => {})).headers.get(
+      "Cache-Control",
+    ),
+  ).toContain("max-age=180");
+  expect(fetch).toHaveBeenCalledTimes(2);
 });

@@ -1587,6 +1587,10 @@ export default function App() {
               >
                 Wowhead Forever
               </a>{" "}
+              · Item search:{" "}
+              <a href="https://thewowdb.com/" target="_blank" rel="noreferrer">
+                TheWoWDB
+              </a>{" "}
               · Game art © Blizzard
             </span>
           </footer>

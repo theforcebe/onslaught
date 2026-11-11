@@ -6580,3 +6580,23 @@ main {
     grid-template-columns: minmax(125px, 1fr) 1fr 18px;
   }
 }
+.item-attribution {
+  font-size: 10px;
+  color: #b9a3ab;
+  line-height: 1.5;
+}
+.item-attribution a {
+  color: #dbb78c;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.page-footer > span:last-child {
+  max-width: 65%;
+  line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .page-footer > span:last-child {
+    max-width: 100%;
+  }
+}

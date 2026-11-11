@@ -2,12 +2,14 @@ import { useEffect, useId, useState } from "react";
 import { Search, X } from "lucide-react";
 import { API_URL } from "./lib/api";
 import { ItemTooltip } from "./ItemTooltip";
+import { getItem, safeIcon } from "./lib/items";
 export type ItemSuggestion = {
   id: number;
   name: string;
   icon: string;
   quality: number;
   category: string;
+  source?: "thewowdb";
 };
 const cache = new Map<string, { at: number; results: ItemSuggestion[] }>();
 export function ItemPicker({
@@ -33,8 +35,13 @@ export function ItemPicker({
       return;
     }
     const old = cache.get(q);
-    if (old && Date.now() - old.at < 43200000) {
+    if (
+      old &&
+      Date.now() - old.at <
+        (old.results.some((r) => r.source === "thewowdb") ? 3600000 : 43200000)
+    ) {
       setResults(old.results);
+      setLoading(false);
       return;
     }
     const abort = new AbortController();
@@ -49,7 +56,7 @@ export function ItemPicker({
         const data = await r.json();
         if (!data.available)
           throw new Error(
-            "Wowhead search is temporarily unavailable. You can enter the item name below.",
+            "Item search is temporarily unavailable. You can enter the item name below.",
           );
         if (!abort.signal.aborted) {
           cache.set(q, { at: Date.now(), results: data.results });
@@ -87,7 +94,7 @@ export function ItemPicker({
           <label className="search item-search">
             <Search size={17} />
             <input
-              aria-label="Search Wowhead Forever items"
+              aria-label="Search Forever items"
               role="combobox"
               aria-expanded={!!results.length}
               aria-controls={id}
@@ -124,7 +131,7 @@ export function ItemPicker({
               : error ||
                 (query.length >= 2 && !results.length
                   ? "No matching suggestions. Refine the name or enter it manually."
-                  : "Search by name, then choose the exact item. Hover the preview to inspect it.")}
+                  : "Search by name, then choose the exact item. Refine broad searches to find more matches.")}
           </div>
           {!!results.length && (
             <div
@@ -145,11 +152,7 @@ export function ItemPicker({
                     aria-selected={active === i}
                     onClick={() => onChange(r)}
                   >
-                    <img
-                      src={`https://wow.zamimg.com/images/wow/icons/medium/${r.icon}.jpg`}
-                      alt=""
-                      loading="lazy"
-                    />
+                    <SuggestionIcon item={r} eager={i < 5} />
                     <span>
                       <strong>{r.name}</strong>
                       <small>
@@ -166,6 +169,57 @@ export function ItemPicker({
           )}
         </>
       )}
+      <small className="item-attribution">
+        Tooltips:{" "}
+        <a
+          href="https://www.wowhead.com/forever"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Wowhead Forever
+        </a>{" "}
+        ·{" "}
+        {value?.source === "thewowdb" ||
+        results.some((r) => r.source === "thewowdb")
+          ? "Search results from "
+          : "Catalog fallback: "}
+        <a
+          href="https://thewowdb.com/developers/"
+          target="_blank"
+          rel="noreferrer"
+        >
+          TheWoWDB
+        </a>
+      </small>
     </div>
+  );
+}
+function SuggestionIcon({
+  item,
+  eager,
+}: {
+  item: ItemSuggestion;
+  eager: boolean;
+}) {
+  const [icon, setIcon] = useState<string>();
+  useEffect(() => {
+    let current = true;
+    if (item.source === "thewowdb" && eager)
+      void getItem(item.id).then((r) => {
+        if (current) setIcon(safeIcon(r.item?.icon_url));
+      });
+    return () => {
+      current = false;
+    };
+  }, [item.id, item.source, eager]);
+  return (
+    <img
+      src={
+        icon ||
+        `https://wow.zamimg.com/images/wow/icons/medium/${item.icon}.jpg`
+      }
+      alt=""
+      loading="lazy"
+    />
   );
 }

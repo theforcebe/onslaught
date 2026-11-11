@@ -36,7 +36,7 @@ Revocation prevents future responses. It cannot erase previously viewed, downloa
 
 ## Input and dependencies
 
-Imports and raid text reject common credential patterns, but no scan can recognize every secret. Imported values render as text, never injected HTML. Item-service requests contain only item IDs, bounded numeric modifiers, or a normalized public item-name search (2–64 characters), never exports or authentication. Icon URLs and source protocols are constrained. Demo data is fictional and browser-local.
+Imports and raid text reject common credential patterns, but no scan can recognize every secret. Imported values render as text, never injected HTML. Item-service requests contain only item IDs, bounded numeric modifiers, or a normalized public item-name search (2–64 characters), never exports or authentication. Material search falls back to TheWoWDB’s documented, credential-free Forever API if Wowhead declines server requests. Both providers use fixed HTTPS hosts, bounded JSON, redirect rejection, shared caching and request limits. Icon URLs and source protocols are constrained. Demo data is fictional and browser-local.
 
 Source/build scans check common tokens and private keys and reject server secret variable names in public bundles. Pages Actions has no gateway credentials and uses pinned actions with explicit permissions. Run tests, type checks, build validation and dependency audit before release.
 

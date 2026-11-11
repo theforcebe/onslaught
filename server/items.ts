@@ -27,17 +27,23 @@ export async function serveItemSearch(
   )
     return new Response("Enter 2–64 characters", { status: 400 });
   const key = new Request(
-    `${url.origin}/item-search/v1?q=${encodeURIComponent(q)}`,
+    `${url.origin}/item-search/v3?q=${encodeURIComponent(q)}`,
   );
   const cached = await cache.match(key).catch(() => undefined);
-  if (cached)
-    return new Response(cached.body, {
+  if (cached) {
+    const data = (await cached.json()) as {
+      available: boolean;
+      provider?: string;
+      retryAfter?: number;
+    };
+    return new Response(JSON.stringify(data), {
       headers: {
         "Content-Type": "application/json",
-        "Cache-Control": "public, max-age=3600",
+        "Cache-Control": `public, max-age=${data.available ? (data.provider === "thewowdb" ? 3600 : 43200) : data.retryAfter || 60}`,
         "X-Content-Type-Options": "nosniff",
       },
     });
+  }
   let pending = searchFlight.get(q);
   if (!pending) {
     pending = (async () => {
@@ -48,8 +54,11 @@ export async function serveItemSearch(
         icon: string;
         quality: number;
         category: string;
+        source?: "thewowdb";
       }[] = [];
       let ok = false;
+      let provider = "wowhead",
+        retryAfter = 60;
       try {
         const r = await fetch(
           `https://www.wowhead.com/forever/search/suggestions-template?q=${encodeURIComponent(q)}`,
@@ -89,12 +98,82 @@ export async function serveItemSearch(
       } catch {
         /* An upstream outage never exposes request details. */
       }
+      if (!ok) {
+        try {
+          const r = await fetch(
+            `https://thewowdb.com/api/v1/forever/item/?q=${encodeURIComponent(q)}&per_page=100`,
+            {
+              redirect: "manual",
+              signal: AbortSignal.timeout(7000),
+              headers: { Accept: "application/json" },
+            },
+          );
+          if (r.status === 429)
+            retryAfter = Math.max(
+              60,
+              Math.min(3600, Number(r.headers.get("Retry-After")) || 60),
+            );
+          if (r.ok) {
+            const data = (await boundedItemJSON(r)) as {
+              version?: string;
+              results?: unknown[];
+            };
+            if (data.version === "forever" && Array.isArray(data.results)) {
+              ok = true;
+              provider = "thewowdb";
+              results = data.results
+                .filter(
+                  (v: any) =>
+                    v?.kind === "item" &&
+                    v.version === "forever" &&
+                    Number.isSafeInteger(v.id) &&
+                    v.id > 0 &&
+                    typeof v.name === "string",
+                )
+                .slice(0, 100)
+                .sort(
+                  (a: any, b: any) =>
+                    Number(!a.name.toLowerCase().startsWith(q)) -
+                      Number(!b.name.toLowerCase().startsWith(q)) ||
+                    a.name.localeCompare(b.name) ||
+                    a.id - b.id,
+                )
+                .slice(0, 20)
+                .map((v: any) => ({
+                  id: v.id,
+                  name: v.name.replace(/<[^>]*>/g, "").slice(0, 150),
+                  icon: "inv_misc_questionmark",
+                  quality:
+                    (
+                      {
+                        poor: 0,
+                        common: 1,
+                        uncommon: 2,
+                        rare: 3,
+                        epic: 4,
+                        legendary: 5,
+                      } as Record<string, number>
+                    )[v.quality] ?? 1,
+                  category: "Forever item",
+                  source: "thewowdb",
+                }));
+            }
+          }
+        } catch {
+          /* Both providers failing leaves manual item entry available. */
+        }
+      }
       const response = new Response(
-        JSON.stringify({ results, available: ok }),
+        JSON.stringify({
+          results,
+          available: ok,
+          provider,
+          ...(!ok ? { retryAfter } : {}),
+        }),
         {
           headers: {
             "Content-Type": "application/json",
-            "Cache-Control": `public, max-age=${ok ? 43200 : 60}`,
+            "Cache-Control": `public, max-age=${ok ? (provider === "thewowdb" ? 3600 : 43200) : retryAfter}`,
             "X-Content-Type-Options": "nosniff",
           },
         },
