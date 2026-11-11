@@ -46,6 +46,7 @@ import {
 import Dialogs from "./dialogs";
 import { AccessPanel } from "./AccessPanel";
 import { Dropdown } from "./Dropdown";
+import { RaidPlanner } from "./RaidPlanner";
 import {
   PUBLIC_ACCESS,
   ADMIN_ACCESS,
@@ -747,100 +748,14 @@ export default function App() {
     </>
   );
   const planner = (
-    <>
-      <div className="toolbar">
-        <div className="segmented">
-          {state.teams.map((t) => (
-            <button
-              className={team?.id === t.id ? "active" : ""}
-              key={t.id}
-              onClick={() => setSelectedTeam(t.id)}
-            >
-              {t.name}
-            </button>
-          ))}
-        </div>
-        <div className="button-row">
-          <button
-            className="btn secondary"
-            onClick={() => open({ type: "team", team })}
-          >
-            <Settings size={15} />
-            Configure team
-          </button>
-          {addButton("team", "New team")}
-        </div>
-      </div>
-      <div className="planner-header">
-        <div>
-          <h2>{team?.name}</h2>
-          <p>{team?.description}</p>
-        </div>
-        <div className="planner-capacity">
-          <strong>
-            {teamMembers.length}
-            <span>/{team?.size}</span>
-          </strong>
-          <small>Positions filled</small>
-        </div>
-      </div>
-      <div className="role-targets">
-        {(["tank", "healer", "melee", "ranged"] as const).map((r) => {
-          const count = teamMembers.filter((c) => c.role === r).length,
-            target =
-              r === "tank"
-                ? team?.tanks
-                : r === "healer"
-                  ? team?.healers
-                  : undefined;
-          return (
-            <div className={r} key={r}>
-              <RoleIcon role={r} size={20} />
-              <span>{label(r)}</span>
-              <strong>
-                {count}
-                {target !== undefined && <small>/{target}</small>}
-              </strong>
-              {target !== undefined && (
-                <span className="muted">
-                  {count < target ? `${target - count} needed` : "Target met"}
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      {groupGrid()}
-      <section className="panel spaced">
-        <div className="panel-title">
-          <h3>Available raiders</h3>
-          <span className="muted">Click a raider to assign a position</span>
-        </div>
-        <div className="bench">
-          {state.characters
-            .filter((c) => !c.teamId || c.teamId !== team?.id)
-            .map((c) => (
-              <Player
-                key={c.id}
-                character={c}
-                onClick={() => open({ type: "assign", character: c, team })}
-              />
-            ))}
-        </div>
-        {state.characters.every((c) => c.teamId === team?.id) && (
-          <p className="muted">
-            {state.characters.length
-              ? "Everyone on the roster has a position in this team. Import another character to grow your roster."
-              : "Your roster is empty. Import a character to fill the first position."}
-          </p>
-        )}
-      </section>
-      <p className="page-note">
-        <ShieldCheck size={15} />
-        Team size, group positions, and role targets can only be changed by
-        admins.
-      </p>
-    </>
+    <RaidPlanner
+      state={state}
+      team={team}
+      selectTeam={setSelectedTeam}
+      access={effectiveAccess}
+      change={change}
+      open={open}
+    />
   );
   const filtered = state.characters.filter(
     (c) =>
@@ -2041,7 +1956,7 @@ export default function App() {
           dialog={dialog}
           state={state}
           close={() => setDialog(undefined)}
-          change={(a) => void change(a)}
+          change={change}
           open={open}
           toast={toast}
           demo={demo}

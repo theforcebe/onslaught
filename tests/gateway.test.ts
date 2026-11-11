@@ -379,7 +379,7 @@ describe("credential and OAuth boundaries", () => {
             type: "character.update",
             characterId: doc.state.characters[0].id,
             role: "ranged",
-            spec: "",
+            spec: "Beast Mastery",
             notes: "Updated",
           },
         },

@@ -1,6 +1,7 @@
 import { RequestSchema, StateSchema } from "./model";
 import type { RaidState, Identity, ChangeRequest } from "./model";
 import { parseSimc, rejectCredentials } from "./parser";
+import { confirmedRaiders, validateProfile } from "./raid";
 export class ChangeError extends Error {
   constructor(
     message: string,
@@ -82,9 +83,19 @@ export function applyChange(
   switch (a.type) {
     case "character.import": {
       const snapshot = parseSimc(a.raw, at);
+      if (a.profile) {
+        const error = validateProfile(
+          snapshot.class,
+          a.profile,
+          snapshot.level,
+        );
+        if (error) throw new ChangeError(error);
+      }
       let c = s.characters.find((c) => c.id === a.characterId);
       if (c) {
         own(c.id);
+        if (c.class !== snapshot.class)
+          throw new ChangeError("This export has a different character class.");
         if (
           c.snapshot &&
           (c.snapshot.name.toLowerCase() !== snapshot.name.toLowerCase() ||
@@ -125,13 +136,25 @@ export function applyChange(
         class: snapshot.class,
         level: snapshot.level,
         snapshot,
+        ...(a.profile || {}),
       });
       summary = `Imported ${c.name}'s equipment`;
       break;
     }
     case "character.update": {
       const c = own(a.characterId);
-      Object.assign(c, { role: a.role, spec: a.spec, notes: a.notes });
+      const error = validateProfile(
+        c.class,
+        { role: a.role, spec: a.spec, buffs: a.buffs ?? c.buffs ?? [] },
+        c.level,
+      );
+      if (error) throw new ChangeError(error);
+      Object.assign(c, {
+        role: a.role,
+        spec: a.spec,
+        notes: a.notes,
+        ...(a.buffs ? { buffs: a.buffs } : {}),
+      });
       summary = `Updated ${c.name}'s raid profile`;
       break;
     }
@@ -156,7 +179,23 @@ export function applyChange(
       const members = s.characters.filter((c) => c.teamId === a.team.id);
       if (
         members.length > a.team.size ||
-        members.some((c) => (c.group || 1) > Math.ceil(a.team.size / 5))
+        members.some((c) => (c.group || 1) > Math.ceil(a.team.size / 5)) ||
+        s.events
+          .filter((e) => e.teamId === a.team.id)
+          .some(
+            (e) =>
+              Object.values(e.lineup || {}).some(
+                (g) => g > Math.ceil(a.team.size / 5),
+              ) ||
+              Array.from(
+                { length: Math.ceil(a.team.size / 5) },
+                (_, i) => i + 1,
+              ).some(
+                (g) =>
+                  Object.values(e.lineup || {}).filter((x) => x === g).length >
+                  Math.min(5, a.team.size - (g - 1) * 5),
+              ),
+          )
       )
         throw new ChangeError("Move members before reducing team size.");
       update(s.teams, a.team);
@@ -203,8 +242,84 @@ export function applyChange(
         throw new ChangeError("Choose a valid IANA time zone.");
       }
       const prev = s.events.find((e) => e.id === a.event.id);
-      update(s.events, { ...a.event, signups: prev?.signups || {} });
+      update(s.events, {
+        ...a.event,
+        signups: prev?.signups || {},
+        lineup: prev?.teamId === a.event.teamId ? prev.lineup : {},
+      });
       summary = `Scheduled ${a.event.title}`;
+      break;
+    }
+    case "event.assign": {
+      needAdmin();
+      const e = s.events.find((e) => e.id === a.eventId);
+      if (!e) throw new ChangeError("Raid not found.");
+      const team = s.teams.find((t) => t.id === e.teamId);
+      if (!team) throw new ChangeError("Team not found.");
+      const eligible = confirmedRaiders(s.characters, e);
+      if (!eligible.some((c) => c.id === a.characterId))
+        throw new ChangeError(
+          "Only team members marked Going can enter this raid lineup.",
+        );
+      const lineup = (e.lineup ||= {});
+      const previous = lineup[a.characterId];
+      if (a.swapWith) {
+        if (
+          a.swapWith === a.characterId ||
+          !eligible.some((c) => c.id === a.swapWith) ||
+          !a.group ||
+          lineup[a.swapWith] !== a.group
+        )
+          throw new ChangeError(
+            "Choose a confirmed raider in the destination group to swap.",
+          );
+        if (previous) lineup[a.swapWith] = previous;
+        else delete lineup[a.swapWith];
+      }
+      if (a.group === null) delete lineup[a.characterId];
+      else {
+        const capacity = Math.min(5, team.size - (a.group - 1) * 5);
+        if (
+          capacity <= 0 ||
+          Object.entries(lineup).filter(
+            ([id, g]) => id !== a.characterId && g === a.group,
+          ).length >= capacity
+        )
+          throw new ChangeError(
+            "That group is full. Drop onto a raider to swap, or choose another group.",
+          );
+        lineup[a.characterId] = a.group;
+      }
+      summary = `Updated ${e.title}'s confirmed lineup`;
+      break;
+    }
+    case "event.fill": {
+      needAdmin();
+      const e = s.events.find((e) => e.id === a.eventId);
+      if (!e) throw new ChangeError("Raid not found.");
+      const team = s.teams.find((t) => t.id === e.teamId);
+      if (!team) throw new ChangeError("Team not found.");
+      const lineup = (e.lineup ||= {});
+      for (const c of confirmedRaiders(s.characters, e)) {
+        if (lineup[c.id]) continue;
+        const groups = [
+          ...new Set([
+            c.group || 1,
+            ...Array.from(
+              { length: Math.ceil(team.size / 5) },
+              (_, i) => i + 1,
+            ),
+          ]),
+        ];
+        const group = groups.find(
+          (g) =>
+            g <= Math.ceil(team.size / 5) &&
+            Object.values(lineup).filter((x) => x === g).length <
+              Math.min(5, team.size - (g - 1) * 5),
+        );
+        if (group) lineup[c.id] = group;
+      }
+      summary = `Filled open positions for ${e.title}`;
       break;
     }
     case "event.signup": {
@@ -309,6 +424,16 @@ export function applyChange(
       summary = "Updated guild settings";
       break;
     }
+  }
+  // Declines and standing-team moves cannot leave ghost raiders in an event.
+  for (const e of s.events) {
+    if (!e.lineup) continue;
+    const eligible = new Set(
+      confirmedRaiders(s.characters, e).map((c) => c.id),
+    );
+    e.lineup = Object.fromEntries(
+      Object.entries(e.lineup).filter(([id]) => eligible.has(id)),
+    );
   }
   s.revision++;
   s.processedRequests.push(req.id);

@@ -195,6 +195,13 @@ export function project(doc: GuildDocument, identity?: Identity): GuildView {
       group: allowed("planner", c.teamId) ? c.group : undefined,
       notes: canSeeCharacter(a, c, identity) ? c.notes : "",
       snapshot: canSeeCharacter(a, c, identity) ? c.snapshot : undefined,
+      buffs:
+        canSeeCharacter(a, c, identity) ||
+        (allowed("planner", c.teamId) &&
+          allowed("attendance", c.teamId) &&
+          visibleCharacter(c.id))
+          ? c.buffs
+          : undefined,
       ownerBattleNet:
         a.admin || c.ownerBattleNet === identity?.id
           ? c.ownerBattleNet
@@ -213,6 +220,14 @@ export function project(doc: GuildDocument, identity?: Identity): GuildView {
       end: e.end,
       timeZone: e.timeZone,
       notes: allowed("attendance", e.teamId) ? e.notes : "",
+      lineup:
+        allowed("planner", e.teamId) && allowed("attendance", e.teamId)
+          ? Object.fromEntries(
+              Object.entries(e.lineup || {}).filter(([id]) =>
+                visibleCharacter(id),
+              ),
+            )
+          : undefined,
       signups: allowed("attendance", e.teamId)
         ? Object.fromEntries(
             Object.entries(e.signups).filter(([id]) => visibleCharacter(id)),
@@ -248,6 +263,8 @@ export function project(doc: GuildDocument, identity?: Identity): GuildView {
         (hasSection(a, "activity") &&
           !!entry.scope &&
           hasSection(a, entry.scope.section as Section) &&
+          (!["event.assign", "event.fill"].includes(entry.action) ||
+            hasSection(a, "planner")) &&
           entry.scope.teamIds.every((t) => hasTeam(a, t)) &&
           entry.scope.characterIds.every(visibleCharacter)),
     ),
@@ -281,7 +298,7 @@ export function actionScope(s: RaidState, action: RaidAction) {
     teamId =
       action.type === "event.save"
         ? action.event.teamId
-        : action.type === "event.signup"
+        : "eventId" in action
           ? s.events.find((e) => e.id === action.eventId)?.teamId
           : undefined;
   }
@@ -339,6 +356,8 @@ export function authorizeAction(
   const scope = actionScope(doc.state, action);
   if (
     !scope ||
+    (["event.assign", "event.fill"].includes(action.type) &&
+      !hasSection(a, "planner")) ||
     !hasSection(a, scope.section) ||
     !scope.teamIds.every((t) => hasTeam(a, t))
   )

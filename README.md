@@ -6,8 +6,9 @@ The raid headquarters for Ønslaught on WoW Forever. A responsive React app on G
 
 ## What works
 
-- **Roster and equipment:** paste or upload SimC exports, review before saving, inspect equipment, bags, modifiers, talents, professions, pet data, and original exports. Roster basics are public; gear and raw exports require permission. The live roster starts empty; the demo uses fictional characters.
-- **Raid planner:** multiple teams, configurable sizes and role targets, five-player groups, capacity validation, class colors and official class portraits.
+- **Roster and equipment:** guided SimC import with role cards, fixed class specializations, declared buffs and a final review. Inspect equipment, bags, modifiers, talents, professions, pet data, and original exports. Roster basics are public; gear and raw exports require permission. The initial live roster was empty; the demo uses fictional characters.
+- **Raid planner:** event-specific confirmed lineups, drag-and-drop groups and swaps, a confirmed bench, fill-open-positions, and a keyboard/touch alternative. Team sizes and role targets are enforced on the server; declines and team changes remove invalid positions.
+- **Buff coverage:** an interactive map of declared providers, grouped by in-lineup, confirmed bench, or unconfirmed availability. Select an ability to highlight providers and jump to their raid positions. Forever-specific rules distinguish raid-wide buffs and mutually exclusive alternatives. See [planning behavior and sources](docs/RAID_PLANNING.md).
 - **Loot council:** verified item IDs and sources, class eligibility, member requests, ordered council priorities, current equipment comparison, immutable awards and written rationale.
 - **Preparation:** per-raid or guild-stock consumable targets, attributed member commitments, progress and shortages.
 - **Schedule:** raid events, going/tentative/absent responses, attendance lists, time-zone display, and UTC iCalendar downloads.

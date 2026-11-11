@@ -105,6 +105,7 @@ export const CharacterSchema = z
     role: z.enum(ROLES),
     spec: text,
     ownerGithub: github.optional(),
+    buffs: z.array(id).max(40).optional(),
     ownerBattleNet: id.optional(),
     teamId: id.optional(),
     publicTeamName: text.optional(),
@@ -137,6 +138,7 @@ export const EventSchema = z
     timeZone: text,
     notes: z.string().max(2000),
     signups: z.record(z.string(), z.enum(["going", "tentative", "absent"])),
+    lineup: z.record(id, z.number().int().min(1).max(8)).optional(),
   })
   .strict();
 export type RaidEvent = z.infer<typeof EventSchema>;
@@ -242,6 +244,10 @@ export const ActionSchema = z.discriminatedUnion("type", [
       type: z.literal("character.import"),
       characterId: id,
       raw: z.string().min(1).max(100000),
+      profile: z
+        .object({ role: z.enum(ROLES), spec: text, buffs: z.array(id).max(40) })
+        .strict()
+        .optional(),
     })
     .strict(),
   z
@@ -251,6 +257,7 @@ export const ActionSchema = z.discriminatedUnion("type", [
       role: z.enum(ROLES),
       spec: text,
       notes: z.string().max(2000),
+      buffs: z.array(id).max(40).optional(),
     })
     .strict(),
   z
@@ -278,6 +285,16 @@ export const ActionSchema = z.discriminatedUnion("type", [
     })
     .strict(),
   z.object({ type: z.literal("event.save"), event: EventSchema }).strict(),
+  z
+    .object({
+      type: z.literal("event.assign"),
+      eventId: id,
+      characterId: id,
+      group: z.number().int().min(1).max(8).nullable(),
+      swapWith: id.optional(),
+    })
+    .strict(),
+  z.object({ type: z.literal("event.fill"), eventId: id }).strict(),
   z
     .object({
       type: z.literal("event.signup"),

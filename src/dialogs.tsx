@@ -1,8 +1,5 @@
 import { useState } from "react";
 import {
-  Upload,
-  Check,
-  AlertTriangle,
   ExternalLink,
   ArrowUp,
   ArrowDown,
@@ -11,7 +8,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { Modal, Field, Form, ClassIcon, Player, GearItem } from "./components";
-import { CLASSES, ROLES, SLOTS, label, makeId } from "./lib/model";
+import { CLASSES, SLOTS, label, makeId } from "./lib/model";
 import type {
   Character,
   Team,
@@ -22,10 +19,9 @@ import type {
   ChangeRequest,
   RaidState,
   RaidAction,
-  Snapshot,
 } from "./lib/model";
-import { parseSimc, numericStats } from "./lib/parser";
-import { EXAMPLE_EXPORT } from "./lib/example";
+import { numericStats } from "./lib/parser";
+import { CharacterImport, CharacterProfileEditor } from "./CharacterSetup";
 import { getItem, itemLink } from "./lib/items";
 import { REPO_URL } from "./lib/api";
 import type { Member } from "./lib/access";
@@ -44,7 +40,7 @@ type Props = {
   dialog: DialogState;
   state: RaidState;
   close: () => void;
-  change: (action: RaidAction) => void;
+  change: (action: RaidAction) => void | Promise<void>;
   open: (d: DialogState) => void;
   toast: (s: string) => void;
   demo: boolean;
@@ -99,9 +95,7 @@ function CharacterChoice({
 }
 export default function Dialogs(p: Props) {
   const { dialog: d, state, close, change, open, toast, demo } = p;
-  const [raw, setRaw] = useState(""),
-    [preview, setPreview] = useState<Snapshot>(),
-    [error, setError] = useState(""),
+  const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [lookedUp, setLookedUp] = useState<{ id: number; name: string }>(
       undefined!,
@@ -118,153 +112,14 @@ export default function Dialogs(p: Props) {
   let title = "",
     content;
   if (d.type === "import") {
-    title = "Bring your character into the war room";
+    title = "Set up your raid character";
     content = (
-      <>
-        <p className="muted">
-          Paste your full SimC addon export or select a .simc or .txt file.
-          Review the equipment before sharing it with the guild.
-        </p>
-        {!preview ? (
-          <>
-            <div className="import-tools">
-              <label className="btn secondary file-button">
-                <Upload size={16} /> Choose export
-                <input
-                  type="file"
-                  accept=".simc,.txt,text/plain"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    if (file.size > 100000) {
-                      setError("Choose an export smaller than 100 KB.");
-                      return;
-                    }
-                    setRaw(await file.text());
-                    setError("");
-                  }}
-                />
-              </label>
-              <button
-                className="btn text"
-                onClick={async () => {
-                  setRaw(EXAMPLE_EXPORT);
-                  setError("");
-                }}
-              >
-                Load fictional example
-              </button>
-            </div>
-            <Field label="Character export">
-              <textarea
-                className="code-input"
-                value={raw}
-                onChange={(e) => setRaw(e.target.value)}
-                rows={13}
-                spellCheck={false}
-                placeholder={'hunter="Your character"\nlevel=25\n...'}
-              />
-            </Field>
-            <div className="form-actions">
-              <small>Nothing is uploaded until you confirm.</small>
-              <button
-                className="btn primary"
-                onClick={() => {
-                  try {
-                    setPreview(parseSimc(raw));
-                    setError("");
-                  } catch (e) {
-                    fail(e);
-                  }
-                }}
-              >
-                Review import
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="import-identity">
-              <ClassIcon cls={preview.class} size={64} />
-              <div>
-                <h3>{preview.name}</h3>
-                <p>
-                  Level {preview.level} {label(preview.race)}{" "}
-                  {label(preview.class)}
-                </p>
-                <small>{preview.server}</small>
-              </div>
-              <span className="badge green">
-                <Check size={13} /> Parsed
-              </span>
-            </div>
-            <div className="mini-stats">
-              <div>
-                <strong>{preview.gear.length}</strong>
-                <span>Equipped items</span>
-              </div>
-              <div>
-                <strong>{preview.bagGear.length}</strong>
-                <span>Bag alternatives</span>
-              </div>
-              <div>
-                <strong>{preview.bags.length}</strong>
-                <span>Bags</span>
-              </div>
-            </div>
-            {preview.warnings.map((w) => (
-              <p className="notice" key={w}>
-                <AlertTriangle size={15} />
-                {w}
-              </p>
-            ))}
-            <div className="import-gear">
-              {preview.gear.map((g) => (
-                <div key={g.slot}>
-                  <span>{label(g.slot)}</span>
-                  <strong>{g.name}</strong>
-                  <small>#{g.id}</small>
-                </div>
-              ))}
-            </div>
-            <p className="privacy-note">
-              Character name, class, level, role, and team appear on the public
-              roster. Equipment, talents, professions, realm details, and the
-              original export are stored privately and shared only with
-              authorized members. Never paste passwords, tokens, chat logs, or
-              personal information.
-            </p>
-            <div className="form-actions">
-              <button
-                className="btn secondary"
-                onClick={() => setPreview(undefined)}
-              >
-                Back to export
-              </button>
-              <button
-                className="btn primary"
-                onClick={() =>
-                  submit({
-                    type: "character.import",
-                    characterId:
-                      d.character?.id ||
-                      state.characters.find(
-                        (c) =>
-                          c.name.toLowerCase() === preview.name.toLowerCase() &&
-                          c.snapshot?.server === preview.server &&
-                          c.snapshot?.region === preview.region,
-                      )?.id ||
-                      makeId(),
-                    raw,
-                  })
-                }
-              >
-                {demo ? "Import into demo" : "Save character import"}
-              </button>
-            </div>
-          </>
-        )}
-      </>
+      <CharacterImport
+        state={state}
+        character={d.character}
+        change={change}
+        demo={demo}
+      />
     );
   }
   if (d.type === "character" && d.character) {
@@ -359,36 +214,7 @@ export default function Dialogs(p: Props) {
         )}
         <details className="details">
           <summary>Edit raid profile</summary>
-          <Form
-            onSubmit={(f) =>
-              submit({
-                type: "character.update",
-                characterId: c.id,
-                role: val(f, "role") as Character["role"],
-                spec: val(f, "spec"),
-                notes: val(f, "notes"),
-              })
-            }
-          >
-            <div className="form-grid">
-              <Field label="Raid role">
-                <select name="role" defaultValue={c.role}>
-                  {ROLES.map((r) => (
-                    <option key={r} value={r}>
-                      {label(r)}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Specialization">
-                <input name="spec" defaultValue={c.spec} maxLength={80} />
-              </Field>
-            </div>
-            <Field label="Raid notes">
-              <textarea name="notes" defaultValue={c.notes} maxLength={2000} />
-            </Field>
-            <Actions />
-          </Form>
+          <CharacterProfileEditor key={c.id} character={c} change={change} />
         </details>
         {p.admin && (
           <details className="details">
@@ -594,7 +420,7 @@ export default function Dialogs(p: Props) {
           <Field label="Team">
             <select
               name="teamId"
-              defaultValue={d.event?.teamId || state.teams[0]?.id}
+              defaultValue={d.event?.teamId || d.team?.id || state.teams[0]?.id}
             >
               {state.teams.map((t) => (
                 <option key={t.id} value={t.id}>

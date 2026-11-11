@@ -1,6 +1,7 @@
 import type { RaidState, WowClass, Character } from "./model";
 import { parseSimc } from "./parser";
 import { EXAMPLE_EXPORT } from "./example";
+import { RAID_BUFFS } from "./raid";
 export function demoState(base: RaidState): RaidState {
   const s = structuredClone(base);
   s.revision = 0;
@@ -27,7 +28,7 @@ export function demoState(base: RaidState): RaidState {
   ];
   const people: [string, WowClass, Character["role"], string][] = [
     ["Thorgar", "warrior", "tank", "Protection"],
-    ["Ironbark", "druid", "tank", "Guardian"],
+    ["Ironbark", "druid", "tank", "Feral"],
     ["Seraphine", "priest", "healer", "Discipline"],
     ["Tidecaller", "shaman", "healer", "Restoration"],
     ["Wildbloom", "druid", "healer", "Restoration"],
@@ -71,6 +72,16 @@ export function demoState(base: RaidState): RaidState {
       group: Math.floor((i + 1) / 5) + 1,
     })),
   );
+  // Explicit fictional ability declarations; live imports never infer these.
+  for (const c of s.characters)
+    c.buffs = RAID_BUFFS.filter(
+      (b) =>
+        b.cls === c.class &&
+        (!["moonkin", "pack", "trueshot"].includes(b.id) ||
+          (b.id === "moonkin" && c.spec === "Balance") ||
+          (b.id === "pack" && c.spec === "Feral") ||
+          (b.id === "trueshot" && c.spec === "Marksmanship")),
+    ).map((b) => b.id);
   const start = new Date();
   start.setDate(start.getDate() + 2);
   start.setHours(19, 0, 0, 0);
@@ -179,6 +190,12 @@ export function demoState(base: RaidState): RaidState {
       notes: "",
     },
   ];
+  s.events[0].lineup = Object.fromEntries(
+    s.characters
+      .filter((c) => s.events[0].signups[c.id] === "going")
+      .slice(0, 10)
+      .map((c) => [c.id, c.group || 1]),
+  );
   s.audit = [
     {
       id: "demo-a",
