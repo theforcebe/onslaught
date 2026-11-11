@@ -3,7 +3,6 @@ import {
   Upload,
   Check,
   AlertTriangle,
-  Github,
   ExternalLink,
   ArrowUp,
   ArrowDown,
@@ -28,7 +27,8 @@ import type {
 import { parseSimc, numericStats } from "./lib/parser";
 import { EXAMPLE_EXPORT } from "./lib/example";
 import { getItem, itemLink } from "./lib/items";
-import { issueBody, REPO_URL, API_URL } from "./lib/api";
+import { REPO_URL } from "./lib/api";
+import type { Member } from "./lib/access";
 import { download } from "./lib/calendar";
 export type DialogState = {
   type: string;
@@ -48,12 +48,14 @@ type Props = {
   open: (d: DialogState) => void;
   toast: (s: string) => void;
   demo: boolean;
+  admin: boolean;
+  members: Member[];
   message?: string;
 };
 const val = (d: FormData, k: string) => String(d.get(k) || "");
 const num = (d: FormData, k: string) => Number(d.get(k));
 function Actions({
-  label: caption = "Review change",
+  label: caption = "Save change",
   admin = false,
 }: {
   label?: string;
@@ -226,9 +228,11 @@ export default function Dialogs(p: Props) {
               ))}
             </div>
             <p className="privacy-note">
-              Shared imports are public guild data: character name, realm,
-              equipment, talents, professions and the original export. Never
-              paste passwords, tokens, chat logs, or personal information.
+              Character name, class, level, role, and team appear on the public
+              roster. Equipment, talents, professions, realm details, and the
+              original export are stored privately and shared only with
+              authorized members. Never paste passwords, tokens, chat logs, or
+              personal information.
             </p>
             <div className="form-actions">
               <button
@@ -255,7 +259,7 @@ export default function Dialogs(p: Props) {
                   })
                 }
               >
-                {demo ? "Import into demo" : "Review shared import"}
+                {demo ? "Import into demo" : "Save character import"}
               </button>
             </div>
           </>
@@ -386,28 +390,40 @@ export default function Dialogs(p: Props) {
             <Actions />
           </Form>
         </details>
-        <details className="details">
-          <summary>Admin: assign GitHub ownership</summary>
-          <Form
-            onSubmit={(f) =>
-              submit({
-                type: "character.owner",
-                characterId: c.id,
-                github: val(f, "github"),
-              })
-            }
-          >
-            <Field label="GitHub username">
-              <input
-                name="github"
-                defaultValue={c.ownerGithub}
-                required
-                pattern="[a-zA-Z0-9-]{1,39}"
-              />
-            </Field>
-            <Actions admin />
-          </Form>
-        </details>
+        {p.admin && (
+          <details className="details">
+            <summary>Admin: assign Battle.net ownership</summary>
+            <Form
+              onSubmit={(f) =>
+                submit({
+                  type: "character.member",
+                  characterId: c.id,
+                  memberId: val(f, "memberId"),
+                })
+              }
+            >
+              <Field label="Approved member">
+                <select
+                  name="memberId"
+                  defaultValue={c.ownerBattleNet || ""}
+                  required
+                >
+                  <option value="" disabled>
+                    Choose a member
+                  </option>
+                  {p.members
+                    .filter((m) => m.status === "active")
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label}
+                      </option>
+                    ))}
+                </select>
+              </Field>
+              <Actions admin />
+            </Form>
+          </details>
+        )}
       </>
     );
   }
@@ -759,6 +775,7 @@ export default function Dialogs(p: Props) {
             type: "loot.save",
             loot: {
               id: d.loot?.id || makeId(),
+              teamId: val(f, "teamId") || undefined,
               itemId: num(f, "itemId"),
               name: val(f, "name"),
               slot: val(f, "slot") as Loot["slot"],
@@ -771,6 +788,19 @@ export default function Dialogs(p: Props) {
           })
         }
       >
+        <Field
+          label="Visibility scope"
+          hint="Guild-wide records are visible to everyone with this section. Team records require that team too."
+        >
+          <select name="teamId" defaultValue={d.loot?.teamId || ""}>
+            <option value="">Guild-wide</option>
+            {state.teams.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </Field>
         <div className="form-grid">
           <Field label="Forever item ID">
             <input
@@ -1107,6 +1137,7 @@ export default function Dialogs(p: Props) {
             type: "boss.save",
             boss: {
               id: d.boss?.id || makeId(),
+              teamId: val(f, "teamId") || undefined,
               name: val(f, "name"),
               instance: val(f, "instance"),
               status: val(f, "status") as Boss["status"],
@@ -1117,6 +1148,19 @@ export default function Dialogs(p: Props) {
           })
         }
       >
+        <Field
+          label="Visibility scope"
+          hint="Guild-wide records are visible to everyone with this section. Team records require that team too."
+        >
+          <select name="teamId" defaultValue={d.boss?.teamId || ""}>
+            <option value="">Guild-wide</option>
+            {state.teams.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </Field>
         <div className="form-grid">
           <Field label="Boss">
             <input name="name" defaultValue={d.boss?.name} required />
@@ -1170,74 +1214,6 @@ export default function Dialogs(p: Props) {
       </Form>
     );
   }
-  if (d.type === "shared" && d.request) {
-    title = "Publish a guild change";
-    const body = issueBody(d.request);
-    const encoded = new URLSearchParams({
-      title: `[raid-change] ${d.request.action.type}`,
-      body,
-    });
-    const small = encoded.toString().length < 6500;
-    content = (
-      <>
-        <p>
-          GitHub will verify the account submitting this change. Only character
-          owners can edit personal records; structural changes require a guild
-          admin.
-        </p>
-        <div className="change-summary">
-          <Github />
-          <div>
-            <strong>{label(d.request.action.type.replaceAll(".", " "))}</strong>
-            <small>Based on guild revision {d.request.expectedRevision}</small>
-          </div>
-          <span className="badge">Pending submission</span>
-        </div>
-        <p className="notice">
-          The guild is not changed yet. Submit the issue on GitHub, then the
-          validator will either commit it or explain why it was rejected.
-        </p>
-        <Field
-          label="Change request"
-          hint="This includes the character export when importing. Review it before posting to the public repository."
-        >
-          <textarea className="code-input" rows={8} value={body} readOnly />
-        </Field>
-        <div className="form-actions">
-          <button
-            className="btn secondary"
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(body);
-                toast("Change request copied.");
-              } catch {
-                setError(
-                  "Select and copy the request above; clipboard access is unavailable.",
-                );
-              }
-            }}
-          >
-            Copy request
-          </button>
-          <a
-            className="btn primary"
-            href={`${REPO_URL}/issues/new?${small ? encoded.toString() : new URLSearchParams({ title: `[raid-change] ${d.request.action.type}` }).toString()}`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {small ? "Submit on GitHub" : "Open GitHub & paste request"}
-            <ExternalLink size={14} />
-          </a>
-        </div>
-        <small className="muted">
-          Return to Ønslaught and refresh after the issue is marked accepted.{" "}
-          {API_URL
-            ? "Battle.net members can save directly after signing in."
-            : "Direct Battle.net saves become available after the secure gateway is configured."}
-        </small>
-      </>
-    );
-  }
   if (d.type === "auth") {
     title = "Battle.net connection";
     content = (
@@ -1251,9 +1227,9 @@ export default function Dialogs(p: Props) {
           secret never belongs in this site or its repository.
         </p>
         <p className="notice">
-          The gateway has not been configured yet. The live site supports
-          GitHub-verified submissions now; Battle.net sign-in will activate when
-          the guild owner supplies the server configuration.
+          The gateway has not been configured yet. Shared editing will activate
+          after the guild owner completes setup. The public roster and calendar
+          stay available, and the fictional demo works locally.
         </p>
         <a
           className="btn primary"

@@ -1,80 +1,96 @@
-# Deployment and guild onboarding
+# Activate Battle.net and private guild coordination
 
-## GitHub Pages
+The public app is https://theforcebe.github.io/onslaught/. Source lives in `theforcebe/onslaught`. Canonical guild records and member permissions live in the **private** repository `theforcebe/onslaught-data`, at `data/guild.json`.
 
-The repository is `theforcebe/onslaught`, and the site is `https://theforcebe.github.io/onslaught/`. Repository Settings → Pages uses **GitHub Actions**. A push to `main` validates data, runs tests, builds, scans for secrets and publishes.
+The gateway code and access rules are implemented and tested locally. Real provider sign-in remains unverified until the steps below are completed. The public roster is initially empty. The demo is fictional and browser-local. Public GitHub issues are no longer an editing channel.
 
-The owner `theforcebe` is the initial admin. To add raiders, open **Guild settings → Invited GitHub members**, enter their GitHub usernames, and submit the proposed change. To add another admin, update the admin list through the same verified route. To attach an existing character to a member, open the character → **Admin: assign GitHub ownership**. The live roster starts empty.
+## 1. Connect Cloudflare
 
-For a shared edit, click **Review change**, inspect the public payload, and choose **Submit on GitHub**. Large imports use **Copy request** followed by **Open GitHub & paste request**. After posting the issue, the workflow commits accepted changes and explains rejected ones. It never trusts a username typed into the payload. Refresh the app to fetch the committed state.
+From the app checkout, run `npx wrangler login` and approve sign-in in your browser. Then:
 
-The workflow drains pending issues on each trigger and retries open submissions hourly. Multiple people editing the same revision may cause a conflict: the second user must refresh, review, and submit a new request. This protects the first change. A duplicate request ID does not produce another award or duplicate commitment.
+```sh
+npx wrangler d1 create onslaught-auth
+```
 
-Keep repository write access restricted to trusted maintainers. App members do not need it.
+Put the returned database ID in `wrangler.toml`. It is not a secret. Initialize the auth tables:
 
-## Activate Battle.net
+```sh
+npx wrangler d1 execute onslaught-auth --remote --file=server/schema.sql
+npm run worker:deploy
+```
 
-**Status:** the gateway is implemented and locally type-checked and unit-tested. It has not been deployed or tested against a real Blizzard client. No credentials have been supplied or copied into this repository.
+The first deployment can run without secrets; sign-in fails closed. Copy the returned HTTPS Worker origin into `PUBLIC_API_URL` in `wrangler.toml`, without a trailing slash. Keep `APP_ORIGIN = "https://theforcebe.github.io"` and `GITHUB_REPOSITORY = "theforcebe/onslaught-data"`. Deploy again. A dedicated custom app domain is preferable if other untrusted apps share your Pages origin.
 
-The GitHub Pages host cannot keep client secrets or run OAuth callbacks. Deploy the included Cloudflare Worker to handle sign-in and authenticated repository writes. Use your own Cloudflare and Blizzard developer accounts. The app continues to work through GitHub-verified submissions before this setup is completed.
+## 2. Register the Battle.net client
 
-1. Sign in to Cloudflare with Wrangler (`npx wrangler login`). Create a D1 database:
+In the [Blizzard developer portal](https://community.developer.battle.net/access/clients), create an OAuth client named **Ønslaught**. Set its redirect URI to the exact URL:
 
-   ```sh
-   npx wrangler d1 create onslaught-auth
-   ```
+```text
+https://YOUR-WORKER-HOST/auth/callback
+```
 
-   Replace `database_id` in `wrangler.toml` with the returned database ID. This ID is not a secret. Run:
+The app uses the `openid` identity scope, not WoW armory access. Enter the client ID and secret directly in **Cloudflare → Workers & Pages → onslaught-gateway → Settings → Variables and Secrets**, using type **Secret**. Alternatively use Wrangler's interactive prompts:
 
-   ```sh
-   npx wrangler d1 execute onslaught-auth --remote --file=server/schema.sql
-   ```
+```sh
+npx wrangler secret put BNET_CLIENT_ID
+npx wrangler secret put BNET_CLIENT_SECRET
+```
 
-2. Choose the Worker hostname. Set `PUBLIC_API_URL` to its complete HTTPS origin and keep `APP_ORIGIN` set to the exact Pages origin `https://theforcebe.github.io` (no path or trailing slash). A dedicated custom app domain is preferable if the account hosts unrelated applications on that origin.
+Never paste secret values into chat, GitHub issues, source code, `wrangler.toml`, or any variable starting with `VITE_`.
 
-3. In the [Blizzard developer portal](https://community.developer.battle.net/access/clients), register an OAuth client. The redirect URI must exactly match:
+## 3. Connect the private data repository
 
-   ```text
-   https://YOUR-WORKER.workers.dev/auth/callback
-   ```
+Create a dedicated [fine-grained GitHub token](https://github.com/settings/personal-access-tokens/new), with:
 
-   Store the client ID and secret using interactive secret prompts:
+- Repository access: **Only selected repositories → onslaught-data**.
+- Repository permission: **Contents → Read and write**. Metadata read is implicit.
+- An expiration date you can maintain. No Actions, administration, organization, or public app repository permissions.
 
-   ```sh
-   npx wrangler secret put BNET_CLIENT_ID
-   npx wrangler secret put BNET_CLIENT_SECRET
-   ```
+Store it directly as Cloudflare secret `GITHUB_TOKEN`. Do not reuse a developer's GitHub CLI credential. Generate at least 32 random bytes with a password manager and store a stable `IDENTITY_KEY` secret; changing it later requires migrating member and character-owner IDs.
 
-   Do not paste the secret into chat, a GitHub issue, an environment variable prefixed `VITE_`, or a committed file.
+```sh
+npx wrangler secret put GITHUB_TOKEN
+npx wrangler secret put IDENTITY_KEY
+```
 
-4. In GitHub, create a **dedicated fine-grained token**, limited to `theforcebe/onslaught`, with **Contents: Read and write**. No other permissions are needed. Choose an expiration date, store it using:
+Keep `onslaught-data` private and give repository access only to trusted operators. Raiders use the app and do not need GitHub accounts. The gateway verifies the repository is private before reading it. Accepted guild edits and access changes create private commits with conflict checks.
 
-   ```sh
-   npx wrangler secret put GITHUB_TOKEN
-   ```
+## 4. Connect Pages and establish the owner
 
-   Do not reuse your existing GitHub CLI credential. The gateway only uses this token on `api.github.com`.
+Set the public repository's **Settings → Secrets and variables → Actions → Variables → VITE_API_URL** to the Worker origin. This is a public URL, not a credential. Run the **Publish raid headquarters** workflow.
 
-5. Generate a strong random secret in your password manager and store it as `IDENTITY_KEY`. Keep it stable: it pseudonymizes public character owners.
+Sign in with your Battle.net account. Open **Members & access → Owner setup reference** to see your verified numeric account ID. Store **your own** ID as Cloudflare secret `ADMIN_BNET_IDS`. It accepts comma-separated numeric IDs for recovery owners. Nobody becomes an admin automatically because they signed in first. Sign out and back in, then use Members & access.
 
-   ```sh
-   npx wrangler secret put IDENTITY_KEY
-   npm run worker:deploy
-   ```
+## 5. Invite raiders and choose visibility
 
-6. Set the repository **Actions variable** `VITE_API_URL` to the Worker’s HTTPS origin and run the **Publish raid headquarters** workflow. This is a public URL, never a credential.
+1. Raider signs in with Battle.net and clicks **Request membership** in Members & access.
+2. An admin sees the verified BattleTag and pending request privately.
+3. Set membership to **Active**, role to **Raider**, choose private sections, and select raid teams (or all teams).
+4. Save. Permissions are checked from the current private document on every API read and save. Suspended and pending accounts get only the public view.
 
-7. Sign in once. Before you are allowlisted, the app displays your numeric Battle.net account ID privately in the failed invitation response. Use it to set `ADMIN_BNET_IDS` via `npx wrangler secret put ADMIN_BNET_IDS`. Add raiders’ IDs to `MEMBER_BNET_IDS`; both accept comma-separated numeric account IDs. Keep these lists in server secrets. An empty admin list does not grant anyone automatic admin access. Re-deploy as required by your hosting workflow.
+Roster basics (name, class, level, role, specialization, team name) and event basics (title, instance, team name, time) are public. Equipment, raw imports, character notes, group assignments, attendance and raid notes, loot, consumables, progress, and audit history are private.
 
-8. Verify the live flow: sign in, save a harmless character note, confirm the commit and audit entry, sign out, and confirm a write is denied. Confirm a non-admin cannot change a team or someone else’s profile. Live provider OAuth and browser-popup behavior must be checked with the actual registered client.
+Each private section needs its own grant. Team-scoped records also need the matching team. Guild-wide loot/progress/supply records are visible to anyone with that section, so choose a specific team or raid event when needed. Unassigned character gear is visible to its owner with Gear access and to members with Gear plus all-team access. Activity entries additionally require their source section and team; legacy unscoped entries and access-management history are admin-only.
 
-Battle.net sessions last one hour and are not saved across reloads. The server checks membership every time. Imported new characters are assigned to the verified member’s public pseudonym. GitHub and Battle.net identities are not silently linked merely because names match.
+Admins can see all records and manage structure, membership, ownership, schedules, targets, priorities and awards. Section access does not grant structural editing. Raiders can edit their own character and personal responses. A signed-in owner from `ADMIN_BNET_IDS` retains recovery access independently of the editable member list.
 
-## Backup and operations
+Use a character's **Admin: assign Battle.net ownership** control to attach an existing imported character to an approved member. Exports do not prove in-game ownership.
 
-- Every accepted edit commits the complete guild state. Use GitHub history for review and recovery.
-- **Guild settings → Download snapshot** exports the state being viewed. Demo snapshots are explicitly named as demo.
-- `npm run check:data` validates schema and references before publication.
-- `npm audit`, the tests and `scripts/scan-secrets.mjs` should pass before each release.
-- The item cache can be refreshed with `npx tsx scripts/cache-items.ts`. Check source builds and unknown variants before treating a data change as gameplay truth.
-- Keep the raw snapshot for provenance. Do not infer simulated DPS, attendance percentages, or loot eligibility that the available records cannot establish.
+## 6. Verify before onboarding the guild
+
+- Sign in as the owner, confirm Members & access works, and create a harmless test record.
+- Sign in as a raider with one section and one team; confirm other teams' private records are absent from API responses.
+- Confirm a raider cannot edit someone else's character, change groups, grant access, or award loot.
+- Suspend that raider while the session is active; refresh and confirm private content disappears and saves are denied.
+- Sign out and confirm only roster and schedule basics remain. Check the calendar export too.
+- Confirm private commits exist and public Pages artifacts remain empty of guild records.
+
+Live OAuth popup behavior and provider configuration require actual accounts for final verification. Local tests cannot substitute for it.
+
+## Operations
+
+Sessions last one hour and stay in memory; reload requires sign-in. Failed refreshes clear displayed private state. Revocation stops future responses; it cannot retract information already seen or downloaded. Guild settings exports only the authorized view. Full backups are in the private repository, including historical access grants and exports.
+
+Run `npm test`, `npm run check:data`, `npx tsc -p tsconfig.server.json`, `npm run build`, and `node scripts/scan-secrets.mjs` before release. CI rejects live guild records in the public bootstrap. Do not copy the private data repo into the website checkout or build output.
+
+See [Cloudflare's secret storage instructions](https://developers.cloudflare.com/workers/configuration/secrets/) and [the security model](../SECURITY.md).

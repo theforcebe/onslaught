@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import {
   LayoutDashboard,
@@ -32,6 +32,7 @@ import {
   Check,
   LogOut,
   LoaderCircle,
+  LockKeyhole,
 } from "lucide-react";
 import {
   ClassIcon,
@@ -43,6 +44,16 @@ import {
   Form,
 } from "./components";
 import Dialogs from "./dialogs";
+import { AccessPanel } from "./AccessPanel";
+import {
+  PUBLIC_ACCESS,
+  ADMIN_ACCESS,
+  hasSection,
+  hasTeam,
+  canSeeCharacter,
+  project,
+} from "./lib/access";
+import type { Access, GuildView, Member, Section } from "./lib/access";
 import type { DialogState } from "./dialogs";
 import {
   CLASS_COLORS,
@@ -63,6 +74,9 @@ import {
   saveShared,
   REPO_URL,
   API_URL,
+  saveMember,
+  requestMembership,
+  sessionActive,
 } from "./lib/api";
 import { calendarFile, download } from "./lib/calendar";
 const nav = [
@@ -74,6 +88,7 @@ const nav = [
   { id: "schedule", name: "Schedule", icon: CalendarDays },
   { id: "progress", name: "Progress", icon: Flag },
   { id: "activity", name: "Activity", icon: History },
+  { id: "access", name: "Members & access", icon: ShieldCheck },
 ];
 const titles: Record<string, [string, string]> = {
   overview: [
@@ -112,9 +127,27 @@ const titles: Record<string, [string, string]> = {
     "Make this your war room.",
     "Guild identity, permissions, data, and connections.",
   ],
+  access: [
+    "The right access. For every member.",
+    "Public roster and schedule. Private coordination, controlled by you.",
+  ],
 };
 const safeURL = (url: string) => (/^https:\/\//i.test(url) ? url : undefined);
 export default function App() {
+  const [access, setAccess] = useState<Access>(PUBLIC_ACCESS);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [demoMembers, setDemoMembers] = useState<Member[]>([
+    {
+      id: "demo-member",
+      label: "Example raider",
+      role: "member",
+      status: "pending",
+      sections: [],
+      allTeams: false,
+      teamIds: [],
+    },
+  ]);
+  const accessSignature = useRef("");
   const [live, setLive] = useState<RaidState>(),
     [practice, setPractice] = useState<RaidState>(),
     [demo, setDemo] = useState(false),
@@ -134,6 +167,16 @@ export default function App() {
     ),
     [lootTab, setLootTab] = useState("active");
   const state = demo ? practice : live;
+  const effectiveAccess = demo ? ADMIN_ACCESS : access;
+  function acceptView(next: GuildView) {
+    if (!sessionActive()) setIdentity(undefined);
+    const signature = JSON.stringify(next.access);
+    if (accessSignature.current !== signature) setDialog(undefined);
+    accessSignature.current = signature;
+    setLive(next.state);
+    setAccess(next.access);
+    setMembers(next.members || []);
+  }
   function toast(s: string) {
     setNotification(s);
   }
@@ -141,13 +184,20 @@ export default function App() {
     setRefreshing(true);
     try {
       const next = await loadGuild();
-      setLive(next.state);
+      acceptView(next);
       setError(
         next.isCurrent
           ? ""
-          : "The live repository is unavailable. Showing the bundled snapshot; refresh before submitting changes.",
+          : "Battle.net setup is pending. The public roster starts empty; explore the fictional demo while the guild gateway is connected.",
       );
     } catch (e) {
+      if (!sessionActive()) setIdentity(undefined);
+      setLive((prev) =>
+        prev ? project({ version: 1, state: prev, members: [] }).state : prev,
+      );
+      setAccess(PUBLIC_ACCESS);
+      setMembers([]);
+      setDialog(undefined);
       setError((e as Error).message);
     } finally {
       setRefreshing(false);
@@ -216,8 +266,9 @@ export default function App() {
     if (demo) {
       try {
         const next = applyChange(state, request, {
-          provider: "github",
-          id: state.guild.adminsGithub[0],
+          provider: "battlenet",
+          admin: true,
+          id: "demo-admin",
           label: "Demo admin",
         });
         localStorage.setItem("onslaught:demo:v1", JSON.stringify(next));
@@ -232,7 +283,7 @@ export default function App() {
     if (identity && API_URL) {
       try {
         const next = await saveShared(request);
-        setLive(next);
+        acceptView(next);
         setDialog(undefined);
         toast("Saved to the guild repository.");
       } catch (e) {
@@ -240,7 +291,7 @@ export default function App() {
       }
       return;
     }
-    setDialog({ type: "shared", request });
+    setDialog({ type: "auth" });
   }
   async function signIn() {
     if (!API_URL) {
@@ -249,6 +300,7 @@ export default function App() {
     }
     try {
       setIdentity(await loginBattleNet());
+      await refresh();
       toast("Signed in with Battle.net.");
     } catch (e) {
       toast((e as Error).message);
@@ -300,15 +352,50 @@ export default function App() {
       new Date(date),
     );
   const open = (d: DialogState) => {
+    if (!demo) {
+      const adminTypes = [
+        "team",
+        "assign",
+        "event",
+        "supply",
+        "loot",
+        "award",
+        "boss",
+      ];
+      if (adminTypes.includes(d.type) && !access.admin) {
+        toast("Only guild admins can change structure, targets, and awards.");
+        return;
+      }
+      const privateTypes: Record<string, Section> = {
+        import: "gear",
+        character: "gear",
+        "loot-detail": "loot",
+        request: "loot",
+        pledge: "consumables",
+        signup: "attendance",
+      };
+      const section = privateTypes[d.type];
+      if (
+        section &&
+        (!hasSection(access, section) ||
+          (d.character && !canSeeCharacter(access, d.character, identity)) ||
+          (d.event && !hasTeam(access, d.event.teamId)))
+      ) {
+        toast("This information requires member access. See Members & access.");
+        return;
+      }
+    }
     setNotification("");
     setDialog(d);
   };
-  const addButton = (type: string, text: string) => (
-    <button className="btn primary" onClick={() => open({ type })}>
-      <Plus size={16} />
-      {text}
-    </button>
-  );
+  const addButton = (type: string, text: string) =>
+    (effectiveAccess.admin ||
+      (type === "import" && hasSection(effectiveAccess, "gear"))) && (
+      <button className="btn primary" onClick={() => open({ type })}>
+        <Plus size={16} />
+        {text}
+      </button>
+    );
   const groupGrid = (compact = false) => (
     <div className={`groups ${compact ? "compact" : ""}`}>
       {Array.from({ length: Math.ceil((team?.size || 20) / 5) }, (_, i) => {
@@ -832,11 +919,18 @@ export default function App() {
             </span>
             <span className="roster-team">
               {state.teams.find((t) => t.id === c.teamId)?.name ||
+                c.publicTeamName ||
                 "Not assigned"}
-              <small>{c.group ? `Group ${c.group}` : "Bench"}</small>
+              <small>
+                {c.group ? `Group ${c.group}` : c.teamId ? "Assigned" : "Bench"}
+              </small>
             </span>
             <span className="snapshot-status">
-              {c.snapshot ? (
+              {!demo && !canSeeCharacter(access, c, identity) ? (
+                <span className="muted">
+                  <LockKeyhole size={13} /> Private gear
+                </span>
+              ) : c.snapshot ? (
                 <>
                   <span className="dot green" />
                   {c.snapshot.gear.length} equipped
@@ -1130,7 +1224,8 @@ export default function App() {
                 <div className="event-title">
                   <h2>{e.title}</h2>
                   <span className="badge">
-                    {state.teams.find((t) => t.id === e.teamId)?.name}
+                    {state.teams.find((t) => t.id === e.teamId)?.name ||
+                      e.publicTeamName}
                   </span>
                   {Date.parse(e.end) < Date.now() && (
                     <span className="badge">Past raid</span>
@@ -1151,49 +1246,63 @@ export default function App() {
                   })}
                 </div>
                 <p className="muted">{e.notes}</p>
-                <div className="signup-stats">
-                  <span className="green-text">
-                    {
-                      Object.values(e.signups).filter((s) => s === "going")
-                        .length
-                    }{" "}
-                    going
-                  </span>
-                  <span className="amber-text">
-                    {
-                      Object.values(e.signups).filter((s) => s === "tentative")
-                        .length
-                    }{" "}
-                    tentative
-                  </span>
-                  <span>
-                    {
-                      Object.values(e.signups).filter((s) => s === "absent")
-                        .length
-                    }{" "}
-                    absent
-                  </span>
-                </div>
-                <details className="attendance-details">
-                  <summary>View attendance</summary>
-                  {Object.entries(e.signups).map(([id, status]) => (
-                    <div key={id}>
-                      <span>
-                        {state.characters.find((c) => c.id === id)?.name ||
-                          "Unknown"}
+                {hasSection(effectiveAccess, "attendance") &&
+                hasTeam(effectiveAccess, e.teamId) ? (
+                  <>
+                    <div className="signup-stats">
+                      <span className="green-text">
+                        {
+                          Object.values(e.signups).filter((s) => s === "going")
+                            .length
+                        }{" "}
+                        going
                       </span>
-                      <span>{label(status)}</span>
+                      <span className="amber-text">
+                        {
+                          Object.values(e.signups).filter(
+                            (s) => s === "tentative",
+                          ).length
+                        }{" "}
+                        tentative
+                      </span>
+                      <span>
+                        {
+                          Object.values(e.signups).filter((s) => s === "absent")
+                            .length
+                        }{" "}
+                        absent
+                      </span>
                     </div>
-                  ))}
-                </details>
+                    <details className="attendance-details">
+                      <summary>View attendance</summary>
+                      {Object.entries(e.signups).map(([id, status]) => (
+                        <div key={id}>
+                          <span>
+                            {state.characters.find((c) => c.id === id)?.name ||
+                              "Unknown"}
+                          </span>
+                          <span>{label(status)}</span>
+                        </div>
+                      ))}
+                    </details>
+                  </>
+                ) : (
+                  <p className="muted">
+                    <LockKeyhole size={13} /> Attendance and raid notes are
+                    private.
+                  </p>
+                )}
               </div>
               <div className="event-actions">
-                <button
-                  className="btn primary"
-                  onClick={() => open({ type: "signup", event: e })}
-                >
-                  Set availability
-                </button>
+                {hasSection(effectiveAccess, "attendance") &&
+                  hasTeam(effectiveAccess, e.teamId) && (
+                    <button
+                      className="btn primary"
+                      onClick={() => open({ type: "signup", event: e })}
+                    >
+                      Set availability
+                    </button>
+                  )}
                 <button
                   className="btn secondary"
                   onClick={() =>
@@ -1203,12 +1312,14 @@ export default function App() {
                   Add to calendar
                   <Download size={14} />
                 </button>
-                <button
-                  className="btn text"
-                  onClick={() => open({ type: "event", event: e })}
-                >
-                  Edit raid
-                </button>
+                {effectiveAccess.admin && (
+                  <button
+                    className="btn text"
+                    onClick={() => open({ type: "event", event: e })}
+                  >
+                    Edit raid
+                  </button>
+                )}
               </div>
             </article>
           ))}
@@ -1359,14 +1470,8 @@ export default function App() {
               type: "guild.update",
               name: String(f.get("name")),
               timeZone: String(f.get("timeZone")),
-              adminsGithub: String(f.get("admins"))
-                .split(",")
-                .map((s) => s.trim())
-                .filter(Boolean),
-              membersGithub: String(f.get("members"))
-                .split(",")
-                .map((s) => s.trim())
-                .filter(Boolean),
+              adminsGithub: [],
+              membersGithub: [],
             })
           }
         >
@@ -1385,28 +1490,13 @@ export default function App() {
               required
             />
           </Field>
-          <Field
-            label="GitHub admins"
-            hint="Comma-separated usernames. GitHub authenticates submissions; this is not a browser role toggle."
-          >
-            <input
-              name="admins"
-              defaultValue={state.guild.adminsGithub.join(", ")}
-              required
-            />
-          </Field>
-          <Field
-            label="Invited GitHub members"
-            hint="Comma-separated usernames. Members can import characters and edit their own records."
-          >
-            <input
-              name="members"
-              defaultValue={state.guild.membersGithub.join(", ")}
-            />
-          </Field>
+          <p className="muted">
+            Approve members and choose private sections and teams in{" "}
+            <a href="#access">Members &amp; access</a>.
+          </p>
           <div className="form-actions">
             <button className="btn primary" type="submit">
-              Review settings
+              Save settings
             </button>
           </div>
         </Form>
@@ -1470,8 +1560,9 @@ export default function App() {
       <section className="panel">
         <h3>Your data, with history.</h3>
         <p className="muted">
-          The live roster is a versioned JSON file in the guild repository.
-          Accepted changes include an audit entry and a revision number.
+          Guild records are versioned in a private data repository. Downloads
+          include only the information your account can view. Accepted changes
+          include an audit entry and a revision number.
         </p>
         <div className="button-row">
           <button
@@ -1487,18 +1578,19 @@ export default function App() {
             Download snapshot
           </button>
           <a
-            href={`${REPO_URL}/issues`}
+            href="https://github.com/theforcebe/onslaught-data"
             target="_blank"
             rel="noreferrer"
             className="btn secondary"
           >
-            Review submissions
+            Private data history
             <ExternalLink size={14} />
           </a>
         </div>
         <p className="privacy-note">
-          The Pages site and repository are public. Keep contact information,
-          real names, passwords, and account tokens out of shared raid data.
+          The website code, roster, and schedule are public. Gear, attendance,
+          plans, and member permissions stay in the private data repository.
+          Never enter passwords or account tokens into raid records.
         </p>
       </section>
       <section className="panel">
@@ -1536,7 +1628,153 @@ export default function App() {
     progress,
     activity,
     settings,
+    access: (
+      <AccessPanel
+        access={effectiveAccess}
+        members={demo ? demoMembers : members}
+        state={state}
+        identity={demo ? undefined : identity}
+        demo={demo}
+        save={async (member) => {
+          try {
+            if (demo) {
+              setDemoMembers((old) =>
+                old.map((m) => (m.id === member.id ? member : m)),
+              );
+              toast("Demo member permissions saved locally.");
+            } else {
+              acceptView(await saveMember(member, state.revision));
+              toast("Member access updated.");
+            }
+          } catch (e) {
+            toast((e as Error).message);
+          }
+        }}
+        join={async () => {
+          try {
+            acceptView(await requestMembership());
+            toast("Membership request sent to guild admins.");
+          } catch (e) {
+            toast((e as Error).message);
+          }
+        }}
+      />
+    ),
   };
+  const publicOverview = (
+    <>
+      <section className="raid-hero public-hero">
+        <div className="hero-contours" aria-hidden="true">
+          <div className="rune">
+            <img src={`${import.meta.env.BASE_URL}crest.svg`} alt="" />
+          </div>
+        </div>
+        <div className="hero-content">
+          <span className="hero-kicker">
+            <span className="pulse-dot" />
+            Ønslaught · WoW Forever
+          </span>
+          <h2>{nextRaid?.title || "Stronger, together."}</h2>
+          <p>
+            {nextRaid
+              ? `${nextRaid.instance} · ${formatDate(nextRaid.start, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" })}`
+              : "One guild. Every class. A place for every raider."}
+          </p>
+          <div className="hero-actions">
+            <button className="btn gold" onClick={() => go("roster")}>
+              Meet the roster <Users size={16} />
+            </button>
+            <button
+              className="btn hero-secondary"
+              onClick={() => go("schedule")}
+            >
+              Raid schedule <CalendarDays size={16} />
+            </button>
+          </div>
+        </div>
+        <div className="hero-footer">
+          <span>{state.characters.length} raiders on the public roster</span>
+          <span className="hero-footnote">Public roster & schedule</span>
+        </div>
+      </section>
+      <div className="overview-bottom spaced">
+        <section className="panel">
+          <div className="panel-title">
+            <h3>Every class brings something.</h3>
+            <span className="badge">Public</span>
+          </div>
+          <div className="class-distribution">
+            {CLASSES.map((cls) => (
+              <div key={cls}>
+                <ClassIcon cls={cls} size={29} />
+                <span>{label(cls)}</span>
+                <div className="class-track">
+                  <span
+                    style={{
+                      width: `${(state.characters.filter((c) => c.class === cls).length / (state.characters.length || 1)) * 100}%`,
+                      background: CLASS_COLORS[cls],
+                    }}
+                  />
+                </div>
+                <strong>
+                  {state.characters.filter((c) => c.class === cls).length}
+                </strong>
+              </div>
+            ))}
+          </div>
+        </section>
+        <section className="panel">
+          <div className="panel-title">
+            <h3>Your raid workspace</h3>
+            <ShieldCheck size={20} />
+          </div>
+          <p className="muted">
+            Gear, loot priorities, consumables, attendance, and encounter notes
+            are available to approved members for their assigned sections and
+            teams.
+          </p>
+          <button
+            className="btn primary"
+            onClick={() => (identity ? go("access") : void signIn())}
+          >
+            {identity ? "View your access" : "Sign in with Battle.net"}
+          </button>
+          <button className="btn text" onClick={toggleDemo}>
+            Explore the fictional demo <ArrowUpRight size={15} />
+          </button>
+        </section>
+      </div>
+    </>
+  );
+  const pageSection: Record<string, Section> = {
+    planner: "planner",
+    loot: "loot",
+    consumables: "consumables",
+    progress: "progress",
+    activity: "activity",
+  };
+  const pageAllowed = (id: string) =>
+    id === "settings"
+      ? effectiveAccess.admin
+      : !pageSection[id] || hasSection(effectiveAccess, pageSection[id]);
+  const locked = (
+    <section className="panel">
+      <Empty icon={<LockKeyhole size={36} />} title="This section is private.">
+        Your guild admin controls section and team access.
+      </Empty>
+      <div className="button-row">
+        <button
+          className="btn primary"
+          onClick={() => (identity ? go("access") : void signIn())}
+        >
+          {identity ? "View your access" : "Sign in with Battle.net"}
+        </button>
+        <button className="btn secondary" onClick={toggleDemo}>
+          Explore the demo
+        </button>
+      </div>
+    </section>
+  );
   const [title, subtitle] = titles[page] || titles.overview;
   return (
     <div
@@ -1585,6 +1823,7 @@ export default function App() {
             >
               <n.icon size={18} />
               <span>{n.name}</span>
+              {!pageAllowed(n.id) && <LockKeyhole size={13} />}
               {n.id === "roster" && <small>{state.characters.length}</small>}
               {n.id === "loot" && pendingLoot.length > 0 && (
                 <span className="nav-dot" />
@@ -1641,8 +1880,21 @@ export default function App() {
                 className="icon-btn"
                 aria-label="Sign out"
                 onClick={async () => {
-                  await logout();
                   setIdentity(undefined);
+                  setAccess(PUBLIC_ACCESS);
+                  setMembers([]);
+                  setDialog(undefined);
+                  setLive((prev) =>
+                    prev
+                      ? project({ version: 1, state: prev, members: [] }).state
+                      : prev,
+                  );
+                  try {
+                    await logout();
+                  } catch {
+                    /* Local sign-out already cleared the session. */
+                  }
+                  await refresh();
                   toast("Signed out.");
                 }}
               >
@@ -1717,7 +1969,7 @@ export default function App() {
               <h1>{title}</h1>
               <p>{subtitle}</p>
             </div>
-            {page === "overview" && (
+            {page === "overview" && hasSection(effectiveAccess, "gear") && (
               <button
                 className="btn secondary"
                 onClick={() => open({ type: "import" })}
@@ -1732,7 +1984,11 @@ export default function App() {
               {error}
             </p>
           )}
-          {content[page] || overview}
+          {pageAllowed(page)
+            ? page === "overview" && !effectiveAccess.admin
+              ? publicOverview
+              : content[page] || publicOverview
+            : locked}
           <footer className="page-footer">
             <span>
               Ønslaught <span className="footer-divider">/</span> Made for the
@@ -1775,6 +2031,8 @@ export default function App() {
           open={open}
           toast={toast}
           demo={demo}
+          admin={effectiveAccess.admin}
+          members={demo ? demoMembers : members}
           message={notification}
         />
       )}

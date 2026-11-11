@@ -8,21 +8,11 @@ const state = StateSchema.parse({
     realm: "WoW Forever guild",
     region: "US",
     timeZone: "America/Los_Angeles",
-    adminsGithub: ["theforcebe"],
+    adminsGithub: [],
     membersGithub: [],
   },
   characters: [],
-  teams: [
-    {
-      id: "vanguard",
-      name: "The Vanguard",
-      size: 20,
-      tanks: 2,
-      healers: 4,
-      description:
-        "Our first raid team. Adjust the size and role targets as the guild grows.",
-    },
-  ],
+  teams: [],
   events: [],
   loot: [],
   supplies: [],

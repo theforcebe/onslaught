@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
           order: "post",
           handler(html, ctx) {
             if (ctx.server) return html;
-            const policy = `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://render.worldofwarcraft.com https://wow.zamimg.com https://thewowdb.com; connect-src 'self' https://raw.githubusercontent.com https://thewowdb.com ${gateway}; object-src 'none'; base-uri 'self'; form-action 'self' https://github.com; upgrade-insecure-requests`;
+            const policy = `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://render.worldofwarcraft.com https://wow.zamimg.com https://thewowdb.com; connect-src 'self' https://thewowdb.com ${gateway}; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests`;
             return html.replace(
               "<head>",
               `<head><meta http-equiv="Content-Security-Policy" content="${policy}"><meta name="referrer" content="no-referrer">`,

@@ -1,7 +1,16 @@
 /// <reference types="@cloudflare/workers-types" />
 import { applyChange, ChangeError } from "../src/lib/reducer";
-import { RequestSchema, StateSchema } from "../src/lib/model";
-import type { Identity, RaidState } from "../src/lib/model";
+import { RequestSchema } from "../src/lib/model";
+import type { Identity } from "../src/lib/model";
+import {
+  DocumentSchema,
+  accessFor,
+  project,
+  authorizeAction,
+  actionScope,
+  updateMember,
+} from "../src/lib/access";
+import type { GuildDocument } from "../src/lib/access";
 import { ZodError } from "zod";
 export interface Env {
   DB: D1Database;
@@ -13,7 +22,6 @@ export interface Env {
   PUBLIC_API_URL: string;
   GITHUB_REPOSITORY: string;
   ADMIN_BNET_IDS: string;
-  MEMBER_BNET_IDS: string;
 }
 type Stored = { payload: string };
 const encoder = new TextEncoder();
@@ -179,8 +187,6 @@ async function authenticated(req: Request, env: Env): Promise<Identity> {
     label: string;
   };
   const admin = list(env.ADMIN_BNET_IDS).includes(stored.subject);
-  if (!admin && !list(env.MEMBER_BNET_IDS).includes(stored.subject))
-    throw new ChangeError("This account is not on the guild access list.", 403);
   return { provider: "battlenet", id: stored.id, label: stored.label, admin };
 }
 function githubHeaders(env: Env) {
@@ -195,7 +201,17 @@ function githubHeaders(env: Env) {
 export async function readRepository(env: Env) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(env.GITHUB_REPOSITORY))
     throw new Error("Invalid repository configuration");
-  const url = `https://api.github.com/repos/${env.GITHUB_REPOSITORY}/contents/public/data/raid-state.json`;
+  // A misconfigured public repository must fail closed, including for anonymous reads.
+  const meta = await fetch(
+    `https://api.github.com/repos/${env.GITHUB_REPOSITORY}`,
+    { headers: githubHeaders(env), redirect: "error" },
+  );
+  if (
+    !meta.ok ||
+    ((await meta.json()) as { private?: boolean }).private !== true
+  )
+    throw new ChangeError("A private guild data repository is required.", 503);
+  const url = `https://api.github.com/repos/${env.GITHUB_REPOSITORY}/contents/data/guild.json`;
   const r = await fetch(`${url}?ref=main`, { headers: githubHeaders(env) });
   if (!r.ok)
     throw new ChangeError(
@@ -207,7 +223,7 @@ export async function readRepository(env: Env) {
     c.charCodeAt(0),
   );
   return {
-    state: StateSchema.parse(JSON.parse(new TextDecoder().decode(bytes))),
+    document: DocumentSchema.parse(JSON.parse(new TextDecoder().decode(bytes))),
     sha: file.sha,
     url,
   };
@@ -216,16 +232,16 @@ async function writeRepository(
   env: Env,
   url: string,
   sha: string,
-  state: RaidState,
+  document: GuildDocument,
 ) {
-  const bytes = encoder.encode(JSON.stringify(state, null, 2) + "\n");
+  const bytes = encoder.encode(JSON.stringify(document, null, 2) + "\n");
   let binary = "";
   for (const b of bytes) binary += String.fromCharCode(b);
   const r = await fetch(url, {
     method: "PUT",
     headers: githubHeaders(env),
     body: JSON.stringify({
-      message: `raid: ${state.audit[0].action} (revision ${state.revision})`,
+      message: `raid: ${document.state.audit[0].action} (revision ${document.state.revision})`,
       content: btoa(binary),
       sha,
       branch: "main",
@@ -364,16 +380,6 @@ async function route(req: Request, env: Env): Promise<Response> {
     if (!saved || saved.challenge !== (await digest(verifier)))
       throw new ChangeError("Sign-in expired. Try again.", 401);
     const admin = list(env.ADMIN_BNET_IDS).includes(saved.subject);
-    const member = admin || list(env.MEMBER_BNET_IDS).includes(saved.subject);
-    if (!member)
-      return json(
-        {
-          error:
-            "This Battle.net account needs a guild invitation. Give your numeric account ID to the guild owner privately.",
-          accountId: saved.subject,
-        },
-        403,
-      );
     const token = random();
     await put(
       env,
@@ -389,6 +395,8 @@ async function route(req: Request, env: Env): Promise<Response> {
         id: saved.id,
         label: saved.label,
         admin,
+        // Only returned to the account itself after proof-key verification, for owner bootstrap.
+        accountId: saved.subject,
       },
     });
   }
@@ -400,15 +408,82 @@ async function route(req: Request, env: Env): Promise<Response> {
         .run();
     return json({ ok: true });
   }
+  if (u.pathname === "/api/public" && req.method === "GET") {
+    await limit(env, `read:${ipHash}`, 90);
+    const current = await readRepository(env);
+    return json(project(current.document));
+  }
+  if (u.pathname === "/api/state" && req.method === "GET") {
+    const identity = await authenticated(req, env);
+    await limit(env, `read:${identity.id}`, 90);
+    const current = await readRepository(env);
+    return json(project(current.document, identity));
+  }
+  if (u.pathname === "/api/join" && req.method === "POST") {
+    const identity = await authenticated(req, env);
+    await limit(env, `join:${identity.id}`, 3);
+    const current = await readRepository(env);
+    if (!current.document.members.some((m) => m.id === identity.id)) {
+      if (current.document.members.length >= 500)
+        throw new ChangeError("The guild member limit has been reached.", 409);
+      const doc = structuredClone(current.document);
+      doc.members.push({
+        id: identity.id,
+        label: identity.label,
+        status: identity.admin ? "active" : "pending",
+        role: identity.admin ? "admin" : "member",
+        sections: [],
+        allTeams: false,
+        teamIds: [],
+      });
+      doc.state.revision++;
+      doc.state.audit.unshift({
+        id: crypto.randomUUID(),
+        at: new Date().toISOString(),
+        actor: "Battle.net member",
+        action: "access.request",
+        summary: "Requested guild membership",
+      });
+      await writeRepository(
+        env,
+        current.url,
+        current.sha,
+        DocumentSchema.parse(doc),
+      );
+      return json(project(doc, identity));
+    }
+    return json(project(current.document, identity));
+  }
+  if (u.pathname === "/api/members" && req.method === "POST") {
+    const identity = await authenticated(req, env);
+    await limit(env, `write:${identity.id}`, 20);
+    const current = await readRepository(env);
+    const next = updateMember(
+      current.document,
+      identity,
+      await boundedJSON(req),
+    );
+    if (next.state.revision !== current.document.state.revision)
+      await writeRepository(env, current.url, current.sha, next);
+    return json(project(next, identity));
+  }
   if (u.pathname === "/api/change" && req.method === "POST") {
     const identity = await authenticated(req, env);
     await limit(env, `write:${identity.id}`, 20);
-    const input = RequestSchema.parse(await boundedJSON(req));
     const current = await readRepository(env);
-    const next = applyChange(current.state, input, identity);
-    if (next.revision !== current.state.revision)
+    if (accessFor(current.document, identity).status !== "active")
+      throw new ChangeError("Your membership is not active.", 403);
+    const input = RequestSchema.parse(await boundedJSON(req));
+    const actor = authorizeAction(current.document, identity, input.action);
+    const next = {
+      ...current.document,
+      state: applyChange(current.document.state, input, actor),
+    };
+    if (next.state.revision !== current.document.state.revision) {
+      next.state.audit[0].scope = actionScope(next.state, input.action);
       await writeRepository(env, current.url, current.sha, next);
-    return json(next);
+    }
+    return json(project(next, identity));
   }
   return json({ error: "Not found." }, 404);
 }

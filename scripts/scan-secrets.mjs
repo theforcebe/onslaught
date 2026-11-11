@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 const patterns = [
   /gh[pousr]_[A-Za-z0-9]{30,}/,
@@ -21,6 +21,7 @@ const tracked = execFileSync(
   .filter(Boolean);
 let bad = false;
 for (const path of [...new Set([...tracked, ...files("dist")])]) {
+  if (!existsSync(path)) continue;
   if (
     path === "package-lock.json" ||
     path.endsWith(".png") ||

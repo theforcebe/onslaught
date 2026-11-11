@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { privateFixture } from "./access-fixture";
 import worker, { digest, cors } from "../server/worker";
 import type { Env } from "../server/worker";
 function environment() {
@@ -36,13 +37,34 @@ function environment() {
     IDENTITY_KEY: "test-identity-key-long-enough",
     APP_ORIGIN: "https://theforcebe.github.io",
     PUBLIC_API_URL: "https://gateway.example",
-    GITHUB_REPOSITORY: "theforcebe/onslaught",
+    GITHUB_REPOSITORY: "theforcebe/onslaught-data",
     ADMIN_BNET_IDS: "123",
-    MEMBER_BNET_IDS: "456",
   } as unknown as Env;
   return { env, rows };
 }
 const ctx = { waitUntil: () => {} } as any;
+afterEach(() => vi.unstubAllGlobals());
+function mockRepository(doc = privateFixture(), isPrivate = true) {
+  const writes: any[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        writes.push(JSON.parse(String(init.body)));
+        return Response.json({});
+      }
+      if (url.endsWith("/onslaught-data"))
+        return Response.json({ private: isPrivate });
+      if (url.includes("/contents/data/guild.json"))
+        return Response.json({
+          sha: "sha",
+          content: Buffer.from(JSON.stringify(doc)).toString("base64"),
+        });
+      throw Error("Unexpected upstream request");
+    }),
+  );
+  return writes;
+}
 const post = (
   path: string,
   body: unknown,
@@ -168,6 +190,7 @@ describe("credential and OAuth boundaries", () => {
     expect(r.status).toBe(401);
   });
   it("checks current membership for already-issued sessions", async () => {
+    mockRepository();
     const { env, rows } = environment();
     const token = "t".repeat(43);
     rows.set(`session:${await digest(token)}`, {
@@ -186,6 +209,148 @@ describe("credential and OAuth boundaries", () => {
       ctx,
     );
     expect(r.status).toBe(403);
+  });
+  it("serves public roster and schedule without serializing private data", async () => {
+    mockRepository();
+    const { env } = environment();
+    const r = await worker.fetch(
+      new Request("https://gateway.example/api/public"),
+      env,
+      ctx,
+    );
+    expect(r.status).toBe(200);
+    const body = await r.text();
+    expect(body).toContain("Public second raid");
+    expect(body).not.toContain("PRIVATE-");
+    expect(r.headers.get("Cache-Control")).toBe("no-store");
+  });
+  it("refuses a data repository made public", async () => {
+    mockRepository(privateFixture(), false);
+    const { env } = environment();
+    const r = await worker.fetch(
+      new Request("https://gateway.example/api/public"),
+      env,
+      ctx,
+    );
+    expect(r.status).toBe(503);
+    expect(await r.text()).not.toContain("PRIVATE-");
+  });
+  it("requires authentication for private reads and member management", async () => {
+    const { env } = environment();
+    expect(
+      (
+        await worker.fetch(
+          new Request("https://gateway.example/api/state"),
+          env,
+          ctx,
+        )
+      ).status,
+    ).toBe(401);
+    expect(
+      (await worker.fetch(post("/api/members", {}), env, ctx)).status,
+    ).toBe(401);
+  });
+  it("filters read and write responses, then applies revocation to the same session", async () => {
+    const doc = privateFixture(),
+      writes = mockRepository(doc),
+      { env, rows } = environment();
+    const token = "t".repeat(43);
+    rows.set(`session:${await digest(token)}`, {
+      payload: JSON.stringify({
+        subject: "456",
+        id: "member-id",
+        label: "Member",
+      }),
+      expires_at: Date.now() + 3600000,
+    });
+    const headers = { Authorization: `Bearer ${token}` };
+    const read = () =>
+      worker.fetch(
+        new Request("https://gateway.example/api/state", { headers }),
+        env,
+        ctx,
+      );
+    expect(await (await read()).text()).not.toContain("PRIVATE-SECOND");
+    const write = await worker.fetch(
+      post(
+        "/api/change",
+        {
+          version: 1,
+          id: "test-write",
+          expectedRevision: 0,
+          action: {
+            type: "character.update",
+            characterId: doc.state.characters[0].id,
+            role: "ranged",
+            spec: "",
+            notes: "Updated",
+          },
+        },
+        env.APP_ORIGIN,
+        headers,
+      ),
+      env,
+      ctx,
+    );
+    expect(write.status).toBe(200);
+    expect(await write.text()).not.toContain("PRIVATE-SECOND");
+    expect(writes).toHaveLength(1);
+    doc.members[0].status = "suspended";
+    expect(await (await read()).text()).not.toContain("PRIVATE-");
+    const denied = await worker.fetch(
+      post("/api/change", {}, env.APP_ORIGIN, headers),
+      env,
+      ctx,
+    );
+    expect(denied.status).toBe(403);
+    expect(writes).toHaveLength(1);
+  });
+  it("does not trust forged administrator fields or allow a raider to promote themselves", async () => {
+    const doc = privateFixture();
+    mockRepository(doc);
+    const { env, rows } = environment();
+    const token = "t".repeat(43);
+    rows.set(`session:${await digest(token)}`, {
+      payload: JSON.stringify({
+        subject: "456",
+        id: "member-id",
+        label: "Member",
+      }),
+      expires_at: Date.now() + 3600000,
+    });
+    const headers = { Authorization: `Bearer ${token}` };
+    const r = await worker.fetch(
+      post(
+        "/api/members",
+        {
+          id: "promote",
+          expectedRevision: 0,
+          member: { ...doc.members[0], role: "admin" },
+        },
+        env.APP_ORIGIN,
+        headers,
+      ),
+      env,
+      ctx,
+    );
+    expect(r.status).toBe(403);
+    const forged = await worker.fetch(
+      post(
+        "/api/change",
+        {
+          version: 1,
+          id: "forged",
+          expectedRevision: 0,
+          admin: true,
+          action: { type: "team.save", team: doc.state.teams[0] },
+        },
+        env.APP_ORIGIN,
+        headers,
+      ),
+      env,
+      ctx,
+    );
+    expect(forged.status).toBe(400);
   });
   it("revokes sessions on logout", async () => {
     const { env, rows } = environment();

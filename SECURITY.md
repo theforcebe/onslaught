@@ -1,49 +1,43 @@
 # Security model
 
-## Credentials are not raid data
+## Credentials
 
-- The Pages application contains no Battle.net client secret, GitHub service credential, Blizzard access token, or account password.
-- Battle.net passwords are entered only on Battle.net. The gateway requests `openid` identity access; it does not request a WoW profile scope or inspect unrelated account data.
-- Blizzard access tokens are used on the server to read identity and then discarded. They are not returned to the browser, saved in the repository, or written to application logs.
-- The app’s opaque session token is held in JavaScript memory only. It is not in localStorage, sessionStorage, cookies, query parameters, analytics, or repository files. Reloading requires a new sign-in. Sessions expire after one hour and logout revokes them.
-- D1 holds only hashed session/redemption keys and temporary account identity. Session rows expire after one hour and are purged on subsequent requests. Configure the hosting account’s own access and retention policies appropriately.
-- Public character ownership uses an HMAC pseudonym, not a raw Battle.net account ID or BattleTag. A stable `IDENTITY_KEY` is required; rotating it requires migrating owner identifiers.
-- The frontend has no analytics and never sends an export to an item database. Public asset hosts receive ordinary image/font requests, with no referrer.
+Battle.net passwords are entered only on Battle.net. The gateway requests `openid` identity, uses the Blizzard access token to read userinfo, then discards it. Passwords, provider access tokens, client secrets and GitHub service credentials are never stored in guild records or returned to the frontend. Application logs do not record credentials or exports; Worker observability is disabled.
 
-## Authentication boundaries
+Cloudflare secrets hold client credentials, a dedicated repository-scoped service token, a stable identity HMAC key, and owner account IDs. The service token must have Contents read/write on **onslaught-data only**. Never reuse a broader CLI credential. `.dev.vars` and `.env*` are ignored. Only the public Worker URL belongs in a `VITE_` variable.
 
-OAuth state is random, short-lived, consumed once, and bound to a `Secure; HttpOnly; SameSite=Lax` cookie. The browser receives only a short-lived redemption code via `postMessage` to the exact configured app origin. The message listener checks both origin and popup identity. Redemption requires the matching SHA-256 proof key and is single-use.
+## Sign-in and sessions
 
-The final session token is returned in a no-store JSON response. Credentialed mutations require an explicit bearer token, an exact allowed Origin, current membership and a live session. Every mutation is rate limited and request bodies have byte limits. Cross-origin requests fail closed. All callback pages have a restrictive CSP, no external resources and no-referrer policy. The static build also applies a CSP.
+OAuth state is random, expires after five minutes, is consumed once, and is bound to a Secure, HttpOnly, SameSite=Lax cookie. The callback posts a one-use, one-minute redemption code only to the exact app origin. The frontend checks popup identity and origin. Redemption requires the matching SHA-256 proof key. Blizzard tokens are never included.
 
-GitHub Pages project sites under one account share an origin. Use a dedicated custom domain for stronger isolation if the same account hosts other untrusted applications. Keep unrelated code out of the guild’s origin.
+Opaque app sessions live only in JavaScript memory, are hashed in D1, expire after one hour, and are revoked on logout. They never enter localStorage, URLs, or repository files. D1 stores temporary verified identity and hashed keys. Expired rows are removed on subsequent requests. The bootstrap account ID is shown only to its own verified session. Ownership uses stable HMAC identifiers.
 
-## Authorization boundaries
+Responses use no-store. Mutations require a live bearer session and exact allowed Origin. Auth and data routes are rate limited; JSON bodies are bounded. OAuth callback pages have restrictive CSP, no external resources and no-referrer policy. Errors do not echo upstream bodies. Do not enable unredacted auth-route logging or request-body capture.
 
-GitHub identity comes from `issue.user.login`, never request JSON. The validator reads current admin/member lists from the trusted main branch. Members may update only their own character records and personal responses. Structural writes require an admin. Payloads are strict schemas; arbitrary fields, invalid IDs, invalid quantities and ownership injection are rejected.
+GitHub Pages project sites on one account share an origin. Use a dedicated custom domain if other applications on that origin are untrusted. Restrict source and deployment access to trusted maintainers.
 
-Battle.net identity comes from the server’s verified userinfo response. Admin and member status are checked against private server allowlists on every write, so removal takes effect for existing sessions. The client cannot grant itself admin access.
+## Public and private data
 
-The shared reducer is tested for member isolation, admin restrictions, conflict rejection, duplicate requests, team capacity, loot eligibility and award immutability. UI visibility is not a security boundary.
+Website source is public. Canonical guild data and member permissions live in a separate **private repository**. The gateway refuses to use a repository whose metadata says it is public. This cannot undo disclosure if an operator makes it public; keep it private permanently. Public GitHub issue submissions and their write workflow have been removed.
 
-GitHub Actions runs trusted code from `main`; issue contents are never interpolated into shell commands. Validation errors do not print issue bodies. Workflows have explicit permissions. The Pages workflow has no server credentials. The guild workflow uses its short-lived repository `GITHUB_TOKEN`, not a personal token. Raiders should receive app membership, **not** repository write access.
+Anonymous responses contain only guild branding, roster basics (name/class/level/role/spec/team name), and schedule basics (title/instance/team/time). Public exports omit gear, raw imports, ownership IDs, member lists, character notes, group positions, attendance, raid notes, loot, supplies, progression and audit. CI rejects nonempty public bootstrap records.
 
-## Secret handling for operators
+Authenticated reads return an allowlisted projection. Section grants and selected teams apply to every private collection. Nested priorities, requests, pledges and attendance are filtered by character team too. Guild-wide records require section access. Unassigned gear requires Gear access and ownership or all-team access. Audit visibility requires Activity plus the source section, teams and affected characters; unscoped and access-management history is admin-only. Downloads contain only the projected view.
 
-Store gateway credentials only with Cloudflare’s encrypted secret facility. Create a dedicated fine-grained GitHub token limited to this repository with Contents read/write; no workflow, administration or organization permissions. Set an expiry and rotate it. Never reuse a developer’s broad CLI token in the gateway.
+Permissions are read again for each request. Pending and suspended accounts get only public data. Join requests derive identity from verified userinfo and start without private permissions. Admins can edit permissions but cannot forge identities or add unverified accounts through that route. Recovery owners are explicitly listed in `ADMIN_BNET_IDS`; first sign-in never grants admin access automatically.
 
-`.env*` and `.dev.vars` are ignored. Only the public gateway URL uses a `VITE_` variable. Source/build scanning rejects common token and private-key patterns and rejects server-only configuration in the public build. Dependency audits are part of release verification. These checks reduce accidental disclosure; they cannot recognize every possible secret in arbitrary text.
+Mutations pass strict schemas, section/team authorization, and ownership/admin checks. Client flags cannot grant admin access. Conflicts use the canonical revision and GitHub file SHA; successful requests are idempotent. Structure, awards and membership require an admin even if a raider can view the section.
 
-Application logs never include OAuth payloads, authorization headers, exports or credentials. Worker observability is disabled by default. Do not enable HTTP request capture or third-party logging on authentication routes without redaction; OAuth authorization codes necessarily pass through the provider callback URL.
+Revocation prevents future responses. It cannot erase previously viewed, downloaded, copied, or historical information. Data-repository collaborators can read all historical guild data; raiders should receive app membership instead.
 
-## Public content
+## Input and dependencies
 
-This repository and the Pages site are public. Character exports, character names, game realms, plans, notes, GitHub usernames and guild decisions are public after submission. The import review screen states this before publication and rejects common credential patterns. Never put real names, email addresses, contact information, account tokens or private conversation logs into a raid note or import.
+Imports and raid text reject common credential patterns, but no scan can recognize every secret. Imported values render as text, never injected HTML. Item-service requests contain only item IDs, never exports or authentication. Icon URLs and source protocols are constrained. Demo data is fictional and browser-local.
 
-Item names and imported text are rendered as text, not executable HTML. Database tooltip HTML is never injected. Images and source links are constrained to safe protocols and vetted icon hosts.
+Source/build scans check common tokens and private keys and reject server secret variable names in public bundles. Pages Actions has no gateway credentials and uses pinned actions with explicit permissions. Run tests, type checks, build validation and dependency audit before release.
 
-## Reporting and recovery
+## Recovery and limits
 
-Report a suspected vulnerability privately to the repository owner; do not post credentials in an issue. If a credential is exposed, revoke it immediately and rotate it at its issuer, then remove it from code, artifacts and Git history as appropriate. Deleting only the current file does not remove earlier Git revisions. App data can be restored from a reviewed previous commit; preserve the audit history where possible.
+Report vulnerabilities privately to the owner; never post credentials in issues. Revoke exposed credentials immediately, rotate secrets, and review artifacts and history. Deleting a file does not delete prior Git revisions. Restoring old data may restore old permissions; review the member policy during recovery.
 
-The included test suite and scans are not a third-party security audit. Live OAuth verification remains required after provisioning real credentials.
+Automated tests cover public projections, team isolation, section grants, nested records, forged admin fields, live-session revocation, read/write responses, private-repository enforcement, OAuth state/redemption, ownership and conflicts. They are not an independent security audit or a guarantee that every defect is impossible. Real Battle.net OAuth and deployment behavior must be verified after credentials are provisioned.

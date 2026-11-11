@@ -3348,3 +3348,67 @@ legend small {
     visibility: visible;
   }
 }
+
+/* Guild membership and section access */
+.access-page {
+  display: grid;
+  gap: 24px;
+}
+.access-intro {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+.access-intro > svg {
+  color: var(--gold, #d7b477);
+  flex-shrink: 0;
+}
+.member-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: 20px;
+}
+.member-card form {
+  display: grid;
+  gap: 16px;
+}
+.permission-list {
+  border: 1px solid #303440;
+  border-radius: 10px;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+.permission-list legend {
+  color: #aeb2be;
+  padding: 0 6px;
+  font-size: 12px;
+}
+.permission-list label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.permission-list input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #d7b477;
+}
+.member-card .form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.public-hero {
+  min-height: 300px;
+}
+.access-page .section-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 15px;
+  justify-content: space-between;
+}

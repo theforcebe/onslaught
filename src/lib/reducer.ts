@@ -141,6 +141,14 @@ export function applyChange(
       summary = `Assigned character ownership to ${a.github}`;
       break;
     }
+    case "character.member": {
+      needAdmin();
+      const c = char(a.characterId);
+      c.ownerBattleNet = a.memberId;
+      delete c.ownerGithub;
+      summary = `Assigned ownership of ${c.name}`;
+      break;
+    }
     case "team.save": {
       needAdmin();
       if (a.team.tanks + a.team.healers > a.team.size)
@@ -226,6 +234,8 @@ export function applyChange(
     }
     case "loot.save": {
       needAdmin();
+      if (a.loot.teamId && !s.teams.some((t) => t.id === a.loot.teamId))
+        throw new ChangeError("Team not found.");
       if (
         a.loot.priority.some((id) => !s.characters.some((c) => c.id === id)) ||
         new Set(a.loot.priority).size !== a.loot.priority.length
@@ -277,6 +287,8 @@ export function applyChange(
     }
     case "boss.save": {
       needAdmin();
+      if (a.boss.teamId && !s.teams.some((t) => t.id === a.boss.teamId))
+        throw new ChangeError("Team not found.");
       update(s.bosses, a.boss);
       summary = `Updated ${a.boss.name}: ${a.boss.status}`;
       break;

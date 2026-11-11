@@ -107,6 +107,7 @@ export const CharacterSchema = z
     ownerGithub: github.optional(),
     ownerBattleNet: id.optional(),
     teamId: id.optional(),
+    publicTeamName: text.optional(),
     group: z.number().int().min(1).max(8).optional(),
     notes: z.string().max(2000),
     snapshot: SnapshotSchema.optional(),
@@ -130,6 +131,7 @@ export const EventSchema = z
     title: text.min(1),
     instance: text,
     teamId: id,
+    publicTeamName: text.optional(),
     start: z.string().datetime(),
     end: z.string().datetime(),
     timeZone: text,
@@ -141,6 +143,7 @@ export type RaidEvent = z.infer<typeof EventSchema>;
 export const LootSchema = z
   .object({
     id,
+    teamId: id.optional(),
     itemId: z.number().int().positive(),
     name: text.min(1),
     slot: z.enum(SLOTS),
@@ -176,6 +179,7 @@ export type Supply = z.infer<typeof SupplySchema>;
 export const BossSchema = z
   .object({
     id,
+    teamId: id.optional(),
     name: text.min(1),
     instance: text,
     status: z.enum(["not-started", "progressing", "defeated"]),
@@ -195,7 +199,7 @@ export const StateSchema = z
         realm: text,
         region: text,
         timeZone: text,
-        adminsGithub: z.array(github).min(1),
+        adminsGithub: z.array(github),
         membersGithub: z.array(github).max(500).default([]),
       })
       .strict(),
@@ -212,6 +216,13 @@ export const StateSchema = z
         actor: text,
         action: text,
         summary: text,
+        scope: z
+          .object({
+            section: z.string(),
+            teamIds: z.array(id),
+            characterIds: z.array(id),
+          })
+          .optional(),
       }),
     ),
     processedRequests: z.array(id),
@@ -223,6 +234,7 @@ export type Identity = {
   id: string;
   label: string;
   admin?: boolean;
+  accountId?: string;
 };
 export const ActionSchema = z.discriminatedUnion("type", [
   z
@@ -246,6 +258,13 @@ export const ActionSchema = z.discriminatedUnion("type", [
       type: z.literal("character.owner"),
       characterId: id,
       github: github,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("character.member"),
+      characterId: id,
+      memberId: id,
     })
     .strict(),
   z.object({ type: z.literal("team.save"), team: TeamSchema }).strict(),
@@ -300,7 +319,7 @@ export const ActionSchema = z.discriminatedUnion("type", [
       type: z.literal("guild.update"),
       name: text.min(1),
       timeZone: text,
-      adminsGithub: z.array(github).min(1).max(20),
+      adminsGithub: z.array(github).max(20),
       membersGithub: z.array(github).max(500).default([]),
     })
     .strict(),

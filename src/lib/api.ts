@@ -1,40 +1,59 @@
 import { StateSchema } from "./model";
-import type { RaidState, ChangeRequest, Identity } from "./model";
+import type { ChangeRequest, Identity } from "./model";
+import { ViewSchema, PUBLIC_ACCESS } from "./access";
+import type { GuildView, Member } from "./access";
 export const REPOSITORY = "theforcebe/onslaught";
 export const REPO_URL = `https://github.com/${REPOSITORY}`;
 export const API_URL = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 let sessionToken = "";
-export async function loadGuild(): Promise<{
-  state: RaidState;
-  isCurrent: boolean;
-}> {
-  const url = `https://raw.githubusercontent.com/${REPOSITORY}/main/public/data/raid-state.json?v=${Date.now()}`;
-  try {
-    const r = await fetch(url, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(10000),
-    });
-    if (r.ok)
-      return { state: StateSchema.parse(await r.json()), isCurrent: true };
-  } catch {
-    /* Bundled snapshot is the offline fallback */
+let sessionEpoch = 0;
+export const sessionActive = () => !!sessionToken;
+async function api(path: string, body?: unknown): Promise<GuildView> {
+  const epoch = sessionEpoch;
+  const r = await fetch(`${API_URL}${path}`, {
+    method: body === undefined ? "GET" : "POST",
+    headers: {
+      ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    cache: "no-store",
+    signal: AbortSignal.timeout(15000),
+  });
+  const data = await r.json();
+  if (epoch !== sessionEpoch)
+    throw new Error("Session changed. Refresh the guild view.");
+  if (r.status === 401) {
+    sessionToken = "";
+    sessionEpoch++;
   }
+  if (!r.ok) throw new Error(data.error || "The guild could not be loaded.");
+  return ViewSchema.parse(data);
+}
+export async function loadGuild(): Promise<GuildView & { isCurrent: boolean }> {
+  if (API_URL)
+    return {
+      ...(await api(sessionToken ? "/api/state" : "/api/public")),
+      isCurrent: true,
+    };
   const r = await fetch(`${import.meta.env.BASE_URL}data/raid-state.json`, {
     cache: "no-store",
+    signal: AbortSignal.timeout(10000),
   });
   if (!r.ok)
     throw new Error(
       "The guild data could not be loaded. Check your connection and reload.",
     );
-  return { state: StateSchema.parse(await r.json()), isCurrent: false };
-}
-export function issueBody(request: ChangeRequest) {
-  return `Ønslaught shared change. GitHub Actions checks the submitting account and character ownership before committing.\n\n\`\`\`json\n${JSON.stringify(request, null, 2)}\n\`\`\`\n`;
+  return {
+    state: StateSchema.parse(await r.json()),
+    access: { ...PUBLIC_ACCESS },
+    isCurrent: false,
+  };
 }
 export async function loginBattleNet(): Promise<Identity> {
   if (!API_URL)
     throw new Error(
-      "Battle.net sign-in needs the guild’s secure gateway. The setup guide explains the three server secrets required. You can use GitHub submissions in the meantime.",
+      "Battle.net sign-in needs the guild’s secure gateway. Shared changes become available when the owner completes setup.",
     );
   const popup = window.open(
     "about:blank",
@@ -84,6 +103,7 @@ export async function loginBattleNet(): Promise<Identity> {
               : data.error || "Sign-in expired. Try again.",
           );
         sessionToken = data.token;
+        sessionEpoch++;
         resolve(data.identity);
       } catch (error) {
         reject(error);
@@ -105,27 +125,24 @@ export async function loginBattleNet(): Promise<Identity> {
   });
 }
 export async function logout() {
+  const token = sessionToken;
+  sessionToken = "";
+  sessionEpoch++;
   try {
-    if (sessionToken)
+    if (token)
       await fetch(`${API_URL}/auth/logout`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${sessionToken}` },
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(10000),
       });
   } finally {
     sessionToken = "";
   }
 }
-export async function saveShared(request: ChangeRequest): Promise<RaidState> {
+export async function saveShared(request: ChangeRequest): Promise<GuildView> {
   if (!sessionToken) throw new Error("Sign in before saving to the guild.");
-  const r = await fetch(`${API_URL}/api/change`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${sessionToken}`,
-    },
-    body: JSON.stringify(request),
-  });
-  const data = await r.json();
-  if (!r.ok) throw new Error(data.error || "The change could not be saved.");
-  return StateSchema.parse(data);
+  return api("/api/change", request);
 }
+export const requestMembership = () => api("/api/join", {});
+export const saveMember = (member: Member, expectedRevision: number) =>
+  api("/api/members", { member, expectedRevision, id: crypto.randomUUID() });

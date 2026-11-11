@@ -6,6 +6,25 @@ export function demoState(base: RaidState): RaidState {
   s.revision = 0;
   s.audit = [];
   s.processedRequests = [];
+  s.guild = {
+    name: "Ønslaught",
+    realm: "Fictional demo realm",
+    region: "US",
+    timeZone: "America/Los_Angeles",
+    adminsGithub: ["demo-admin"],
+    membersGithub: [],
+  };
+  s.teams = [
+    {
+      id: "vanguard",
+      name: "The Vanguard",
+      size: 20,
+      tanks: 2,
+      healers: 4,
+      description:
+        "Our example raid team. Try changing the role targets and group positions.",
+    },
+  ];
   const people: [string, WowClass, Character["role"], string][] = [
     ["Thorgar", "warrior", "tank", "Protection"],
     ["Ironbark", "druid", "tank", "Guardian"],

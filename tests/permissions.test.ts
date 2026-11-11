@@ -10,6 +10,17 @@ function base(): RaidState {
     JSON.parse(readFileSync("public/data/raid-state.json", "utf8")),
   );
   s.guild.membersGithub = ["raider", "other"];
+  s.guild.adminsGithub = ["theforcebe"];
+  s.teams = [
+    {
+      id: "vanguard",
+      name: "Vanguard",
+      size: 20,
+      tanks: 2,
+      healers: 4,
+      description: "",
+    },
+  ];
   s.characters = [
     {
       id: "example-raider",
