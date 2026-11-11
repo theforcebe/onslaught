@@ -156,13 +156,17 @@ describe("guild coordination permissions and state", () => {
         change(doc(), { ...poll, poll: { ...poll.poll, ...patch } }),
       ).toThrow();
   });
-  it("validates recipient access before committing a request", () => {
+  it("allows active recipients without supply grants but refuses pending and suspended members", () => {
     const d = doc();
     d.members[1].sections = [];
-    expect(() => change(d, request)).toThrow("active member");
-    d.members[1].sections = ["consumables"];
-    d.members[1].teamIds = ["second"];
-    expect(() => change(d, request)).toThrow("active member");
+    d.members[1].teamIds = [];
+    expect(change(d, request).state.community!.requests[0].recipientName).toBe(
+      "Recipient",
+    );
+    for (const status of ["pending", "suspended"] as const) {
+      d.members[1].status = status;
+      expect(() => change(d, request)).toThrow("approved guild member");
+    }
   });
   it("tracks partial and completed fulfillment with actor and timestamp", () => {
     let d = change(doc(), request);

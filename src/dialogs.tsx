@@ -1,3 +1,4 @@
+import { Select } from "./Dropdown";
 import { useState } from "react";
 import {
   ExternalLink,
@@ -79,7 +80,7 @@ function CharacterChoice({
 }) {
   return (
     <Field label="Character">
-      <select
+      <Select
         name="characterId"
         defaultValue={value || state.characters[0]?.id}
         required
@@ -89,7 +90,7 @@ function CharacterChoice({
             {c.name} · {label(c.class)}
           </option>
         ))}
-      </select>
+      </Select>
     </Field>
   );
 }
@@ -229,7 +230,7 @@ export default function Dialogs(p: Props) {
               }
             >
               <Field label="Approved member">
-                <select
+                <Select
                   name="memberId"
                   defaultValue={c.ownerBattleNet || ""}
                   required
@@ -244,7 +245,7 @@ export default function Dialogs(p: Props) {
                         {m.label}
                       </option>
                     ))}
-                </select>
+                </Select>
               </Field>
               <Actions admin />
             </Form>
@@ -341,14 +342,14 @@ export default function Dialogs(p: Props) {
       >
         <CharacterChoice state={state} value={d.character?.id} />
         <Field label="Team">
-          <select name="teamId" defaultValue={d.team?.id || state.teams[0]?.id}>
+          <Select name="teamId" defaultValue={d.team?.id || state.teams[0]?.id}>
             <option value="">Bench / no team</option>
             {state.teams.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label="Group">
           <input
@@ -418,7 +419,7 @@ export default function Dialogs(p: Props) {
             />
           </Field>
           <Field label="Team">
-            <select
+            <Select
               name="teamId"
               defaultValue={d.event?.teamId || d.team?.id || state.teams[0]?.id}
             >
@@ -427,7 +428,7 @@ export default function Dialogs(p: Props) {
                   {t.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         </div>
         <div className="form-grid">
@@ -480,11 +481,11 @@ export default function Dialogs(p: Props) {
       >
         <CharacterChoice state={state} />
         <Field label="Your availability">
-          <select name="status">
+          <Select name="status">
             <option value="going">Going</option>
             <option value="tentative">Tentative</option>
             <option value="absent">Absent</option>
-          </select>
+          </Select>
         </Field>
         <p className="muted">
           You can RSVP for characters you own. Admins can correct attendance.
@@ -541,14 +542,14 @@ export default function Dialogs(p: Props) {
           </Field>
         </div>
         <Field label="For which raid?">
-          <select name="eventId" defaultValue={d.supply?.eventId || ""}>
+          <Select name="eventId" defaultValue={d.supply?.eventId || ""}>
             <option value="">Guild stock</option>
             {state.events.map((e) => (
               <option key={e.id} value={e.id}>
                 {e.title}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label="Notes">
           <textarea
@@ -618,14 +619,14 @@ export default function Dialogs(p: Props) {
           label="Visibility scope"
           hint="Guild-wide records are visible to everyone with this section. Team records require that team too."
         >
-          <select name="teamId" defaultValue={d.loot?.teamId || ""}>
+          <Select name="teamId" defaultValue={d.loot?.teamId || ""}>
             <option value="">Guild-wide</option>
             {state.teams.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <div className="form-grid">
           <Field label="Forever item ID">
@@ -651,7 +652,7 @@ export default function Dialogs(p: Props) {
             />
           </Field>
           <Field label="Equipment slot">
-            <select name="slot" defaultValue={d.loot?.slot || "head"}>
+            <Select name="slot" defaultValue={d.loot?.slot || "head"}>
               {SLOTS.filter(
                 (s) => !["ammo", "shirt", "tabard"].includes(s),
               ).map((s) => (
@@ -659,7 +660,7 @@ export default function Dialogs(p: Props) {
                   {label(s)}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         </div>
         {busy && <p className="muted">Looking up the Forever item…</p>}
@@ -811,7 +812,7 @@ export default function Dialogs(p: Props) {
             }
           >
             <div className="inline-form">
-              <select name="characterId" required defaultValue="">
+              <Select name="characterId" required defaultValue="">
                 <option value="" disabled>
                   Add eligible raider to priority…
                 </option>
@@ -826,7 +827,7 @@ export default function Dialogs(p: Props) {
                       {c.name}
                     </option>
                   ))}
-              </select>
+              </Select>
               <button className="btn secondary" type="submit">
                 Add
               </button>
@@ -906,12 +907,12 @@ export default function Dialogs(p: Props) {
       >
         <CharacterChoice state={state} />
         <Field label="Your priority">
-          <select name="tier">
+          <Select name="tier">
             <option value="bis">Best in slot (member assessment)</option>
             <option value="major">Major upgrade</option>
             <option value="minor">Minor upgrade</option>
             <option value="offspec">Off-spec</option>
-          </select>
+          </Select>
         </Field>
         <Field
           label="Why this item?"
@@ -978,14 +979,14 @@ export default function Dialogs(p: Props) {
           label="Visibility scope"
           hint="Guild-wide records are visible to everyone with this section. Team records require that team too."
         >
-          <select name="teamId" defaultValue={d.boss?.teamId || ""}>
+          <Select name="teamId" defaultValue={d.boss?.teamId || ""}>
             <option value="">Guild-wide</option>
             {state.teams.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <div className="form-grid">
           <Field label="Boss">
@@ -997,14 +998,14 @@ export default function Dialogs(p: Props) {
         </div>
         <div className="form-grid three">
           <Field label="Status">
-            <select
+            <Select
               name="status"
               defaultValue={d.boss?.status || "not-started"}
             >
               <option value="not-started">Not started</option>
               <option value="progressing">Progressing</option>
               <option value="defeated">Defeated</option>
-            </select>
+            </Select>
           </Field>
           <Field label="Total pulls">
             <input

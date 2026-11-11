@@ -14,7 +14,7 @@ import {
 import type { GuildDocument } from "../src/lib/access";
 import { ZodError } from "zod";
 import { handleDiscord } from "./discord";
-import { serveItem, publicItemCache } from "./items";
+import { serveItem, serveItemSearch, publicItemCache } from "./items";
 export interface Env {
   DB: D1Database;
   BNET_CLIENT_ID: string;
@@ -290,6 +290,17 @@ async function route(req: Request, env: Env): Promise<Response> {
   }
   if (u.pathname === "/health" && req.method === "GET")
     return json({ ok: true, battleNetConfigured: configured(env) });
+  if (u.pathname === "/api/items/search")
+    return serveItemSearch(
+      req,
+      publicItemCache(env.DB, caches.default),
+      async () =>
+        limit(
+          env,
+          `item-search:${await digest(req.headers.get("CF-Connecting-IP") || "local")}`,
+          60,
+        ),
+    );
   if (u.pathname.startsWith("/api/items/"))
     return serveItem(req, publicItemCache(env.DB, caches.default), async () =>
       limit(

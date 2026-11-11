@@ -1,4 +1,12 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  Children,
+  isValidElement,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type { ReactNode, KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
@@ -208,8 +216,60 @@ export function Dropdown({
               </div>
             ))}
           </div>,
-          document.body,
+          trigger.current?.closest("dialog") || document.body,
         )}
     </div>
+  );
+}
+
+/** Form-compatible select using the same accessible styled menu throughout. */
+export function Select({
+  children,
+  name,
+  defaultValue,
+  value,
+  onChange,
+  required,
+  ...rest
+}: import("react").SelectHTMLAttributes<HTMLSelectElement>) {
+  const options = Children.toArray(children).flatMap((child) => {
+    if (
+      !isValidElement<{ value?: string | number; children?: ReactNode }>(child)
+    )
+      return [];
+    if (child.type === "option")
+      return [
+        {
+          value: String(child.props.value ?? child.props.children ?? ""),
+          label: Children.toArray(child.props.children).join(""),
+        },
+      ];
+    return Children.toArray(child.props.children)
+      .filter(isValidElement)
+      .map((c: any) => ({
+        value: String(c.props.value),
+        label: Children.toArray(c.props.children).join(""),
+      }));
+  });
+  const [current, setCurrent] = useState(
+    String(value ?? defaultValue ?? options[0]?.value ?? ""),
+  );
+  const selected = value !== undefined ? String(value) : current;
+  return (
+    <>
+      <input type="hidden" name={name} value={selected} />
+      <Dropdown
+        label={String(rest["aria-label"] || name || "Choose an option")}
+        value={selected}
+        options={options}
+        onChange={(v) => {
+          setCurrent(v);
+          onChange?.({
+            target: { value: v },
+            currentTarget: { value: v },
+          } as any);
+        }}
+      />
+    </>
   );
 }

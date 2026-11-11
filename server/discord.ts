@@ -1,7 +1,12 @@
 import { z } from "zod";
 import type { Env } from "./worker";
 import type { Identity } from "../src/lib/model";
-import { accessFor, hasSection, hasTeam } from "../src/lib/access";
+import {
+  accessFor,
+  hasSection,
+  hasTeam,
+  canSeeRequest,
+} from "../src/lib/access";
 import type { GuildDocument } from "../src/lib/access";
 import { ChangeError } from "../src/lib/reducer";
 import { emptyCommunity } from "../src/lib/community";
@@ -182,8 +187,9 @@ function getRecord(
   const access = accessFor(doc, identity);
   if (
     !record ||
-    !hasSection(access, section) ||
-    !hasTeam(access, record.teamId)
+    (kind === "request"
+      ? !canSeeRequest(access, record, identity.id)
+      : !hasSection(access, section) || !hasTeam(access, record.teamId))
   )
     throw new ChangeError("This record is not available to your account.", 403);
   if (write && !access.admin && access.role !== "officer")
@@ -435,9 +441,24 @@ export async function handleDiscord(
   if (u.pathname === "/api/discord/status" && req.method === "GET") {
     const cfg = await config(env),
       own = await link(env, identity.id);
+    const linked =
+      access.admin ||
+      (access.role === "officer" && hasSection(access, "consumables"))
+        ? await env.DB.prepare(
+            "SELECT member_id,dm_opt_in FROM discord_links",
+          ).all<{ member_id: string; dm_opt_in: number }>()
+        : undefined;
     const permissions =
       (1n << 10n) | (1n << 11n) | (1n << 14n) | (1n << 16n) | (1n << 49n);
     return d.json({
+      recipients:
+        linked?.results
+          .filter((r) =>
+            current.document.members.some(
+              (m) => m.id === r.member_id && m.status === "active",
+            ),
+          )
+          .map((r) => ({ id: r.member_id, dmOptIn: !!r.dm_opt_in })) || [],
       botConfigured: !!env.DISCORD_BOT_TOKEN,
       linkConfigured: !!(env.DISCORD_CLIENT_ID && env.DISCORD_CLIENT_SECRET),
       connected: !!cfg && !!env.DISCORD_BOT_TOKEN,
@@ -530,12 +551,13 @@ export async function handleDiscord(
       id: u.searchParams.get("id"),
       destination: u.searchParams.get("destination") || "channel",
     });
-    getRecord(current.document, identity, query.kind, query.id);
-    const key = `${query.kind}:${query.id}:${query.destination}`;
+    const record = getRecord(current.document, identity, query.kind, query.id);
+    const key = notificationKey(query, record);
     let r = await receipt(env, key);
     if (
       query.kind === "poll" &&
       r?.status === "sent" &&
+      !r.finalized &&
       r.channelId &&
       r.messageId &&
       (!r.checkedAt || Date.now() - Date.parse(r.checkedAt) > 30000)
@@ -600,7 +622,7 @@ export async function handleDiscord(
             ? "announcementsChannelId"
             : "requestsChannelId"
       ];
-    const key = `${input.kind}:${input.id}:${input.destination}`,
+    const key = notificationKey(input, record),
       existing = await receipt(env, key);
     if (existing?.status === "sent")
       return d.json({ receipt: publicReceipt(existing) });
@@ -612,7 +634,7 @@ export async function handleDiscord(
     // Validate and render before taking the durable delivery lock.
     const message = discordMessage(current.document, input.kind, input.id);
     if (input.destination === "dm") {
-      if (!("recipientId" in record))
+      if (!("recipientId" in record) || !record.recipientId)
         throw new ChangeError("Recipient not found.");
       const recipient = current.document.members.find(
         (m) => m.id === record.recipientId && m.status === "active",
@@ -624,11 +646,7 @@ export async function handleDiscord(
             label: recipient.label,
           })
         : undefined;
-      if (
-        !recipientAccess ||
-        !hasSection(recipientAccess, "consumables") ||
-        !hasTeam(recipientAccess, record.teamId)
-      )
+      if (!recipientAccess || recipientAccess.status !== "active")
         throw new ChangeError(
           "The recipient no longer has access to this request.",
         );
@@ -704,4 +722,14 @@ export async function handleDiscord(
     }
   }
   return d.json({ error: "Not found." }, 404);
+}
+
+function notificationKey(
+  input: { kind: string; id: string; destination: string },
+  record: { id: string; recipientId?: string; openToGuild?: boolean },
+) {
+  const base = `${input.kind}:${input.id}:${input.destination}`;
+  return input.destination === "dm" && record.openToGuild
+    ? `${base}:${record.recipientId || "unassigned"}`
+    : base;
 }

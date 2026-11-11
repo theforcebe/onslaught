@@ -225,6 +225,28 @@ export function confirmedRaiders(characters: Character[], event: RaidEvent) {
     (c) => c.teamId === event.teamId && event.signups[c.id] === "going",
   );
 }
+export function activeLineup(
+  characters: Character[],
+  event: RaidEvent,
+  size: number,
+) {
+  const counts = new Map<number, number>();
+  return confirmedRaiders(characters, event).filter((c) => {
+    const group = event.lineup?.[c.id];
+    if (
+      !group ||
+      !Number.isInteger(group) ||
+      group < 1 ||
+      group > Math.ceil(size / 5)
+    )
+      return false;
+    const count = counts.get(group) || 0,
+      cap = Math.min(5, size - (group - 1) * 5);
+    if (count >= cap) return false;
+    counts.set(group, count + 1);
+    return true;
+  });
+}
 export function providersFor(buffId: string, characters: Character[]) {
   const buff = RAID_BUFFS.find((b) => b.id === buffId);
   return characters.filter(

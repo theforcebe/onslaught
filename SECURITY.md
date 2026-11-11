@@ -36,7 +36,7 @@ Revocation prevents future responses. It cannot erase previously viewed, downloa
 
 ## Input and dependencies
 
-Imports and raid text reject common credential patterns, but no scan can recognize every secret. Imported values render as text, never injected HTML. Item-service requests contain only item IDs and bounded numeric modifiers, never exports or authentication. Icon URLs and source protocols are constrained. Demo data is fictional and browser-local.
+Imports and raid text reject common credential patterns, but no scan can recognize every secret. Imported values render as text, never injected HTML. Item-service requests contain only item IDs, bounded numeric modifiers, or a normalized public item-name search (2–64 characters), never exports or authentication. Icon URLs and source protocols are constrained. Demo data is fictional and browser-local.
 
 Source/build scans check common tokens and private keys and reject server secret variable names in public bundles. Pages Actions has no gateway credentials and uses pinned actions with explicit permissions. Run tests, type checks, build validation and dependency audit before release.
 
@@ -48,12 +48,16 @@ Automated tests cover public projections, team isolation, section grants, nested
 
 ## Discord and coordination
 
-Canonical announcements, scheduling polls, site votes, material requests, fulfillment history and short replies live in the private guild repository. Public projections exclude all of them. Officers may create and publish coordination records only with the relevant section and team grants; rank alone does not grant access. Only a request recipient or Admin can update fulfillment. The new Guild board section requires an explicit per-person grant.
+Canonical announcements, scheduling polls, site votes, material requests, fulfillment history and short replies live in the private guild repository. Public projections exclude all of them. Officers may create and publish coordination records only with the relevant section and team grants; rank alone does not grant access. Every active approved rank may create a guild-wide volunteer request and claim one. An unstarted claim can be released only by its owner. Requests use revision checks so concurrent claims cannot overwrite each other. Assigned recipients can see their own requests even without a Consumables grant; scoped requests otherwise retain section/team checks. Only a request recipient or Admin can update fulfillment. The new Guild board section requires an explicit per-person grant.
 
-The bot token and OAuth client secret live only in Worker secrets. The integration uses no privileged Gateway intents and does not ingest channel discussions. Native poll counts and delivery receipts are operational data in D1. Discord account IDs and opt-in preferences also stay in D1, outside public source and guild exports. They are not returned as a member directory.
+The bot token and OAuth client secret live only in Worker secrets. The integration uses no privileged Gateway intents and does not ingest channel discussions. Native poll counts and delivery receipts are operational data in D1. Discord account IDs and opt-in preferences also stay in D1, outside public source and guild exports. Raw Discord account IDs are never returned as a member directory. Admins and Officers with supply access receive only approved app-member IDs and link/DM-opt-in badges for recipient selection.
 
 Discord account linking uses identify scope, a one-use app-session-bound ticket, PKCE, an HttpOnly state cookie, a fresh live-session and membership check, and membership in the configured Discord server. Access tokens are used server-side and revoked after identity lookup; OAuth tokens are never persisted or sent to the app. Linking does not grant a guild rank. DMs are off by default and require the recipient's linked account and explicit opt-in.
 
 Every outbound post requires an Admin/Officer action on a record they can access. Destination IDs are validated against the configured server. A preview explains that Discord channel membership determines who can read that copy; site restrictions cannot recall a Discord post. All payloads suppress mentions. Durable delivery locks and Discord nonces prevent routine duplicate sends; ambiguous delivery failures are marked unconfirmed and cannot be blindly retried. No credentialed upstream request follows redirects.
 
 Wowhead content is reduced to bounded plain text; no provider scripts or raw HTML run in the app. Shared caches contain only public item metadata, keyed by item ID and supported modifiers. Item lookups never receive or forward app authorization headers.
+
+## Personal availability
+
+All active approved members can set availability for their own verified roster characters on public raid events, without private Attendance or Planner grants. Non-admin ownership is checked on the server; pending and suspended accounts cannot participate. A restricted projection includes only the viewer’s own responses, while other attendance, notes, lineups and character exports remain protected. An admin may record responses for other characters.

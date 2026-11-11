@@ -1,3 +1,5 @@
+import { GuildBoard } from "./GuildBoard";
+import { SetupGuide } from "./SetupGuide";
 import { ItemTooltip } from "./ItemTooltip";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
@@ -90,29 +92,22 @@ const nav = [
   { id: "overview", name: "Overview", icon: LayoutDashboard },
   { id: "planner", name: "Raid planner", icon: Swords },
   { id: "roster", name: "Roster & gear", icon: Users },
-  { id: "loot", name: "Loot council", icon: Gem },
-  { id: "consumables", name: "Consumables", icon: FlaskConical },
-  { id: "schedule", name: "Schedule", icon: CalendarDays },
-  { id: "progress", name: "Progress", icon: Flag },
+  { id: "community", name: "Guild coordination", icon: MessageSquare },
   { id: "activity", name: "Activity", icon: History },
   { id: "access", name: "Members & access", icon: ShieldCheck },
-  { id: "community", name: "Guild coordination", icon: MessageSquare },
 ];
 const titles: Record<string, [string, string]> = {
   community: [
-    "The guild, in sync.",
-    "Find your raid nights, share updates, and keep preparation moving.",
+    "Guild coordination",
+    "Guild dispatches, material requests, and your Discord connection.",
   ],
-  overview: [
-    "Your guild. Ready for what’s next.",
-    "A clear view of the people, preparation, and decisions behind every pull.",
-  ],
+  overview: ["War room", "The latest from the guild, all in one place."],
   planner: [
-    "A place for every raider.",
-    "Build balanced groups and see exactly where your team needs support.",
+    "Raid planner",
+    "Your raid nights, availability, groups, and preparation.",
   ],
   roster: [
-    "Know your people. Know their gear.",
+    "Roster & gear",
     "Character snapshots, roles, professions, and the details that make a team.",
   ],
   loot: [
@@ -169,7 +164,20 @@ export default function App() {
   const [live, setLive] = useState<RaidState>(),
     [practice, setPractice] = useState<RaidState>(),
     [demo, setDemo] = useState(false),
-    [page, setPage] = useState(location.hash.slice(1) || "overview"),
+    [page, setPage] = useState(
+      ["schedule", "materials", "discord"].includes(location.hash.slice(1))
+        ? location.hash === "#schedule"
+          ? "planner"
+          : "community"
+        : location.hash.slice(1) || "overview",
+    ),
+    [hubTab, setHubTab] = useState(
+      location.hash === "#discord"
+        ? "connection"
+        : location.hash === "#materials"
+          ? "requests"
+          : "",
+    ),
     [dialog, setDialog] = useState<DialogState>(),
     [notification, setNotification] = useState(""),
     [error, setError] = useState(""),
@@ -208,7 +216,7 @@ export default function App() {
       setError(
         next.isCurrent
           ? ""
-          : "Battle.net setup is pending. The public roster starts empty; explore the fictional demo while the guild gateway is connected.",
+          : "Showing the saved public roster. Connect to the guild gateway for current member information.",
       );
     } catch (e) {
       if (!sessionActive()) setIdentity(undefined);
@@ -228,7 +236,7 @@ export default function App() {
     void refresh();
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") void refresh();
-    }, 60000);
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
   useEffect(() => {
@@ -238,7 +246,17 @@ export default function App() {
   }, [notification]);
   useEffect(() => {
     const handle = () => {
-      setPage(location.hash.slice(1) || "overview");
+      const id = location.hash.slice(1) || "overview";
+      setPage(
+        id === "schedule"
+          ? "planner"
+          : ["materials", "discord"].includes(id)
+            ? "community"
+            : id,
+      );
+      setHubTab(
+        id === "materials" ? "requests" : id === "discord" ? "connection" : "",
+      );
       setFilter("");
     };
     window.addEventListener("hashchange", handle);
@@ -246,7 +264,16 @@ export default function App() {
   }, []);
   function go(id: string) {
     location.hash = id;
-    setPage(id);
+    setPage(
+      id === "schedule"
+        ? "planner"
+        : ["materials", "discord"].includes(id)
+          ? "community"
+          : id,
+    );
+    setHubTab(
+      id === "materials" ? "requests" : id === "discord" ? "connection" : "",
+    );
     setMenu(false);
     setFilter("");
   }
@@ -408,7 +435,6 @@ export default function App() {
         "loot-detail": "loot",
         request: "loot",
         pledge: "consumables",
-        signup: "attendance",
       };
       const section = privateTypes[d.type];
       if (
@@ -432,362 +458,16 @@ export default function App() {
         {text}
       </button>
     );
-  const groupGrid = (compact = false) => (
-    <div className={`groups ${compact ? "compact" : ""}`}>
-      {Array.from({ length: Math.ceil((team?.size || 20) / 5) }, (_, i) => {
-        const members = teamMembers.filter((c) => c.group === i + 1);
-        return (
-          <div className="raid-group" key={i}>
-            <div className="group-label">
-              <span>Group {i + 1}</span>
-              <small>{members.length}/5</small>
-            </div>
-            {members.map((c) => (
-              <Player
-                key={c.id}
-                character={c}
-                onClick={() =>
-                  open({
-                    type: compact ? "character" : "assign",
-                    character: c,
-                    team,
-                  })
-                }
-              />
-            ))}
-            {Array.from(
-              {
-                length: Math.max(
-                  0,
-                  Math.min(5, (team?.size || 20) - i * 5) - members.length,
-                ),
-              },
-              (_, j) => (
-                <button
-                  className="vacant"
-                  key={j}
-                  onClick={() => open({ type: "assign", team })}
-                >
-                  <Plus size={15} />
-                  <span>Open position</span>
-                </button>
-              ),
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-  const overview = (
-    <>
-      <div className="overview-top">
-        <section className="raid-hero">
-          <div className="hero-contours" aria-hidden="true">
-            <div className="rune">
-              <img src={`${import.meta.env.BASE_URL}crest.svg`} alt="" />
-            </div>
-          </div>
-          <div className="hero-content">
-            <span className="hero-kicker">
-              <span className="pulse-dot" />
-              {nextRaid ? "Next on the calendar" : "The guild is assembling"}
-            </span>
-            <h2>{nextRaid?.title || "Stronger, together."}</h2>
-            <p>
-              {nextRaid?.instance ||
-                "The first step toward your next great raid is a team that’s ready for it."}
-            </p>
-            {nextRaid ? (
-              <div className="hero-time">
-                <CalendarDays size={16} />
-                {formatDate(nextRaid.start)}
-                <span />
-                <Clock3 size={16} />
-                {formatDate(nextRaid.start, {
-                  hour: "numeric",
-                  minute: "2-digit",
-                  timeZoneName: "short",
-                })}
-              </div>
-            ) : (
-              <div className="hero-time">
-                <ShieldCheck size={16} />
-                {team?.name} <span /> {team?.size} raider positions
-              </div>
-            )}
-            <div className="hero-actions">
-              <button
-                className="btn gold"
-                onClick={() =>
-                  nextRaid
-                    ? open({ type: "signup", event: nextRaid })
-                    : go("planner")
-                }
-              >
-                {nextRaid ? "Set your availability" : "Build the raid team"}
-                <ChevronRight size={16} />
-              </button>
-              <button
-                className="btn hero-secondary"
-                onClick={() =>
-                  nextRaid ? go("schedule") : open({ type: "event" })
-                }
-              >
-                {nextRaid ? "Raid details" : "Schedule a raid"}
-                <ArrowUpRight size={16} />
-              </button>
-            </div>
-          </div>
-          <div className="hero-footer">
-            <div className="avatar-stack">
-              {state.characters.slice(0, 5).map((c) => (
-                <ClassIcon key={c.id} cls={c.class} size={26} />
-              ))}
-            </div>
-            <span>
-              {nextRaid
-                ? `${Object.values(nextRaid.signups).filter((v) => v === "going").length} confirmed for the next raid`
-                : `${state.characters.length} ${state.characters.length === 1 ? "raider" : "raiders"} on the roster`}
-            </span>
-            <span className="hero-footnote">WoW Forever</span>
-          </div>
-        </section>
-        <section className="panel readiness">
-          <div className="panel-title">
-            <h3>Before the first pull</h3>
-            <span className="icon-disc">
-              <CheckCircle2 size={17} />
-            </span>
-          </div>
-          <p className="muted">A little preparation goes a long way.</p>
-          <button className="readiness-row" onClick={() => go("roster")}>
-            <span
-              className={`status-circle ${!state.characters.length || unassigned.length ? "amber" : "green"}`}
-            >
-              {!state.characters.length || unassigned.length ? (
-                <Circle size={15} />
-              ) : (
-                <Check size={15} />
-              )}
-            </span>
-            <span>
-              <strong>Confirm raid roles</strong>
-              <small>
-                {!state.characters.length
-                  ? "Import your first character"
-                  : unassigned.length
-                    ? `${unassigned.length} awaiting a role`
-                    : "Everyone has a role"}
-              </small>
-            </span>
-            <ChevronRight size={15} />
-          </button>
-          <button className="readiness-row" onClick={() => go("roster")}>
-            <span className="status-circle blue">
-              <Upload size={15} />
-            </span>
-            <span>
-              <strong>Keep equipment current</strong>
-              <small>
-                {imports.length}/{state.characters.length} character snapshots
-              </small>
-            </span>
-            <ChevronRight size={15} />
-          </button>
-          <button className="readiness-row" onClick={() => go("consumables")}>
-            <span
-              className={`status-circle ${needed && pledged >= needed ? "green" : "amber"}`}
-            >
-              <FlaskConical size={15} />
-            </span>
-            <span>
-              <strong>Stock up together</strong>
-              <small>
-                {needed
-                  ? `${pledged}/${needed} consumables committed`
-                  : "Set your preparation targets"}
-              </small>
-            </span>
-            <ChevronRight size={15} />
-          </button>
-          <button className="readiness-row" onClick={() => go("loot")}>
-            <span className="status-circle purple">
-              <Gem size={15} />
-            </span>
-            <span>
-              <strong>Agree on loot priorities</strong>
-              <small>
-                {pendingLoot.length
-                  ? `${pendingLoot.length} items in the council plan`
-                  : "Start your first loot plan"}
-              </small>
-            </span>
-            <ChevronRight size={15} />
-          </button>
-        </section>
-      </div>
-      <div className="stat-strip">
-        <Stat
-          icon={<Users />}
-          title="Raid roster"
-          value={`${teamMembers.length}`}
-          suffix={`/ ${team?.size || 0}`}
-          note={`${Math.max(0, (team?.size || 0) - teamMembers.length)} open positions`}
-          onClick={() => go("planner")}
-        />
-        <Stat
-          icon={<ShieldCheck />}
-          title="Gear snapshots"
-          value={`${imports.length}`}
-          suffix={`/ ${state.characters.length}`}
-          note="Equipment, enchants & talents"
-          onClick={() => go("roster")}
-        />
-        <Stat
-          icon={<Gem />}
-          title="Loot to plan"
-          value={`${pendingLoot.length}`}
-          note={`${state.loot.filter((l) => l.awardedTo).length} awards recorded`}
-          onClick={() => go("loot")}
-        />
-        <Stat
-          icon={<Flag />}
-          title="Encounters cleared"
-          value={`${defeated}`}
-          suffix={`/ ${state.bosses.length}`}
-          note={
-            state.bosses.length
-              ? "Keep the next pull in focus"
-              : "Your progress starts here"
-          }
-          onClick={() => go("progress")}
-        />
-      </div>
-      <section className="panel lineup-panel">
-        <div className="panel-title">
-          <div>
-            <h3>{team?.name || "Raid lineup"}</h3>
-            <p className="muted">Every class brings something to the fight.</p>
-          </div>
-          <button className="btn text" onClick={() => go("planner")}>
-            Open raid planner
-            <ArrowUpRight size={15} />
-          </button>
-        </div>
-        <div className="role-summary">
-          {ROLES.filter((r) => r !== "unassigned").map((r) => (
-            <span key={r} className={`role-summary-item ${r}`}>
-              <RoleIcon role={r} />
-              {label(r)}{" "}
-              <strong>{teamMembers.filter((c) => c.role === r).length}</strong>
-              {["tank", "healer"].includes(r) && (
-                <small>/ {r === "tank" ? team?.tanks : team?.healers}</small>
-              )}
-            </span>
-          ))}
-          {unassigned.length > 0 && (
-            <span className="badge amber">{unassigned.length} unassigned</span>
-          )}
-        </div>
-        {groupGrid(true)}
-      </section>
-      <div className="overview-bottom">
-        <section className="panel">
-          <div className="panel-title">
-            <h3>Class balance</h3>
-            <span className="muted">{teamMembers.length} raiders</span>
-          </div>
-          <div className="class-distribution">
-            {CLASSES.map((cls) => {
-              const count = teamMembers.filter((c) => c.class === cls).length;
-              return (
-                <div key={cls}>
-                  <ClassIcon cls={cls} size={29} />
-                  <span>{label(cls)}</span>
-                  <div className="class-track">
-                    <span
-                      style={{
-                        width: `${Math.min(100, (count / (teamMembers.length || 1)) * 100)}%`,
-                        background: CLASS_COLORS[cls],
-                      }}
-                    />
-                  </div>
-                  <strong>{count}</strong>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-        <section className="panel recent-panel">
-          <div className="panel-title">
-            <h3>From the guild</h3>
-            <button
-              className="icon-btn"
-              aria-label="All activity"
-              onClick={() => go("activity")}
-            >
-              <ArrowUpRight size={17} />
-            </button>
-          </div>
-          {state.audit.length ? (
-            state.audit.slice(0, 3).map((a) => (
-              <div className="activity-row" key={a.id}>
-                <span className="activity-dot" />
-                <div>
-                  <p>{a.summary}</p>
-                  <small>
-                    {a.actor} ·{" "}
-                    {formatDate(a.at, {
-                      month: "short",
-                      day: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
-                  </small>
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="first-entry">
-              <img src={`${import.meta.env.BASE_URL}crest.svg`} alt="" />
-              <h4>A new chapter for Ønslaught.</h4>
-              <p>
-                Import your character, find your place in the team, and help
-                shape what comes next.
-              </p>
-              <button
-                className="btn secondary"
-                onClick={() => open({ type: "import" })}
-              >
-                <Upload size={15} />
-                Import character
-              </button>
-            </div>
-          )}
-          <div className="repository-note">
-            <Github size={16} />
-            <span>Built together. Every shared change has a history.</span>
-            <a
-              href={REPO_URL}
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Open GitHub repository"
-            >
-              <ExternalLink size={14} />
-            </a>
-          </div>
-        </section>
-      </div>
-    </>
-  );
   const planner = (
     <RaidPlanner
       state={state}
       team={team}
       selectTeam={setSelectedTeam}
       access={effectiveAccess}
-      change={change}
+      change={(a) => change(a, true)}
       open={open}
+      identity={identity}
+      demo={demo}
     />
   );
   const filtered = state.characters.filter(
@@ -1155,166 +835,6 @@ export default function App() {
       )}
     </>
   );
-  const schedule = (
-    <>
-      <div className="toolbar">
-        <div className="timezone-control">
-          <span>Times shown in</span>
-          <Dropdown
-            label="Display times in"
-            value={timeZone}
-            onChange={setTimeZone}
-            icon={<Clock3 size={16} />}
-            options={[
-              ...new Set([
-                Intl.DateTimeFormat().resolvedOptions().timeZone,
-                state.guild.timeZone,
-                "America/Los_Angeles",
-                "America/New_York",
-                "Europe/London",
-                "Europe/Berlin",
-                "Australia/Sydney",
-                "UTC",
-              ]),
-            ].map((zone) => ({
-              value: zone,
-              label: zone.split("/").at(-1)!.replaceAll("_", " "),
-              detail:
-                zone === "UTC"
-                  ? "Coordinated Universal Time"
-                  : zone.replaceAll("_", " "),
-            }))}
-          />
-        </div>
-        {addButton("event", "Schedule a raid")}
-      </div>
-      <div className="event-list">
-        {[...state.events]
-          .sort((a, b) => Date.parse(a.start) - Date.parse(b.start))
-          .map((e) => (
-            <article className="event-card" key={e.id}>
-              <div className="date-block">
-                <span>{formatDate(e.start, { month: "short" })}</span>
-                <strong>{formatDate(e.start, { day: "2-digit" })}</strong>
-                <small>{formatDate(e.start, { weekday: "long" })}</small>
-              </div>
-              <div className="event-info">
-                <div className="event-title">
-                  <h2>{e.title}</h2>
-                  <span className="badge">
-                    {state.teams.find((t) => t.id === e.teamId)?.name ||
-                      e.publicTeamName}
-                  </span>
-                  {Date.parse(e.end) < Date.now() && (
-                    <span className="badge">Past raid</span>
-                  )}
-                </div>
-                <p>{e.instance}</p>
-                <div className="event-time">
-                  <Clock3 size={15} />
-                  {formatDate(e.start, {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}{" "}
-                  –{" "}
-                  {formatDate(e.end, {
-                    hour: "numeric",
-                    minute: "2-digit",
-                    timeZoneName: "short",
-                  })}
-                </div>
-                <p className="muted">{e.notes}</p>
-                {hasSection(effectiveAccess, "attendance") &&
-                hasTeam(effectiveAccess, e.teamId) ? (
-                  <>
-                    <div className="signup-stats">
-                      <span className="green-text">
-                        {
-                          Object.values(e.signups).filter((s) => s === "going")
-                            .length
-                        }{" "}
-                        going
-                      </span>
-                      <span className="amber-text">
-                        {
-                          Object.values(e.signups).filter(
-                            (s) => s === "tentative",
-                          ).length
-                        }{" "}
-                        tentative
-                      </span>
-                      <span>
-                        {
-                          Object.values(e.signups).filter((s) => s === "absent")
-                            .length
-                        }{" "}
-                        absent
-                      </span>
-                    </div>
-                    <details className="attendance-details">
-                      <summary>View attendance</summary>
-                      {Object.entries(e.signups).map(([id, status]) => (
-                        <div key={id}>
-                          <span>
-                            {state.characters.find((c) => c.id === id)?.name ||
-                              "Unknown"}
-                          </span>
-                          <span>{label(status)}</span>
-                        </div>
-                      ))}
-                    </details>
-                  </>
-                ) : (
-                  <p className="muted">
-                    <LockKeyhole size={13} /> Attendance and raid notes are
-                    private.
-                  </p>
-                )}
-              </div>
-              <div className="event-actions">
-                {hasSection(effectiveAccess, "attendance") &&
-                  hasTeam(effectiveAccess, e.teamId) && (
-                    <button
-                      className="btn primary"
-                      onClick={() => open({ type: "signup", event: e })}
-                    >
-                      Set availability
-                    </button>
-                  )}
-                <button
-                  className="btn secondary"
-                  onClick={() =>
-                    download(`${e.title}.ics`, calendarFile(e), "text/calendar")
-                  }
-                >
-                  Add to calendar
-                  <Download size={14} />
-                </button>
-                {effectiveAccess.admin && (
-                  <button
-                    className="btn text"
-                    onClick={() => open({ type: "event", event: e })}
-                  >
-                    Edit raid
-                  </button>
-                )}
-              </div>
-            </article>
-          ))}
-      </div>
-      {!state.events.length && (
-        <Empty
-          icon={<CalendarDays size={36} />}
-          title="Make time for the next adventure."
-          action={addButton("event", "Schedule your first raid")}
-        >
-          Set a date, choose a team, and give everyone a place to confirm
-          availability. Calendar downloads keep the time correct across time
-          zones.
-        </Empty>
-      )}
-    </>
-  );
   const progress = (
     <>
       <div className="toolbar">
@@ -1602,6 +1122,7 @@ export default function App() {
       <Suspense fallback={<p className="muted">Opening guild coordination…</p>}>
         <GuildHub
           key={demo ? "demo-hub" : `guild-hub-${identity?.id || "visitor"}`}
+          initialTab={hubTab}
           state={state}
           access={effectiveAccess}
           identity={identity}
@@ -1612,12 +1133,35 @@ export default function App() {
         />
       </Suspense>
     ),
-    overview,
+    overview: (
+      <GuildBoard
+        state={state}
+        access={effectiveAccess}
+        identity={identity}
+        demo={demo}
+        go={go}
+        change={(a) => change(a, true)}
+        setup={() => open({ type: "import" })}
+      />
+    ),
+    polls: (
+      <Suspense fallback={<p>Opening scheduling polls…</p>}>
+        <GuildHub
+          mode="polls"
+          state={state}
+          access={effectiveAccess}
+          identity={identity}
+          people={demo ? demoPeople : people}
+          demo={demo}
+          change={(a) => change(a, true)}
+          refresh={refresh}
+        />
+      </Suspense>
+    ),
     planner,
     roster,
     loot,
     consumables,
-    schedule,
     progress,
     activity,
     settings,
@@ -1732,15 +1276,12 @@ export default function App() {
           >
             {identity ? "View your access" : "Sign in with Battle.net"}
           </button>
-          <button className="btn text" onClick={toggleDemo}>
-            Explore the fictional demo <ArrowUpRight size={15} />
-          </button>
         </section>
       </div>
     </>
   );
   const pageSection: Record<string, Section> = {
-    planner: "planner",
+    polls: "attendance",
     loot: "loot",
     consumables: "consumables",
     progress: "progress",
@@ -1764,13 +1305,19 @@ export default function App() {
         >
           {identity ? "View your access" : "Sign in with Battle.net"}
         </button>
-        <button className="btn secondary" onClick={toggleDemo}>
-          Explore the demo
-        </button>
       </div>
     </section>
   );
-  const [title, subtitle] = titles[page] || titles.overview;
+  const raidPage = [
+    "planner",
+    "polls",
+    "loot",
+    "consumables",
+    "progress",
+    "schedule",
+  ].includes(page);
+  const [title, subtitle] =
+    titles[raidPage ? "planner" : page] || titles.overview;
   return (
     <div
       className="app"
@@ -1813,7 +1360,7 @@ export default function App() {
           {nav.map((n) => (
             <button
               key={n.id}
-              className={page === n.id ? "active" : ""}
+              className={`${page === n.id || (n.id === "planner" && raidPage) ? "active" : ""} ${n.id === "community" ? "guild-nav" : ""}`}
               onClick={() => go(n.id)}
             >
               <n.icon size={18} />
@@ -1827,6 +1374,15 @@ export default function App() {
           ))}
         </nav>
         <div className="sidebar-bottom">
+          <SetupGuide
+            state={state}
+            access={effectiveAccess}
+            identity={identity}
+            demo={demo}
+            go={go}
+            signIn={() => void signIn()}
+            importCharacter={() => open({ type: "import" })}
+          />
           <div className="guild-note">
             <span className="small-crest">⚔</span>
             <p>
@@ -1835,13 +1391,15 @@ export default function App() {
               <strong>Every victory, together.</strong>
             </p>
           </div>
-          <button
-            className={`settings-nav ${page === "settings" ? "active" : ""}`}
-            onClick={() => go("settings")}
-          >
-            <Settings size={18} />
-            Guild settings
-          </button>
+          {effectiveAccess.admin && (
+            <button
+              className={`settings-nav ${page === "settings" ? "active" : ""}`}
+              onClick={() => go("settings")}
+            >
+              <Settings size={18} />
+              Guild settings
+            </button>
+          )}
           <a
             className="github-link"
             href={REPO_URL}
@@ -1915,18 +1473,27 @@ export default function App() {
             <span>Guild headquarters</span>
             <ChevronRight size={13} />
             <strong>
-              {nav.find((n) => n.id === page)?.name || "Guild settings"}
+              {raidPage
+                ? "Raid planner"
+                : nav.find((n) => n.id === page)?.name || "Guild settings"}
             </strong>
           </div>
           <div className="top-actions">
-            <button
-              className={`mode-button ${demo ? "demo" : ""}`}
-              onClick={toggleDemo}
-            >
-              <span className={`dot ${demo ? "amber" : "green"}`} />
-              {demo ? "Demo workspace" : "Live guild"}
-              <ChevronDown size={12} />
-            </button>
+            {effectiveAccess.admin || import.meta.env.DEV ? (
+              <button
+                className={`mode-button ${demo ? "demo" : ""}`}
+                onClick={toggleDemo}
+              >
+                <span className={`dot ${demo ? "amber" : "green"}`} />
+                {demo ? "Demo workspace" : "Live guild"}
+                <ChevronDown size={12} />
+              </button>
+            ) : (
+              <span className="live-status">
+                <span className="dot green" />
+                Live guild
+              </span>
+            )}
             <button
               className={`icon-btn ${refreshing ? "spin" : ""}`}
               aria-label="Refresh shared guild data"
@@ -1975,13 +1542,34 @@ export default function App() {
               </button>
             )}
           </div>
-          {error && (
+          {error && !demo && (
             <p className="notice danger" role="alert">
               {error}
             </p>
           )}
+          {raidPage && (
+            <div className="raid-workspace-tabs" aria-label="Raid workspace">
+              {[
+                ["planner", "Lineup & availability"],
+                ["polls", "Night polls"],
+                ["loot", "Loot council"],
+                ["consumables", "Raid supplies"],
+                ["progress", "Progress"],
+              ]
+                .filter(([id]) => id === "planner" || pageAllowed(id))
+                .map(([id, name]) => (
+                  <button
+                    key={id}
+                    className={page === id ? "active" : ""}
+                    onClick={() => go(id)}
+                  >
+                    {name}
+                  </button>
+                ))}
+            </div>
+          )}
           {pageAllowed(page)
-            ? page === "overview" && !effectiveAccess.admin
+            ? page === "overview" && effectiveAccess.status !== "active"
               ? publicOverview
               : content[page] || publicOverview
             : locked}

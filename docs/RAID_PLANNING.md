@@ -26,3 +26,11 @@ Primary Blizzard references, with later notes taking precedence over original de
 - [November 10 hotfixes](https://news.blizzard.com/en-us/article/24315281/wow-forever-hotfixes-november-10-2026): a Shaman's personal weapon imbue may coexist with a weapon totem. The app does not conflate personal imbues with the two totem benefits.
 
 When Blizzard changes class rules, update `src/lib/raid.ts` and this review date. Do not replace Forever's rules with retail spec names or a Classic party-buff assumption.
+
+## Unified raid workspace
+
+Raid planner contains lineup and personal availability, raid-night polls, loot, raid supplies, and progress. The legacy Schedule link redirects here. Personal availability is available to every approved rank for its own characters, independently of permission to view private attendance or edit structure. Manage raiders opens a searchable roster picker; admins can also record RSVPs and download calendar events from the planner. Times use the viewer’s browser time zone.
+
+Buff coverage counts only confirmed, same-team raiders in valid group slots within the team’s capacity. Bench, tentative, absent, wrong-team, out-of-range and over-capacity entries never contribute. Bench providers are explicitly labeled not covered.
+
+The first-use guide covers Battle.net, approval, character setup, optional Discord linking/DMs, and personal availability. Completion is local to the member’s browser and does not store credentials. It can be reopened from Getting started.

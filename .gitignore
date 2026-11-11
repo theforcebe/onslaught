@@ -7,3 +7,6 @@ dist/
 *.log
 *.tsbuildinfo
 .DS_Store
+
+# Local browser QA harnesses (fictional records only)
+work/

@@ -1,3 +1,6 @@
+import { calendarFile, download } from "./lib/calendar";
+import { Availability } from "./Availability";
+import type { Identity } from "./lib/model";
 import { useEffect, useRef, useState } from "react";
 import type { PointerEvent } from "react";
 import {
@@ -12,7 +15,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { ClassIcon, Player, RoleIcon } from "./components";
+import { ClassIcon, Player, RoleIcon, Modal } from "./components";
 import { Dropdown } from "./Dropdown";
 import type { DialogState } from "./dialogs";
 import type { Access } from "./lib/access";
@@ -25,23 +28,30 @@ import type {
   RaidState,
   Team,
 } from "./lib/model";
-import { confirmedRaiders, providersFor, RAID_BUFFS } from "./lib/raid";
+import {
+  activeLineup,
+  confirmedRaiders,
+  providersFor,
+  RAID_BUFFS,
+} from "./lib/raid";
 
 function BuffMap({
   confirmed,
+  size,
   event,
   selected,
   onSelect,
   onReveal,
 }: {
   confirmed: Character[];
+  size: number;
   event: RaidEvent;
   selected: string;
   onSelect: (id: string) => void;
   onReveal: (id: string) => void;
 }) {
   const [utility, setUtility] = useState(false);
-  const slotted = confirmed.filter((c) => event.lineup?.[c.id]);
+  const slotted = activeLineup(confirmed, event, size);
   const buffs = RAID_BUFFS.filter((b) => utility || b.kind === "buff");
   const available = buffs.filter(
     (b) => providersFor(b.id, slotted).length,
@@ -63,14 +73,14 @@ function BuffMap({
             {available}
             <span>/{buffs.length}</span>
           </strong>
-          <small>available abilities</small>
+          <small>covered in active groups</small>
         </div>
       </div>
       <div className="buff-map-toolbar">
         <span>
           <i className="coverage-dot available" /> In lineup{" "}
-          <i className="coverage-dot bench" /> On bench{" "}
-          <i className="coverage-dot" /> Unconfirmed
+          <i className="coverage-dot bench" /> Not covered · bench{" "}
+          <i className="coverage-dot" /> Missing
         </span>
         <label>
           <input
@@ -85,7 +95,7 @@ function BuffMap({
         {buffs.map((b) => {
           const present = providersFor(b.id, slotted),
             waiting = providersFor(b.id, confirmed).filter(
-              (c) => !event.lineup?.[c.id],
+              (c) => !slotted.some((p) => p.id === c.id),
             );
           const status = present.length
             ? "available"
@@ -157,9 +167,9 @@ function BuffMap({
                   </button>
                   <span className="path-line" />
                   <strong>
-                    {event.lineup?.[c.id]
-                      ? `Group ${event.lineup[c.id]}`
-                      : "Confirmed bench"}
+                    {slotted.some((p) => p.id === c.id)
+                      ? `Group ${event.lineup?.[c.id]}`
+                      : "Not covered · on bench"}
                   </strong>
                 </div>
               ))
@@ -238,8 +248,8 @@ function EventBoard({
   const [message, setMessage] = useState("");
   const confirmed = confirmedRaiders(state.characters, event);
   const lineup = event.lineup || {};
-  const placed = confirmed.filter((c) => lineup[c.id]);
-  const bench = confirmed.filter((c) => !lineup[c.id]);
+  const placed = activeLineup(state.characters, event, team.size);
+  const bench = confirmed.filter((c) => !placed.some((p) => p.id === c.id));
   const selectedCharacter = confirmed.find((c) => c.id === selected);
   const highlighted = new Set(providersFor(buff, confirmed).map((c) => c.id));
   const active = selectedCharacter?.id || dragging;
@@ -428,6 +438,7 @@ function EventBoard({
       )}
       <BuffMap
         confirmed={confirmed}
+        size={team.size}
         event={event}
         selected={buff}
         onSelect={setBuff}
@@ -559,14 +570,11 @@ function EventBoard({
                   </small>
                 </header>
                 {people.map(card)}
-                {Array.from(
-                  { length: Math.max(0, cap - people.length) },
-                  (_, i) => (
-                    <div className="raid-empty-slot" key={i}>
-                      <Plus size={13} />
-                      <span>Open position</span>
-                    </div>
-                  ),
+                {people.length < cap && (
+                  <div className="raid-empty-slot">
+                    <Plus size={13} />
+                    <span>{cap - people.length} open positions</span>
+                  </div>
                 )}
                 {admin && (
                   <button
@@ -616,7 +624,7 @@ function EventBoard({
           <p className="bench-empty">
             {confirmed.length
               ? "Every confirmed raider has a position."
-              : "No confirmed team members yet. Mark attendance as Going in the schedule."}
+              : "No confirmed team members yet. Set your availability above."}
           </p>
         )}
       </section>
@@ -624,8 +632,8 @@ function EventBoard({
         <p className="notice">
           {outside} confirmed{" "}
           {outside === 1 ? "character belongs" : "characters belong"} outside
-          this team. Add them to {team.name} using “Team roster” before placing
-          them in its lineup.
+          this team. Add them to {team.name} using “Manage raiders” before
+          placing them in its lineup.
         </p>
       )}
       <span className="sr-only" role="status" aria-live="polite">
@@ -637,11 +645,13 @@ function EventBoard({
 
 export function RaidPlanner({
   state,
-  team,
+  team: selectedTeam,
   selectTeam,
   access,
   change,
   open,
+  identity,
+  demo,
 }: {
   state: RaidState;
   team?: Team;
@@ -649,26 +659,50 @@ export function RaidPlanner({
   access: Access;
   change: (a: RaidAction) => Promise<void>;
   open: (d: DialogState) => void;
+  identity?: Identity;
+  demo?: boolean;
 }) {
-  const [selectedEvent, setSelectedEvent] = useState("");
+  const [selectedEvent, setSelectedEvent] = useState(""),
+    [rosterOpen, setRosterOpen] = useState(false),
+    [search, setSearch] = useState(""),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  const publicTeams = [
+    ...new Map(
+      state.events.map((e) => [
+        e.teamId,
+        { id: e.teamId, name: e.publicTeamName || "Raid team" },
+      ]),
+    ).values(),
+  ];
+  const teams = state.teams.length ? state.teams : publicTeams;
+  const [publicTeamId, setPublicTeamId] = useState("");
+  const team =
+    selectedTeam || teams.find((t) => t.id === publicTeamId) || teams[0];
   const events = state.events
     .filter((e) => e.teamId === team?.id)
     .sort((a, b) => a.start.localeCompare(b.start));
   const event =
     events.find((e) => e.id === selectedEvent) ||
     events.find((e) => Date.parse(e.end) > Date.now()) ||
-    events[events.length - 1];
-  const canPlan = hasSection(access, "attendance") && hasTeam(access, team?.id);
+    events.at(-1);
+  const fullTeam = state.teams.find((t) => t.id === team?.id);
+  const canPlan =
+    hasSection(access, "planner") &&
+    hasSection(access, "attendance") &&
+    hasTeam(access, team?.id);
+  const roster = state.characters.filter((c) => c.teamId === team?.id);
   return (
     <div className="raid-planner">
       <div className="toolbar">
         <div className="segmented">
-          {state.teams.map((t) => (
+          {teams.map((t) => (
             <button
               key={t.id}
               className={team?.id === t.id ? "active" : ""}
               onClick={() => {
                 selectTeam(t.id);
+                setPublicTeamId(t.id);
                 setSelectedEvent("");
               }}
             >
@@ -678,129 +712,238 @@ export function RaidPlanner({
         </div>
         {access.admin && (
           <div className="button-row">
-            {team && (
-              <button
-                className="btn secondary"
-                onClick={() => open({ type: "team", team })}
-              >
-                <Settings size={15} /> Configure team
-              </button>
+            {fullTeam && (
+              <>
+                <button
+                  className="btn primary"
+                  onClick={() => {
+                    setRosterOpen(true);
+                    setError("");
+                  }}
+                >
+                  <Users size={16} />
+                  Manage raiders <span className="badge">{roster.length}</span>
+                </button>
+                <button
+                  className="icon-btn"
+                  aria-label="Configure raid team"
+                  onClick={() => open({ type: "team", team: fullTeam })}
+                >
+                  <Settings size={17} />
+                </button>
+              </>
             )}
-            <button
-              className="btn secondary"
-              onClick={() => open({ type: "team" })}
-            >
-              <Plus size={15} /> New team
+            <button className="btn text" onClick={() => open({ type: "team" })}>
+              <Plus size={15} />
+              New team
             </button>
           </div>
         )}
       </div>
-      {team && (
-        <div className="planner-event-picker">
-          <div>
-            <span className="eyebrow">RAID NIGHT</span>
-            {event ? (
-              <Dropdown
-                label="Raid event"
-                value={event.id}
-                onChange={setSelectedEvent}
-                options={events.map((e) => ({
-                  value: e.id,
-                  label: e.title,
-                  detail: new Date(e.start).toLocaleString(undefined, {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                    timeZone: state.guild.timeZone,
-                  }),
-                }))}
-              />
-            ) : (
-              <p>No raids scheduled for this team.</p>
-            )}
-          </div>
-          {access.admin && (
-            <button
-              className="btn secondary"
-              onClick={() => open({ type: "event", team })}
-            >
-              <Plus size={15} /> Schedule raid
-            </button>
+      <div className="planner-event-picker">
+        <div>
+          {event ? (
+            <Dropdown
+              label="Raid night"
+              value={event.id}
+              onChange={setSelectedEvent}
+              options={events.map((e) => ({
+                value: e.id,
+                label: e.title,
+                detail: new Date(e.start).toLocaleString(undefined, {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                }),
+              }))}
+            />
+          ) : (
+            <p className="muted">No raids scheduled yet.</p>
           )}
         </div>
+        {access.admin && fullTeam && (
+          <div className="button-row">
+            {event && (
+              <>
+                <button
+                  className="btn text"
+                  onClick={() => open({ type: "signup", event })}
+                >
+                  Record RSVP
+                </button>
+                <button
+                  className="btn text"
+                  onClick={() => open({ type: "event", event, team: fullTeam })}
+                >
+                  Edit raid
+                </button>
+              </>
+            )}
+            <button
+              className="btn secondary"
+              onClick={() => open({ type: "event", team: fullTeam })}
+            >
+              <Plus size={15} />
+              Schedule raid
+            </button>
+          </div>
+        )}
+      </div>
+      {event && (
+        <div className="raid-time-summary">
+          <span>
+            {event.instance} ·{" "}
+            {new Date(event.start).toLocaleDateString(undefined, {
+              weekday: "long",
+              month: "short",
+              day: "numeric",
+            })}{" "}
+            ·{" "}
+            {new Date(event.start).toLocaleTimeString(undefined, {
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+            –
+            {new Date(event.end).toLocaleTimeString(undefined, {
+              hour: "numeric",
+              minute: "2-digit",
+              timeZoneName: "short",
+            })}
+          </span>
+          <button
+            className="btn text"
+            onClick={() =>
+              download(
+                event.title + ".ics",
+                calendarFile(event),
+                "text/calendar",
+              )
+            }
+          >
+            Add to calendar
+          </button>
+        </div>
       )}
-      {team && event ? (
-        canPlan ? (
-          <EventBoard
-            key={event.id}
-            state={state}
-            team={team}
-            event={event}
-            admin={access.admin}
-            change={change}
-            open={open}
-          />
-        ) : (
-          <div className="panel empty">
-            <LockKeyhole />
-            <h3>Attendance access required</h3>
-            <p>
-              Ask an admin for Attendance & raid notes access to view confirmed
-              lineups for this team.
+      {event && (
+        <Availability
+          state={state}
+          event={event}
+          identity={identity}
+          access={access}
+          demo={demo}
+          change={change}
+          setup={() => open({ type: "import" })}
+        />
+      )}
+      {event && fullTeam && canPlan ? (
+        <EventBoard
+          key={event.id}
+          state={state}
+          team={fullTeam}
+          event={event}
+          admin={access.admin}
+          change={change}
+          open={open}
+        />
+      ) : (
+        <div className="panel planner-private">
+          <SwordsIcon />
+          <div>
+            <h3>
+              {event
+                ? "Your response helps the raid take shape"
+                : "The next raid starts here"}
+            </h3>
+            <p className="muted">
+              {event
+                ? "Group lineups and private attendance are shown when your admin grants access. Your personal availability can be updated above."
+                : access.admin
+                  ? "Create a team and schedule a raid. Members can then respond and join the lineup."
+                  : "Scheduled raids will appear here. Check back for the next guild raid."}
             </p>
           </div>
-        )
-      ) : (
-        <div className="panel empty">
-          <Users />
-          <h3>
-            {team
-              ? "Choose your next raid night"
-              : "Build your first raid team"}
-          </h3>
-          <p>
-            {team
-              ? "Schedule an event, collect Going responses, then place confirmed raiders here."
-              : "Create a team and add characters to start planning."}
-          </p>
         </div>
       )}
-      {team && (
-        <details className="details team-roster-tools">
-          <summary>
-            Team roster ·{" "}
-            {state.characters.filter((c) => c.teamId === team.id).length}{" "}
-            members
-          </summary>
+      {rosterOpen && fullTeam && (
+        <Modal
+          title={"Raiders · " + fullTeam.name}
+          onClose={() => setRosterOpen(false)}
+        >
           <p className="muted">
-            Standing team membership is separate from each raid night’s lineup.
+            Add characters to the team, then confirm attendance to place them in
+            a raid lineup.
           </p>
-          <div className="bench">
+          <input
+            aria-label="Find a raider"
+            placeholder="Search name, class or role…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {error && (
+            <p role="alert" className="notice danger">
+              {error}
+            </p>
+          )}
+          <div className="roster-picker">
             {state.characters
-              .filter((c) => c.teamId === team.id)
+              .filter((c) =>
+                (c.name + " " + c.class + " " + c.role)
+                  .toLowerCase()
+                  .includes(search.toLowerCase()),
+              )
               .map((c) => (
-                <Player
-                  key={c.id}
-                  character={c}
-                  onClick={() =>
-                    open({
-                      type: access.admin ? "assign" : "character",
-                      character: c,
-                      team,
-                    })
-                  }
-                />
+                <div key={c.id}>
+                  <Player character={c} />
+                  {c.teamId === fullTeam.id ? (
+                    <button
+                      className="btn text"
+                      onClick={() => {
+                        setRosterOpen(false);
+                        open({ type: "assign", character: c, team: fullTeam });
+                      }}
+                    >
+                      On team · adjust
+                    </button>
+                  ) : (
+                    <button
+                      className="btn secondary"
+                      disabled={busy || roster.length >= fullTeam.size}
+                      onClick={async () => {
+                        const group = Array.from(
+                          { length: Math.ceil(fullTeam.size / 5) },
+                          (_, i) => i + 1,
+                        ).find(
+                          (g) =>
+                            roster.filter((c) => c.group === g).length <
+                            Math.min(5, fullTeam.size - (g - 1) * 5),
+                        );
+                        if (!group) return;
+                        setBusy(true);
+                        try {
+                          await change({
+                            type: "team.assign",
+                            characterId: c.id,
+                            teamId: fullTeam.id,
+                            group,
+                          });
+                        } catch (e) {
+                          setError((e as Error).message);
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}
+                    >
+                      <Plus size={14} />
+                      Add to team
+                    </button>
+                  )}
+                </div>
               ))}
           </div>
-          {access.admin && (
-            <button
-              className="btn secondary"
-              onClick={() => open({ type: "assign", team })}
-            >
-              <Plus size={15} /> Add or move team member
-            </button>
-          )}
-        </details>
+        </Modal>
       )}
     </div>
   );
+}
+function SwordsIcon() {
+  return <Users size={30} />;
 }

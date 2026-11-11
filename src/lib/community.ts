@@ -27,7 +27,7 @@ export const MaterialInput = z
   .object({
     id,
     teamId: id.optional(),
-    recipientId: id,
+    recipientId: id.optional(),
     item: z.string().trim().min(1).max(150),
     itemId: z.number().int().positive().optional(),
     quantity: z.number().int().min(1).max(100000),
@@ -50,6 +50,7 @@ export const AnnouncementSchema =
 export const MaterialSchema = MaterialInput.extend({
   ...attribution,
   recipientName: z.string().max(100),
+  openToGuild: z.boolean().optional(),
   fulfilled: z.number().int().min(0).max(100000),
   updatedAt: z.string().datetime(),
   cancelled: z.boolean(),
@@ -113,6 +114,8 @@ export const communityActions = [
     })
     .strict(),
   z.object({ type: z.literal("material.cancel"), requestId: id }).strict(),
+  z.object({ type: z.literal("material.claim"), requestId: id }).strict(),
+  z.object({ type: z.literal("material.release"), requestId: id }).strict(),
   z
     .object({
       type: z.literal("community.reply"),
@@ -256,20 +259,51 @@ export function applyCommunity(
       c.announcements.unshift({ ...a.announcement, ...attr });
       return `Posted announcement: ${a.announcement.title}`;
     case "material.create":
-      lead();
+      if (a.request.recipientId || a.request.teamId) lead();
       unique(c.requests, a.request.id);
-      if (!recipientName)
+      if (a.request.recipientId && !recipientName)
         throw new Error("Choose an active member with access to this request.");
       c.requests.unshift({
         ...a.request,
         ...attr,
-        recipientName,
+        recipientName: recipientName || "Open to volunteers",
+        openToGuild: !a.request.recipientId,
         fulfilled: 0,
         updatedAt: at,
         cancelled: false,
         updates: [],
       });
-      return `Requested ${a.request.quantity} ${a.request.item} from ${recipientName}`;
+      return `Requested ${a.request.quantity} ${a.request.item}${recipientName ? ` from ${recipientName}` : " from the guild"}`;
+    case "material.claim": {
+      const r = c.requests.find((r) => r.id === a.requestId);
+      if (!r || r.cancelled || r.fulfilled >= r.quantity)
+        throw new Error("This request is no longer open.");
+      if (r.recipientId)
+        throw new Error(
+          "Another member has already taken this request. Refresh to see who.",
+        );
+      r.recipientId = actor.id;
+      r.recipientName = actor.label;
+      r.updatedAt = at;
+      return `Claimed request for ${r.item}`;
+    }
+    case "material.release": {
+      const r = c.requests.find((r) => r.id === a.requestId);
+      if (
+        !r ||
+        !r.openToGuild ||
+        r.recipientId !== actor.id ||
+        r.fulfilled ||
+        r.cancelled
+      )
+        throw new Error(
+          "Only an unstarted volunteer request can be released by its owner.",
+        );
+      delete r.recipientId;
+      r.recipientName = "Open to volunteers";
+      r.updatedAt = at;
+      return `Reopened request for ${r.item}`;
+    }
     case "material.progress": {
       const r = c.requests.find((r) => r.id === a.requestId);
       if (!r) throw new Error("Request not found.");
@@ -292,7 +326,6 @@ export function applyCommunity(
       return `Updated fulfillment of ${r.item}`;
     }
     case "material.cancel": {
-      lead();
       const r = c.requests.find((r) => r.id === a.requestId);
       if (!r) throw new Error("Request not found.");
       if (!admin && r.createdBy !== actor.id)
@@ -320,4 +353,37 @@ export function applyCommunity(
       return "Added a guild discussion reply";
     }
   }
+}
+
+export function contributionBoard(requests: MaterialRequest[]) {
+  const people = new Map<
+    string,
+    {
+      id: string;
+      name: string;
+      completed: number;
+      helped: number;
+      units: number;
+    }
+  >();
+  for (const r of requests) {
+    if (r.cancelled || !r.recipientId || !r.fulfilled) continue;
+    const p = people.get(r.recipientId) || {
+      id: r.recipientId,
+      name: r.recipientName,
+      completed: 0,
+      helped: 0,
+      units: 0,
+    };
+    p.helped++;
+    p.units += r.fulfilled;
+    if (r.fulfilled === r.quantity) p.completed++;
+    people.set(p.id, p);
+  }
+  return [...people.values()].sort(
+    (a, b) =>
+      b.completed - a.completed ||
+      b.helped - a.helped ||
+      a.name.localeCompare(b.name),
+  );
 }

@@ -247,9 +247,23 @@ export function project(doc: GuildDocument, identity?: Identity): GuildView {
           : undefined,
       signups: allowed("attendance", e.teamId)
         ? Object.fromEntries(
-            Object.entries(e.signups).filter(([id]) => visibleCharacter(id)),
+            Object.entries(e.signups).filter(
+              ([id]) =>
+                visibleCharacter(id) ||
+                s.characters.some(
+                  (c) => c.id === id && c.ownerBattleNet === identity?.id,
+                ),
+            ),
           )
-        : {},
+        : Object.fromEntries(
+            Object.entries(e.signups).filter(
+              ([id]) =>
+                a.status === "active" &&
+                s.characters.some(
+                  (c) => c.id === id && c.ownerBattleNet === identity?.id,
+                ),
+            ),
+          ),
     })),
     loot: s.loot
       .filter((l) => allowed("loot", l.teamId))
@@ -292,7 +306,7 @@ export function project(doc: GuildDocument, identity?: Identity): GuildView {
         allowed("community", m.teamId),
       );
       const requests = c.requests.filter((r) =>
-        allowed("consumables", r.teamId),
+        canSeeRequest(a, r, identity?.id),
       );
       return {
         announcements,
@@ -319,7 +333,7 @@ export function project(doc: GuildDocument, identity?: Identity): GuildView {
                 id: m.id,
                 label: m.label,
               });
-              return hasSection(target, "consumables");
+              return target.status === "active";
             })
             .map((m) => {
               const target = accessFor(doc, {
@@ -416,6 +430,47 @@ export function authorizeAction(
   )
     throw new ChangeError("Choose an active member.");
   if (a.admin) return { ...identity, admin: true };
+  const participant = {
+    ...identity,
+    admin: false,
+    officer: a.role === "officer",
+  };
+  if (action.type === "event.signup") {
+    if (
+      !doc.state.characters.some(
+        (c) => c.id === action.characterId && c.ownerBattleNet === identity.id,
+      )
+    )
+      throw new ChangeError(
+        "You can only set availability for your own character.",
+        403,
+      );
+    return participant;
+  }
+  if (
+    action.type === "material.create" &&
+    !action.request.recipientId &&
+    !action.request.teamId
+  )
+    return participant;
+  if (
+    [
+      "material.progress",
+      "material.claim",
+      "material.release",
+      "material.cancel",
+    ].includes(action.type) ||
+    (action.type === "community.reply" && action.kind === "request")
+  ) {
+    const id =
+      "requestId" in action
+        ? action.requestId
+        : "recordId" in action
+          ? action.recordId
+          : undefined;
+    const request = doc.state.community?.requests.find((r) => r.id === id);
+    if (request && canSeeRequest(a, request, identity.id)) return participant;
+  }
   if (
     [
       "poll.create",
@@ -448,17 +503,14 @@ export function authorizeAction(
 
 export function materialRecipient(doc: GuildDocument, action: RaidAction) {
   if (action.type !== "material.create") return undefined;
+  if (!action.request.recipientId) return undefined;
   const m = doc.members.find((m) => m.id === action.request.recipientId);
   const target = m
     ? accessFor(doc, { provider: "battlenet", id: m.id, label: m.label })
     : PUBLIC_ACCESS;
-  if (
-    !m ||
-    !hasSection(target, "consumables") ||
-    !hasTeam(target, action.request.teamId)
-  )
+  if (!m || target.status !== "active")
     throw new ChangeError(
-      "Choose an active member with Consumables access to this team.",
+      "Choose an approved guild member. Linking Discord does not approve guild membership.",
     );
   return m.label;
 }
@@ -506,4 +558,25 @@ export function updateMember(
     summary: "Updated member access",
   });
   return DocumentSchema.parse(next);
+}
+
+export function canSeeRequest(
+  access: Access,
+  r: {
+    recipientId?: string;
+    teamId?: string;
+    openToGuild?: boolean;
+    createdBy?: string;
+  },
+  memberId?: string,
+) {
+  return (
+    access.status === "active" &&
+    (access.admin ||
+      (!!memberId &&
+        (r.recipientId === memberId ||
+          (!r.teamId && r.createdBy === memberId))) ||
+      ((r.openToGuild || hasSection(access, "consumables")) &&
+        hasTeam(access, r.teamId)))
+  );
 }

@@ -168,7 +168,13 @@ describe("section and team privacy", () => {
       if (section !== "attendance")
         expect(
           v.state.events.every(
-            (e) => !e.notes && !Object.keys(e.signups).length,
+            (e) =>
+              !e.notes &&
+              Object.keys(e.signups).every((id) =>
+                d.state.characters.some(
+                  (c) => c.id === id && c.ownerBattleNet === member.id,
+                ),
+              ),
           ),
         ).toBe(true);
       if (section !== "loot") expect(v.state.loot).toEqual([]);
@@ -208,10 +214,10 @@ describe("section and team privacy", () => {
       authorizeAction(d, member, {
         type: "event.signup",
         eventId: "second-event",
-        characterId: d.state.characters[0].id,
+        characterId: "second-char",
         status: "going",
       }),
-    ).toThrow("access");
+    ).toThrow("own character");
   });
   it("view permissions never authorize structural changes", () => {
     const d = privateFixture(),

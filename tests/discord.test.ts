@@ -81,6 +81,14 @@ function setup() {
           args = values;
           return this;
         },
+        async all() {
+          return {
+            results: [...links.entries()].map(([id, l]) => ({
+              member_id: id,
+              dm_opt_in: l.dm_opt_in,
+            })),
+          };
+        },
         async first() {
           if (sql.startsWith("SELECT payload FROM discord_config"))
             return records.has("config:" + args[0])
@@ -229,9 +237,18 @@ describe("Discord integration boundaries", () => {
       display_name: "Other user",
       dm_opt_in: 1,
     });
+    s.doc.members.push({
+      ...s.doc.members[0],
+      id: "someone-else",
+      label: "Approved helper",
+      role: "guild_member",
+      sections: [],
+      teamIds: [],
+    });
     const r = await s.call("/api/discord/status");
     const data = (await r!.json()) as any;
     expect(data.ownLink).toBeNull();
+    expect(data.recipients).toEqual([{ id: "someone-else", dmOptIn: true }]);
     expect(data.config).toBeUndefined();
     expect(JSON.stringify(data)).not.toContain("999999");
     expect(JSON.stringify(data)).not.toContain("test-only");
@@ -287,6 +304,7 @@ describe("Discord integration boundaries", () => {
       }),
     ).rejects.toThrow("opted into");
     expect(fetch).not.toHaveBeenCalled();
+    s.doc.members[0].sections = []; // Assigned recipients remain eligible for a DM without a private section grant.
     s.links.set("member-id", {
       member_id: "member-id",
       discord_id: "123456789012345678",
@@ -333,6 +351,51 @@ describe("Discord integration boundaries", () => {
     await expect(s.call("/api/discord/send", input)).rejects.toThrow(
       "unconfirmed",
     );
+  });
+  it("sends a volunteer request once per claimed recipient while preserving retry protection", async () => {
+    const s = setup();
+    s.doc.state.community!.requests[0].openToGuild = true;
+    s.doc.members.push({
+      ...s.doc.members[0],
+      id: "new-helper",
+      label: "Helper",
+      role: "guild_member",
+      sections: [],
+      teamIds: [],
+    });
+    for (const id of ["member-id", "new-helper"])
+      s.links.set(id, {
+        member_id: id,
+        discord_id: "123456789012345678",
+        display_name: id,
+        dm_opt_in: 1,
+      });
+    const mock = vi.fn(async (url, init) =>
+      String(url).includes("/members/")
+        ? Response.json({ user: { id: "123456789012345678" } })
+        : String(url).endsWith("/users/@me/channels")
+          ? Response.json({ id: "888888888888888888" })
+          : Response.json({ id: "777777777777777777" }),
+    );
+    vi.stubGlobal("fetch", mock);
+    const input = { kind: "request", id: "request", destination: "dm" };
+    await s.call("/api/discord/send", input);
+    s.doc.state.community!.requests[0].recipientId = "new-helper";
+    expect(
+      (
+        (await (await s.call(
+          "/api/discord/delivery?kind=request&id=request&destination=dm",
+        ))!.json()) as any
+      ).receipt,
+    ).toBeNull();
+    await s.call("/api/discord/send", input);
+    await s.call("/api/discord/send", input);
+    expect(
+      mock.mock.calls.filter(
+        ([url, init]) =>
+          String(url).endsWith("/messages") && init?.method === "POST",
+      ),
+    ).toHaveLength(2);
   });
   it("handles rate limits as a visible retryable failure", async () => {
     const s = setup();

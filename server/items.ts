@@ -8,6 +8,104 @@ import {
 } from "../src/lib/item-data";
 import type { ItemResult } from "../src/lib/item-data";
 const inFlight = new Map<string, Promise<ItemResult>>();
+const searchFlight = new Map<string, Promise<Response>>();
+export async function serveItemSearch(
+  req: Request,
+  cache: Pick<Cache, "match" | "put">,
+  checkRate: () => Promise<void>,
+) {
+  const url = new URL(req.url),
+    q = (url.searchParams.get("q") || "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .toLowerCase();
+  if (
+    req.method !== "GET" ||
+    q.length < 2 ||
+    q.length > 64 ||
+    [...url.searchParams.keys()].some((k) => k !== "q")
+  )
+    return new Response("Enter 2–64 characters", { status: 400 });
+  const key = new Request(
+    `${url.origin}/item-search/v1?q=${encodeURIComponent(q)}`,
+  );
+  const cached = await cache.match(key).catch(() => undefined);
+  if (cached)
+    return new Response(cached.body, {
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "public, max-age=3600",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  let pending = searchFlight.get(q);
+  if (!pending) {
+    pending = (async () => {
+      await checkRate();
+      let results: {
+        id: number;
+        name: string;
+        icon: string;
+        quality: number;
+        category: string;
+      }[] = [];
+      let ok = false;
+      try {
+        const r = await fetch(
+          `https://www.wowhead.com/forever/search/suggestions-template?q=${encodeURIComponent(q)}`,
+          {
+            redirect: "manual",
+            signal: AbortSignal.timeout(7000),
+            headers: { Accept: "application/json" },
+          },
+        );
+        if (r.ok) {
+          const data = (await boundedItemJSON(r)) as { results?: unknown[] };
+          if (Array.isArray(data?.results)) {
+            ok = true;
+            results = data.results
+              .filter(
+                (v: any) =>
+                  v?.type === 3 &&
+                  Number.isSafeInteger(v.id) &&
+                  v.id > 0 &&
+                  typeof v.name === "string",
+              )
+              .slice(0, 20)
+              .map((v: any) => ({
+                id: v.id,
+                name: v.name.replace(/<[^>]*>/g, "").slice(0, 150),
+                icon: /^[a-z0-9_]+$/i.test(v.icon)
+                  ? v.icon
+                  : "inv_misc_questionmark",
+                quality: Number.isInteger(v.quality) ? v.quality : 1,
+                category:
+                  typeof v.pinFooterText === "string"
+                    ? v.pinFooterText.replace(/<[^>]*>/g, "").slice(0, 60)
+                    : "Item",
+              }));
+          }
+        }
+      } catch {
+        /* An upstream outage never exposes request details. */
+      }
+      const response = new Response(
+        JSON.stringify({ results, available: ok }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": `public, max-age=${ok ? 43200 : 60}`,
+            "X-Content-Type-Options": "nosniff",
+          },
+        },
+      );
+      await cache.put(key, response.clone()).catch(() => {});
+      return response;
+    })().finally(() => searchFlight.delete(q));
+    searchFlight.set(q, pending);
+  }
+  return (await pending).clone();
+}
 export async function serveItem(
   req: Request,
   cache: Pick<Cache, "match" | "put">,
