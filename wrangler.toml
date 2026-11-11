@@ -8,13 +8,13 @@ enabled = false
 
 [vars]
 APP_ORIGIN = "https://theforcebe.github.io"
-PUBLIC_API_URL = "https://REPLACE_WITH_YOUR_WORKER.workers.dev"
+PUBLIC_API_URL = "https://onslaught-gateway.onslaught-raid.workers.dev"
 GITHUB_REPOSITORY = "theforcebe/onslaught-data"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "onslaught-auth"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "75758bc6-2e0c-446a-b22a-cc2dbe095939"
 
 # Store BNET_CLIENT_ID, BNET_CLIENT_SECRET, GITHUB_TOKEN, IDENTITY_KEY,
 # and ADMIN_BNET_IDS with `wrangler secret put`.

@@ -2,11 +2,19 @@
 
 The public app is https://theforcebe.github.io/onslaught/. Source lives in `theforcebe/onslaught`. Canonical guild records and member permissions live in the **private** repository `theforcebe/onslaught-data`, at `data/guild.json`.
 
-The gateway code and access rules are implemented and tested locally. Real provider sign-in remains unverified until the steps below are completed. The public roster is initially empty. The demo is fictional and browser-local. Public GitHub issues are no longer an editing channel.
+The gateway is deployed at `https://onslaught-gateway.onslaught-raid.workers.dev`. D1 is initialized, and `IDENTITY_KEY` has been generated directly into Cloudflare secret storage. Do not regenerate that key during onboarding. Cloudflare CLI authentication uses encrypted storage backed by Windows Credential Manager.
+
+Remaining activation: install `BNET_CLIENT_ID`, `BNET_CLIENT_SECRET`, and the private-repository `GITHUB_TOKEN`; connect the public gateway URL to Pages; establish the owner using `ADMIN_BNET_IDS`; verify real sign-in. The public roster remains empty. The demo is fictional and browser-local. Public GitHub issues are no longer an editing channel.
 
 ## 1. Connect Cloudflare
 
-From the app checkout, run `npx wrangler login` and approve sign-in in your browser. Then:
+This section is already complete for the current deployment. For recovery from a new machine, use the app checkout and authorize only the required Cloudflare scopes:
+
+```sh
+npx wrangler login --use-keyring --scopes account:read user:read workers:write workers_scripts:write d1:write
+```
+
+Wrangler may install its credential-store helper interactively. To provision a replacement database (do not recreate the existing database during routine setup):
 
 ```sh
 npx wrangler d1 create onslaught-auth
@@ -26,7 +34,7 @@ The first deployment can run without secrets; sign-in fails closed. Copy the ret
 In the [Blizzard developer portal](https://community.developer.battle.net/access/clients), create an OAuth client named **Ønslaught**. Set its redirect URI to the exact URL:
 
 ```text
-https://YOUR-WORKER-HOST/auth/callback
+https://onslaught-gateway.onslaught-raid.workers.dev/auth/callback
 ```
 
 The app uses the `openid` identity scope, not WoW armory access. Enter the client ID and secret directly in **Cloudflare → Workers & Pages → onslaught-gateway → Settings → Variables and Secrets**, using type **Secret**. Alternatively use Wrangler's interactive prompts:
@@ -46,11 +54,10 @@ Create a dedicated [fine-grained GitHub token](https://github.com/settings/perso
 - Repository permission: **Contents → Read and write**. Metadata read is implicit.
 - An expiration date you can maintain. No Actions, administration, organization, or public app repository permissions.
 
-Store it directly as Cloudflare secret `GITHUB_TOKEN`. Do not reuse a developer's GitHub CLI credential. Generate at least 32 random bytes with a password manager and store a stable `IDENTITY_KEY` secret; changing it later requires migrating member and character-owner IDs.
+Store it directly as Cloudflare secret `GITHUB_TOKEN`. Do not reuse a developer's GitHub CLI credential. The current `IDENTITY_KEY` is already installed. For a fresh independent deployment, generate at least 32 random bytes with a password manager; changing an existing key requires migrating member and character-owner IDs.
 
 ```sh
 npx wrangler secret put GITHUB_TOKEN
-npx wrangler secret put IDENTITY_KEY
 ```
 
 Keep `onslaught-data` private and give repository access only to trusted operators. Raiders use the app and do not need GitHub accounts. The gateway verifies the repository is private before reading it. Accepted guild edits and access changes create private commits with conflict checks.
