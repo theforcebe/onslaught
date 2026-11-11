@@ -1,4 +1,36 @@
-import {writeFileSync} from 'node:fs';
-import {StateSchema} from '../src/lib/model';
-const state=StateSchema.parse({schemaVersion:1,revision:0,guild:{name:'Ønslaught',realm:'WoW Forever guild',region:'US',timeZone:'America/Los_Angeles',adminsGithub:['theforcebe'],membersGithub:[]},characters:[],teams:[{id:'vanguard',name:'The Vanguard',size:20,tanks:2,healers:4,description:'Our first raid team. Adjust the size and role targets as the guild grows.'}],events:[],loot:[],supplies:[],bosses:[],audit:[],processedRequests:[]});
-writeFileSync('public/data/raid-state.json',JSON.stringify(state,null,2)+'\n');
+import { writeFileSync } from "node:fs";
+import { StateSchema } from "../src/lib/model";
+const state = StateSchema.parse({
+  schemaVersion: 1,
+  revision: 0,
+  guild: {
+    name: "Ønslaught",
+    realm: "WoW Forever guild",
+    region: "US",
+    timeZone: "America/Los_Angeles",
+    adminsGithub: ["theforcebe"],
+    membersGithub: [],
+  },
+  characters: [],
+  teams: [
+    {
+      id: "vanguard",
+      name: "The Vanguard",
+      size: 20,
+      tanks: 2,
+      healers: 4,
+      description:
+        "Our first raid team. Adjust the size and role targets as the guild grows.",
+    },
+  ],
+  events: [],
+  loot: [],
+  supplies: [],
+  bosses: [],
+  audit: [],
+  processedRequests: [],
+});
+writeFileSync(
+  "public/data/raid-state.json",
+  JSON.stringify(state, null, 2) + "\n",
+);

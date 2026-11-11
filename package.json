@@ -9,7 +9,8 @@
     "test": "vitest run",
     "worker:dev": "wrangler dev",
     "worker:deploy": "wrangler deploy",
-    "check:data": "tsx scripts/validate-data.ts"
+    "check:data": "tsx scripts/validate-data.ts",
+    "format": "prettier --write src server scripts tests"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
@@ -23,6 +24,7 @@
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.4.1",
+    "prettier": "^3.9.10",
     "tsx": "^4.19.4",
     "typescript": "~5.8.3",
     "vite": "^6.3.5",
