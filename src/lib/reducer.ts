@@ -2,6 +2,7 @@ import { RequestSchema, StateSchema } from "./model";
 import type { RaidState, Identity, ChangeRequest } from "./model";
 import { parseSimc, rejectCredentials } from "./parser";
 import { confirmedRaiders, validateProfile } from "./raid";
+import { applyCommunity, CommunityActionSchema } from "./community";
 export class ChangeError extends Error {
   constructor(
     message: string,
@@ -22,6 +23,7 @@ export function applyChange(
   input: ChangeRequest,
   actor: Identity,
   at = new Date().toISOString(),
+  context: { recipientName?: string } = {},
 ): RaidState {
   const req = RequestSchema.parse(input);
   try {
@@ -80,6 +82,23 @@ export function applyChange(
     else list[i] = item;
   };
   let summary = "";
+  const communityAction = CommunityActionSchema.safeParse(a);
+  if (communityAction.success) {
+    try {
+      summary = applyCommunity(
+        s,
+        communityAction.data,
+        actor,
+        admin,
+        at,
+        context.recipientName,
+      );
+    } catch (e) {
+      throw new ChangeError(
+        e instanceof Error ? e.message : "Unable to update guild coordination.",
+      );
+    }
+  }
   switch (a.type) {
     case "character.import": {
       const snapshot = parseSimc(a.raw, at);

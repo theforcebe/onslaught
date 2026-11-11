@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CommunitySchema, communityActions } from "./community";
 export const CLASSES = [
   "warrior",
   "paladin",
@@ -228,6 +229,7 @@ export const StateSchema = z
       }),
     ),
     processedRequests: z.array(id),
+    community: CommunitySchema.optional(),
   })
   .strict();
 export type RaidState = z.infer<typeof StateSchema>;
@@ -237,8 +239,10 @@ export type Identity = {
   label: string;
   admin?: boolean;
   accountId?: string;
+  officer?: boolean;
 };
 export const ActionSchema = z.discriminatedUnion("type", [
+  ...communityActions,
   z
     .object({
       type: z.literal("character.import"),

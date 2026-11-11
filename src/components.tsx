@@ -1,20 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode, FormEvent } from "react";
-import {
-  X,
-  Shield,
-  Heart,
-  Swords,
-  Crosshair,
-  HelpCircle,
-  ExternalLink,
-  Package,
-  LoaderCircle,
-} from "lucide-react";
+import { X, Shield, Heart, Swords, Crosshair, HelpCircle } from "lucide-react";
 import { CLASS_COLORS, label } from "./lib/model";
 import type { Character, Gear } from "./lib/model";
-import { getItem, itemLink, safeIcon } from "./lib/items";
-import type { ItemResult } from "./lib/items";
+import { ItemTooltip } from "./ItemTooltip";
+
 export function ClassIcon({
   cls,
   size = 36,
@@ -216,75 +206,26 @@ export function Meter({
   );
 }
 export function GearItem({ gear }: { gear: Gear }) {
-  const [info, setInfo] = useState<ItemResult>();
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  async function lookup() {
-    if (!info) {
-      setLoading(true);
-      setInfo(await getItem(gear.id));
-      setLoading(false);
-    }
-    setOpen((v) => !v);
-  }
-  const item = info?.item,
-    icon = safeIcon(item?.icon_url);
   return (
-    <div className={`gear-item ${open ? "expanded" : ""}`}>
-      <button className="gear-main" onClick={lookup} aria-expanded={open}>
-        <span className="item-icon">
-          {icon ? <img src={icon} alt="" /> : <Package size={21} />}
-        </span>
+    <div className="gear-item">
+      <ItemTooltip
+        id={gear.id}
+        name={gear.name}
+        modifiers={gear.modifiers}
+        className="gear-main"
+        icon
+      >
         <span>
           <small>{label(gear.slot)}</small>
-          <strong className={item?.quality || ""}>{gear.name}</strong>
+          <strong>{gear.name}</strong>
           <small>
             #{gear.id}
             {gear.modifiers.enchant_id && " · Enchanted"}
             {gear.modifiers.bonus_id && " · Variant"}
           </small>
         </span>
-        <span className="item-level">
-          {loading ? (
-            <LoaderCircle size={16} className="spin" />
-          ) : (
-            gear.level || "—"
-          )}
-        </span>
-      </button>
-      {open && (
-        <div className="gear-detail">
-          {info?.status === "resolved" ? (
-            <>
-              <p>
-                {item?.stats?.length
-                  ? item.stats.map((s) => `+${s.value} ${s.name}`).join(" · ")
-                  : "Base item found; full stats are not available."}
-              </p>
-              <small>Source build: {item?.build || "not supplied"}</small>
-            </>
-          ) : (
-            <p>
-              {info?.status === "unresolved"
-                ? "Not yet indexed by the Forever item API. Export details are preserved."
-                : "Item service is unavailable. Your imported equipment is still saved."}
-            </p>
-          )}
-          {Object.keys(gear.modifiers).length > 0 && (
-            <p className="muted">
-              {Object.entries(gear.modifiers)
-                .map(([k, v]) => `${label(k)}: ${v}`)
-                .join(" / ")}
-            </p>
-          )}
-          <small>
-            Base stats exclude unverified enchants, suffixes, tuning and procs.
-          </small>
-          <a href={itemLink(gear.id)} target="_blank" rel="noreferrer">
-            Item data: TheWoWDB <ExternalLink size={12} />
-          </a>
-        </div>
-      )}
+        <span className="item-level">{gear.level || "—"}</span>
+      </ItemTooltip>
     </div>
   );
 }

@@ -77,3 +77,11 @@ Class artwork is served by Blizzard’s official render host. World of Warcraft 
 The JSON architecture is intended for one guild, with revision conflicts rather than simultaneous merging. Large histories or many guilds should move operational data to a database with repository snapshots. Source changes belong in pull requests; shared raid changes go through the authenticated gateway.
 
 Read [SECURITY.md](SECURITY.md) before configuring production credentials.
+
+## Guild coordination and item tooltips
+
+Guild coordination adds an Officer/Admin announcement board, short member replies, raid-night polls with visual results, and assigned material requests with timestamped fulfillment history. Section and team permissions are enforced server-side. Site polls keep one editable response per member; native Discord polls take votes only in Discord and mirror counts to the site every 30 seconds while visible.
+
+Discord delivery is explicit: save a record, preview its destination, then post to the configured channel. Request DMs require each recipient to link Discord and opt in. See [Discord setup](docs/DISCORD.md). The bot's credentials and installation are separate from deploying the app; the site reports setup pending until configured.
+
+Wowhead Forever tooltips are available on gear, loot, supplies and material requests with item IDs. Hover/focus to inspect, click to pin, Escape to dismiss. Variant-aware caching keeps repeated lookups fast without delaying imports. See [data provenance and cache policy](docs/DATA.md).

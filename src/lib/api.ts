@@ -160,3 +160,31 @@ export async function saveShared(request: ChangeRequest): Promise<GuildView> {
 export const requestMembership = () => api("/api/join", {});
 export const saveMember = (member: Member, expectedRevision: number) =>
   api("/api/members", { member, expectedRevision, id: crypto.randomUUID() });
+
+export async function discordCall(path: string, body?: unknown) {
+  const epoch = sessionEpoch,
+    token = session.token();
+  if (!token) throw new Error("Sign in before connecting Discord.");
+  const r = await fetch(`${API_URL}/api/discord/${path}`, {
+    method: body === undefined ? "GET" : "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    cache: "no-store",
+    signal: AbortSignal.timeout(25000),
+  });
+  const data = await r.json();
+  if (epoch !== sessionEpoch)
+    throw new Error("Your session changed. Refresh the guild view.");
+  if (r.status === 401) {
+    session.clear();
+    sessionEpoch++;
+  }
+  if (!r.ok)
+    throw new Error(
+      data.error || "The Discord request could not be completed.",
+    );
+  return data;
+}

@@ -9,9 +9,12 @@ import {
   authorizeAction,
   actionScope,
   updateMember,
+  materialRecipient,
 } from "../src/lib/access";
 import type { GuildDocument } from "../src/lib/access";
 import { ZodError } from "zod";
+import { handleDiscord } from "./discord";
+import { serveItem, publicItemCache } from "./items";
 export interface Env {
   DB: D1Database;
   BNET_CLIENT_ID: string;
@@ -22,6 +25,9 @@ export interface Env {
   PUBLIC_API_URL: string;
   GITHUB_REPOSITORY: string;
   ADMIN_BNET_IDS: string;
+  DISCORD_BOT_TOKEN?: string;
+  DISCORD_CLIENT_ID?: string;
+  DISCORD_CLIENT_SECRET?: string;
 }
 type Stored = { payload: string };
 const encoder = new TextEncoder();
@@ -284,6 +290,14 @@ async function route(req: Request, env: Env): Promise<Response> {
   }
   if (u.pathname === "/health" && req.method === "GET")
     return json({ ok: true, battleNetConfigured: configured(env) });
+  if (u.pathname.startsWith("/api/items/"))
+    return serveItem(req, publicItemCache(env.DB, caches.default), async () =>
+      limit(
+        env,
+        `items:${await digest(req.headers.get("CF-Connecting-IP") || "local")}`,
+        120,
+      ),
+    );
   if (!configured(env))
     return json(
       {
@@ -300,6 +314,15 @@ async function route(req: Request, env: Env): Promise<Response> {
   if (req.method === "POST" && origin !== env.APP_ORIGIN)
     return json({ error: "Origin not allowed." }, 403);
   const ipHash = await digest(req.headers.get("CF-Connecting-IP") || "local");
+  const discordResponse = await handleDiscord(req, env, {
+    authenticated,
+    readRepository,
+    digest,
+    json,
+    boundedJSON,
+    limit,
+  });
+  if (discordResponse) return discordResponse;
   if (u.pathname === "/auth/start" && req.method === "GET") {
     await limit(env, `auth:${ipHash}`, 10);
     const challenge = u.searchParams.get("challenge") || "";
@@ -495,7 +518,9 @@ async function route(req: Request, env: Env): Promise<Response> {
     const actor = authorizeAction(current.document, identity, input.action);
     const next = {
       ...current.document,
-      state: applyChange(current.document.state, input, actor),
+      state: applyChange(current.document.state, input, actor, undefined, {
+        recipientName: materialRecipient(current.document, input.action),
+      }),
     };
     if (next.state.revision !== current.document.state.revision) {
       next.state.audit[0].scope = actionScope(next.state, input.action);

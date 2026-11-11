@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { ItemTooltip } from "./ItemTooltip";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import {
   LayoutDashboard,
@@ -33,6 +34,7 @@ import {
   LogOut,
   LoaderCircle,
   LockKeyhole,
+  MessageSquare,
 } from "lucide-react";
 import {
   ClassIcon,
@@ -47,6 +49,9 @@ import Dialogs from "./dialogs";
 import { AccessPanel } from "./AccessPanel";
 import { Dropdown } from "./Dropdown";
 import { RaidPlanner } from "./RaidPlanner";
+const GuildHub = lazy(() =>
+  import("./GuildHub").then((module) => ({ default: module.GuildHub })),
+);
 import {
   PUBLIC_ACCESS,
   ADMIN_ACCESS,
@@ -91,8 +96,13 @@ const nav = [
   { id: "progress", name: "Progress", icon: Flag },
   { id: "activity", name: "Activity", icon: History },
   { id: "access", name: "Members & access", icon: ShieldCheck },
+  { id: "community", name: "Guild coordination", icon: MessageSquare },
 ];
 const titles: Record<string, [string, string]> = {
+  community: [
+    "The guild, in sync.",
+    "Find your raid nights, share updates, and keep preparation moving.",
+  ],
   overview: [
     "Your guild. Ready for what’s next.",
     "A clear view of the people, preparation, and decisions behind every pull.",
@@ -135,9 +145,15 @@ const titles: Record<string, [string, string]> = {
   ],
 };
 const safeURL = (url: string) => (/^https:\/\//i.test(url) ? url : undefined);
+const demoPeople = [
+  { id: "demo-admin", label: "Demo admin", allTeams: true, teamIds: [] },
+  { id: "demo-ember", label: "Ember", allTeams: true, teamIds: [] },
+  { id: "demo-nyx", label: "Nyx", allTeams: true, teamIds: [] },
+];
 export default function App() {
   const [access, setAccess] = useState<Access>(PUBLIC_ACCESS);
   const [members, setMembers] = useState<Member[]>([]);
+  const [people, setPeople] = useState<NonNullable<GuildView["people"]>>([]);
   const [demoMembers, setDemoMembers] = useState<Member[]>([
     {
       id: "demo-member",
@@ -179,6 +195,7 @@ export default function App() {
     setLive(next.state);
     setAccess(next.access);
     setMembers(next.members || []);
+    setPeople(next.people || []);
   }
   function toast(s: string) {
     setNotification(s);
@@ -200,6 +217,7 @@ export default function App() {
       );
       setAccess(PUBLIC_ACCESS);
       setMembers([]);
+      setPeople([]);
       setDialog(undefined);
       setError((e as Error).message);
     } finally {
@@ -252,12 +270,13 @@ export default function App() {
         : "Demo enabled. All edits stay in this browser.",
     );
   }
-  async function change(action: RaidAction) {
+  async function change(action: RaidAction, rethrow = false) {
     if (!state) return;
     try {
       rejectCredentials(action);
     } catch (e) {
       toast((e as Error).message);
+      if (rethrow) throw e;
       return;
     }
     const request = {
@@ -268,18 +287,31 @@ export default function App() {
     };
     if (demo) {
       try {
-        const next = applyChange(state, request, {
-          provider: "battlenet",
-          admin: true,
-          id: "demo-admin",
-          label: "Demo admin",
-        });
+        const next = applyChange(
+          state,
+          request,
+          {
+            provider: "battlenet",
+            admin: true,
+            id: "demo-admin",
+            label: "Demo admin",
+          },
+          undefined,
+          {
+            recipientName:
+              action.type === "material.create"
+                ? demoPeople.find((p) => p.id === action.request.recipientId)
+                    ?.label
+                : undefined,
+          },
+        );
         localStorage.setItem("onslaught:demo:v1", JSON.stringify(next));
         setPractice(next);
         setDialog(undefined);
         toast("Saved in your demo workspace.");
       } catch (e) {
         toast((e as Error).message);
+        if (rethrow) throw e;
       }
       return;
     }
@@ -291,6 +323,7 @@ export default function App() {
         toast("Saved to the guild repository.");
       } catch (e) {
         toast((e as Error).message);
+        if (rethrow) throw e;
       }
       return;
     }
@@ -921,7 +954,13 @@ export default function App() {
                   <Gem size={27} />
                 </span>
                 <div>
-                  <h3>{l.name}</h3>
+                  <h3>
+                    <ItemTooltip
+                      id={l.itemId}
+                      name={l.name}
+                      className="item-name"
+                    />
+                  </h3>
                   <p>{l.boss}</p>
                 </div>
                 <span className="badge">{label(l.slot)}</span>
@@ -1044,7 +1083,18 @@ export default function App() {
                     : `${s.needed - count} needed`}
                 </span>
               </div>
-              <h3>{s.name}</h3>
+              <h3>
+                {s.itemId ? (
+                  <ItemTooltip
+                    id={s.itemId}
+                    name={s.name}
+                    className="item-name"
+                    icon
+                  />
+                ) : (
+                  s.name
+                )}
+              </h3>
               <p>
                 {state.events.find((e) => e.id === s.eventId)?.title ||
                   "Guild stock"}
@@ -1548,6 +1598,20 @@ export default function App() {
     </div>
   );
   const content: Record<string, ReactNode> = {
+    community: (
+      <Suspense fallback={<p className="muted">Opening guild coordination…</p>}>
+        <GuildHub
+          key={demo ? "demo-hub" : `guild-hub-${identity?.id || "visitor"}`}
+          state={state}
+          access={effectiveAccess}
+          identity={identity}
+          people={demo ? demoPeople : people}
+          demo={demo}
+          change={(a) => change(a, true)}
+          refresh={refresh}
+        />
+      </Suspense>
+    ),
     overview,
     planner,
     roster,
@@ -1683,9 +1747,11 @@ export default function App() {
     activity: "activity",
   };
   const pageAllowed = (id: string) =>
-    id === "settings"
-      ? effectiveAccess.admin
-      : !pageSection[id] || hasSection(effectiveAccess, pageSection[id]);
+    id === "community"
+      ? effectiveAccess.status === "active"
+      : id === "settings"
+        ? effectiveAccess.admin
+        : !pageSection[id] || hasSection(effectiveAccess, pageSection[id]);
   const locked = (
     <section className="panel">
       <Empty icon={<LockKeyhole size={36} />} title="This section is private.">
@@ -1812,6 +1878,7 @@ export default function App() {
                   setIdentity(undefined);
                   setAccess(PUBLIC_ACCESS);
                   setMembers([]);
+                  setPeople([]);
                   setDialog(undefined);
                   setLive((prev) =>
                     prev
@@ -1924,13 +1991,13 @@ export default function App() {
               long game.
             </span>
             <span>
-              Forever item data by{" "}
+              Item tooltips by{" "}
               <a
-                href="https://thewowdb.com/developers/"
+                href="https://www.wowhead.com/forever"
                 target="_blank"
                 rel="noreferrer"
               >
-                TheWoWDB
+                Wowhead Forever
               </a>{" "}
               · Game art © Blizzard
             </span>

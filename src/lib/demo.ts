@@ -205,5 +205,97 @@ export function demoState(base: RaidState): RaidState {
       summary: "The Vanguard is assembling. Three places remain.",
     },
   ];
+  const createdAt = new Date().toISOString();
+  s.community = {
+    announcements: [
+      {
+        id: "demo-announcement",
+        title: "A little preparation. A better raid night.",
+        body: "Bring your consumables, update your character export, and check the requests board before we head in. If you need a hand with materials, leave a reply here.",
+        createdBy: "demo-admin",
+        createdByName: "Demo admin",
+        createdAt,
+      },
+    ],
+    polls: [
+      {
+        id: "demo-poll",
+        title: "Which nights work for our first raid?",
+        timeZone: "America/Los_Angeles",
+        options: [
+          "Tuesday · 7–10 PM",
+          "Thursday · 7–10 PM",
+          "Friday · 7–10 PM",
+          "Sunday · 6–9 PM",
+        ],
+        closesAt: new Date(Date.now() + 7 * 86400000).toISOString(),
+        voting: "site",
+        closed: false,
+        createdBy: "demo-admin",
+        createdByName: "Demo admin",
+        createdAt,
+        votes: {
+          "demo-ember": [0, 1, 2],
+          "demo-nyx": [1, 2],
+          "demo-seraphine": [0, 1, 3],
+          "demo-rend": [1, 3],
+          "demo-ironbark": [0, 2, 3],
+        },
+      },
+    ],
+    requests: [
+      {
+        id: "demo-material-1",
+        item: "Dreamfoil",
+        quantity: 40,
+        recipientId: "demo-ember",
+        recipientName: "Ember",
+        notes:
+          "For the guild flask stock. Trade to the raid lead before invites.",
+        dueAt: new Date(Date.now() + 2 * 86400000).toISOString(),
+        createdBy: "demo-admin",
+        createdByName: "Demo admin",
+        createdAt,
+        updatedAt: createdAt,
+        fulfilled: 25,
+        cancelled: false,
+        updates: [
+          {
+            at: createdAt,
+            by: "demo-ember",
+            byName: "Ember",
+            quantity: 25,
+            note: "First gathering run delivered.",
+          },
+        ],
+      },
+      {
+        id: "demo-material-2",
+        item: "Grilled Squid",
+        quantity: 20,
+        recipientId: "demo-admin",
+        recipientName: "Demo admin",
+        notes: "Food for the melee group.",
+        createdBy: "demo-nyx",
+        createdByName: "Nyx",
+        createdAt,
+        updatedAt: createdAt,
+        fulfilled: 0,
+        cancelled: false,
+        updates: [],
+      },
+    ],
+    replies: [
+      {
+        id: "demo-reply",
+        kind: "announcement",
+        recordId: "demo-announcement",
+        body: "I can help with an herb run on Thursday.",
+        createdBy: "demo-ember",
+        createdByName: "Ember",
+        createdAt,
+      },
+    ],
+  };
   return s;
 }

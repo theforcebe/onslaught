@@ -1,29 +1,29 @@
-export type ItemData = {
-  id: number;
-  name: string;
-  quality: string;
-  item_level: number;
-  required_level: number;
-  slot: string;
-  icon_url?: string;
-  stats: { name: string; value: number }[];
-  build?: string;
-  effects?: unknown[];
-  weapon?: unknown;
-  links?: { html: string };
-};
-export type ItemResult = {
-  status: "resolved" | "unresolved" | "unavailable";
-  item?: ItemData;
-  checkedAt: number;
-};
-const memory = new Map<number, ItemResult>();
-let queue = Promise.resolve();
-let lastRequest = 0;
-let bundled: Promise<void> | undefined;
-const API = "https://thewowdb.com/api/v1/forever/item/";
-export function itemLink(id: number) {
-  return `https://thewowdb.com/wow-forever/item/${id}`;
+import {
+  boundedItemJSON,
+  ITEM_FRESH_MS,
+  ITEM_STALE_MS,
+  itemKey,
+  itemParams,
+  parseWowhead,
+  wowheadURL,
+} from "./item-data";
+import type { ItemResult, ItemModifiers } from "./item-data";
+export type { ItemData, ItemResult } from "./item-data";
+export { itemLink } from "./item-data";
+const API = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+const memory = new Map<string, ItemResult>(),
+  inFlight = new Map<string, Promise<ItemResult>>();
+const PREFIX = "onslaught:tooltip:v1:";
+let active = 0;
+const waiting: (() => void)[] = [];
+async function slot() {
+  if (active >= 3) await new Promise<void>((r) => waiting.push(r));
+  else active++;
+  return () => {
+    const next = waiting.shift();
+    if (next) next();
+    else active--;
+  };
 }
 export function safeIcon(url?: string) {
   try {
@@ -38,66 +38,105 @@ export function safeIcon(url?: string) {
     return undefined;
   }
 }
-export async function getItem(id: number): Promise<ItemResult> {
-  if (!Number.isSafeInteger(id) || id <= 0) throw new Error("Invalid item ID");
-  bundled ||= fetch(`${import.meta.env.BASE_URL}data/items.json`)
-    .then((r) => (r.ok ? r.json() : null))
-    .then((data) => {
-      if (data?.items)
-        for (const [key, result] of Object.entries(data.items)) {
-          const r = result as ItemResult;
-          if (r.status !== "unavailable") memory.set(Number(key), r);
-        }
-    })
-    .catch(() => {});
-  await bundled;
-  let cached = memory.get(id);
+function save(key: string, value: ItemResult) {
+  memory.delete(key);
+  memory.set(key, value);
+  if (memory.size > 300) memory.delete(memory.keys().next().value!);
   try {
-    cached ||= JSON.parse(
-      localStorage.getItem(`onslaught:item:${id}`) || "null",
-    );
-  } catch {
-    /* Storage unavailable */
-  }
-  if (cached && Date.now() - cached.checkedAt < 3600000) return cached;
-  let result: ItemResult = { status: "unavailable", checkedAt: Date.now() };
-  const work = async () => {
-    const wait = 550 - (Date.now() - lastRequest);
-    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-    lastRequest = Date.now();
-    try {
-      const r = await fetch(`${API}${id}`, {
-        signal: AbortSignal.timeout(10000),
-        referrerPolicy: "no-referrer",
+    localStorage.setItem(PREFIX + key, JSON.stringify(value));
+    const keys = Object.keys(localStorage).filter((k) => k.startsWith(PREFIX));
+    if (keys.length > 300) {
+      keys.sort((a, b) => {
+        try {
+          return (
+            JSON.parse(localStorage.getItem(a)!).checkedAt -
+            JSON.parse(localStorage.getItem(b)!).checkedAt
+          );
+        } catch {
+          return 0;
+        }
       });
-      if (r.status === 404)
-        result = { status: "unresolved", checkedAt: Date.now() };
-      else if (r.status === 429) {
-        const delay = Number(r.headers.get("Retry-After") || "30");
-        lastRequest =
-          Date.now() + Math.min(60000, Math.max(1000, delay * 1000));
-      } else if (r.ok) {
-        const item = (await r.json()) as ItemData;
-        if (
-          item.id === id &&
-          typeof item.name === "string" &&
-          Array.isArray(item.stats)
-        )
-          result = { status: "resolved", item, checkedAt: Date.now() };
-      }
-    } catch {
-      /* Offline retains the character snapshot. */
+      keys
+        .slice(0, keys.length - 300)
+        .forEach((k) => localStorage.removeItem(k));
     }
-    if (result.status !== "unavailable") {
-      memory.set(id, result);
+  } catch {
+    /* Optional public metadata cache. */
+  }
+}
+export async function getItem(
+  id: number,
+  modifiers: ItemModifiers = {},
+): Promise<ItemResult> {
+  if (!Number.isSafeInteger(id) || id <= 0 || id > 999999999)
+    throw new Error("Invalid item ID");
+  const key = itemKey(id, modifiers);
+  let cached = memory.get(key);
+  try {
+    cached ||= JSON.parse(localStorage.getItem(PREFIX + key) || "null");
+  } catch {
+    /* optional */
+  }
+  const age = Date.now() - (cached?.checkedAt || 0),
+    ttl =
+      cached?.status === "resolved"
+        ? ITEM_FRESH_MS
+        : cached?.status === "unresolved"
+          ? 300000
+          : 60000;
+  if (cached && (age < ttl || (cached.retryAt || 0) > Date.now()))
+    return cached;
+  let pending = inFlight.get(key);
+  if (!pending) {
+    pending = (async () => {
+      const release = await slot();
+      let result: ItemResult = { status: "unavailable", checkedAt: Date.now() };
       try {
-        localStorage.setItem(`onslaught:item:${id}`, JSON.stringify(result));
+        const params = itemParams(modifiers),
+          url = API
+            ? `${API}/api/items/${id}?${params}`
+            : wowheadURL(id, params);
+        const r = await fetch(url, {
+          credentials: "omit",
+          referrerPolicy: "no-referrer",
+          redirect: "error",
+          signal: AbortSignal.timeout(10000),
+        });
+        if (r.status === 404)
+          result = { status: "unresolved", checkedAt: Date.now() };
+        else if (r.ok) {
+          const raw = await boundedItemJSON(r);
+          if (API) {
+            if (
+              ["resolved", "unresolved", "unavailable"].includes(raw.status) &&
+              typeof raw.checkedAt === "number" &&
+              (raw.status !== "resolved" || raw.item?.id === id)
+            )
+              result = raw;
+          } else {
+            const item = parseWowhead(id, raw, params.size > 0);
+            if (item)
+              result = { status: "resolved", item, checkedAt: Date.now() };
+          }
+        }
       } catch {
-        /* Cache is optional */
+        /* Imported data stays available offline. */
+      } finally {
+        release();
       }
-    }
-  };
-  queue = queue.then(work, work);
-  await queue;
-  return result;
+      if (
+        result.status === "unavailable" &&
+        cached?.status === "resolved" &&
+        age < ITEM_STALE_MS
+      ) {
+        const stale = { ...cached, stale: true, retryAt: Date.now() + 60000 };
+        save(key, stale);
+        return stale;
+      }
+      save(key, result);
+      return result;
+    })().finally(() => inFlight.delete(key));
+    inFlight.set(key, pending);
+  }
+  return pending;
 }

@@ -725,7 +725,7 @@ export default function Dialogs(p: Props) {
           <span className="badge">{label(l.slot)}</span>
           <span>#{l.itemId}</span>
           <a href={itemLink(l.itemId)} target="_blank" rel="noreferrer">
-            TheWoWDB <ExternalLink size={13} />
+            Wowhead Forever <ExternalLink size={13} />
           </a>
         </div>
         <p className="muted">{l.boss}</p>

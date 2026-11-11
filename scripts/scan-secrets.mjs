@@ -4,6 +4,8 @@ const patterns = [
   /gh[pousr]_[A-Za-z0-9]{30,}/,
   /github_pat_[A-Za-z0-9_]{35,}/,
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
+  /discord(?:app)?\.com\/api(?:\/v\d+)?\/webhooks\/\d+\/[A-Za-z0-9_-]+/,
+  /\b(?:mfa\.[A-Za-z0-9_-]{30,}|[A-Za-z0-9_-]{24,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{25,})\b/,
 ];
 function files(dir) {
   return readdirSync(dir).flatMap((f) => {

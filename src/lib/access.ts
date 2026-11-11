@@ -2,6 +2,11 @@ import { z } from "zod";
 import { StateSchema } from "./model";
 import type { RaidState, Identity, RaidAction } from "./model";
 import { ChangeError } from "./reducer";
+import {
+  CommunityActionSchema,
+  communityScope,
+  emptyCommunity,
+} from "./community";
 
 export const SECTIONS = [
   "planner",
@@ -11,6 +16,7 @@ export const SECTIONS = [
   "attendance",
   "progress",
   "activity",
+  "community",
 ] as const;
 export type Section = (typeof SECTIONS)[number];
 export const SECTION_NAMES: Record<Section, string> = {
@@ -21,6 +27,7 @@ export const SECTION_NAMES: Record<Section, string> = {
   attendance: "Attendance & raid notes",
   progress: "Progress",
   activity: "Activity history",
+  community: "Guild board & discussions",
 };
 const key = z
   .string()
@@ -90,6 +97,16 @@ export const ViewSchema = z
     state: StateSchema,
     access: AccessSchema,
     members: z.array(MemberSchema).optional(),
+    people: z
+      .array(
+        z.object({
+          id: key,
+          label: z.string().max(100),
+          allTeams: z.boolean(),
+          teamIds: z.array(key),
+        }),
+      )
+      .optional(),
     identity: z
       .object({
         provider: z.literal("battlenet"),
@@ -269,11 +286,55 @@ export function project(doc: GuildDocument, identity?: Identity): GuildView {
           entry.scope.characterIds.every(visibleCharacter)),
     ),
     processedRequests: [],
+    community: (() => {
+      const c = s.community || emptyCommunity();
+      const announcements = c.announcements.filter((m) =>
+        allowed("community", m.teamId),
+      );
+      const requests = c.requests.filter((r) =>
+        allowed("consumables", r.teamId),
+      );
+      return {
+        announcements,
+        requests,
+        polls: c.polls.filter((p) => allowed("attendance", p.teamId)),
+        replies: c.replies.filter((r) =>
+          r.kind === "request"
+            ? requests.some((x) => x.id === r.recordId)
+            : announcements.some((x) => x.id === r.recordId),
+        ),
+      };
+    })(),
   };
   return ViewSchema.parse({
     state,
     access: a,
     ...(a.admin ? { members: doc.members } : {}),
+    people:
+      a.admin || (a.role === "officer" && hasSection(a, "consumables"))
+        ? doc.members
+            .filter((m) => {
+              const target = accessFor(doc, {
+                provider: "battlenet",
+                id: m.id,
+                label: m.label,
+              });
+              return hasSection(target, "consumables");
+            })
+            .map((m) => {
+              const target = accessFor(doc, {
+                provider: "battlenet",
+                id: m.id,
+                label: m.label,
+              });
+              return {
+                id: m.id,
+                label: m.label,
+                allTeams: target.allTeams,
+                teamIds: target.teamIds.filter((id) => hasTeam(a, id)),
+              };
+            })
+        : [],
     ...(identity?.provider === "battlenet"
       ? {
           identity: {
@@ -289,6 +350,8 @@ export function project(doc: GuildDocument, identity?: Identity): GuildView {
 }
 
 export function actionScope(s: RaidState, action: RaidAction) {
+  const communication = CommunityActionSchema.safeParse(action);
+  if (communication.success) return communityScope(s, communication.data);
   let section: Section | undefined, teamId: string | undefined;
   const characterId = "characterId" in action ? action.characterId : undefined;
   if (action.type.startsWith("character.")) section = "gear";
@@ -353,6 +416,20 @@ export function authorizeAction(
   )
     throw new ChangeError("Choose an active member.");
   if (a.admin) return { ...identity, admin: true };
+  if (
+    [
+      "poll.create",
+      "poll.close",
+      "announcement.create",
+      "material.create",
+      "material.cancel",
+    ].includes(action.type) &&
+    a.role !== "officer"
+  )
+    throw new ChangeError(
+      "Only an Admin or Officer with access can do this.",
+      403,
+    );
   const scope = actionScope(doc.state, action);
   if (
     !scope ||
@@ -366,7 +443,24 @@ export function authorizeAction(
       403,
     );
   // The reducer still enforces admin-only structure and ownership on every personal edit.
-  return { ...identity, admin: false };
+  return { ...identity, admin: false, officer: a.role === "officer" };
+}
+
+export function materialRecipient(doc: GuildDocument, action: RaidAction) {
+  if (action.type !== "material.create") return undefined;
+  const m = doc.members.find((m) => m.id === action.request.recipientId);
+  const target = m
+    ? accessFor(doc, { provider: "battlenet", id: m.id, label: m.label })
+    : PUBLIC_ACCESS;
+  if (
+    !m ||
+    !hasSection(target, "consumables") ||
+    !hasTeam(target, action.request.teamId)
+  )
+    throw new ChangeError(
+      "Choose an active member with Consumables access to this team.",
+    );
+  return m.label;
 }
 
 export function updateMember(

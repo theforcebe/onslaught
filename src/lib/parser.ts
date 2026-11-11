@@ -3,7 +3,10 @@ import type { Snapshot, Gear, WowClass } from "./model";
 const sensitive =
   /(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|(?:client_secret|access_token|refresh_token|password|authorization)\s*[:=]\s*\S+)/i;
 export function rejectCredentials(value: unknown) {
-  if (sensitive.test(typeof value === "string" ? value : JSON.stringify(value)))
+  const input = typeof value === "string" ? value : JSON.stringify(value);
+  const discordCredential =
+    /discord(?:app)?\.com\/api(?:\/v\d+)?\/webhooks\/\d+\/[A-Za-z0-9_-]+|\b(?:mfa\.[A-Za-z0-9_-]{30,}|[A-Za-z0-9_-]{24,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{25,})\b/;
+  if (sensitive.test(input) || discordCredential.test(input))
     throw new Error(
       "This text appears to contain a credential. Remove it before sharing.",
     );

@@ -33,6 +33,7 @@ const sectionDetails: Record<Section, string> = {
   attendance: "Raid notes and personal RSVPs",
   progress: "Encounters and strategy",
   activity: "History for permitted records",
+  community: "Announcements and focused conversations",
 };
 
 function MemberCard({

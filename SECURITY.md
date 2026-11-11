@@ -14,7 +14,7 @@ Opaque app sessions are hashed in D1 and expire after one hour. To survive page 
 
 D1 stores temporary verified identity and hashed keys. Expired rows are removed on subsequent requests. Own identity and the bootstrap account ID are returned only to that verified session, never in anonymous views or another member's identity. Ownership uses stable HMAC identifiers. Storage-disabled browsers fall back to memory-only sessions.
 
-Responses use no-store. Mutations require a live bearer session and exact allowed Origin. Auth and data routes are rate limited; JSON bodies are bounded. OAuth callback pages have restrictive CSP, no external resources and no-referrer policy. Errors do not echo upstream bodies. Do not enable unredacted auth-route logging or request-body capture.
+Private and authentication responses use no-store. Public item metadata is cacheable. Mutations require a live bearer session and exact allowed Origin. Auth and data routes are rate limited; JSON bodies are bounded. OAuth callback pages have restrictive CSP, no external resources and no-referrer policy. Errors do not echo upstream bodies. Do not enable unredacted auth-route logging or request-body capture.
 
 GitHub Pages project sites on one account share an origin. Use a dedicated custom domain if other applications on that origin are untrusted. Restrict source and deployment access to trusted maintainers.
 
@@ -28,7 +28,7 @@ Authenticated reads return an allowlisted projection. Section grants and selecte
 
 Permissions are read again for each request. Pending and suspended accounts get only public data. Join requests derive identity from verified userinfo and start without private permissions. Admins can edit permissions but cannot forge identities or add unverified accounts through that route. Recovery owners are explicitly listed in `ADMIN_BNET_IDS`; first sign-in never grants admin access automatically.
 
-The four ranks are Admin, Officer, Raider, and Guild Member. Only an active Admin rank or configured recovery owner grants administrative privileges. All other ranks use per-person section and team grants, with no implicit promotion privileges. Rank names do not bypass ownership or structural-edit checks. Legacy `member` records map to Raider without changing grants. The authenticated response includes only the caller's own current rank and identity; the full member directory remains admin-only.
+The four ranks are Admin, Officer, Raider, and Guild Member. Only an active Admin rank or configured recovery owner grants administrative privileges. All other ranks use per-person section and team grants, with no implicit promotion privileges. Rank names do not bypass ownership or structural-edit checks. Legacy `member` records map to Raider without changing grants. The full member directory remains admin-only. Officers with Consumables access receive a limited directory of eligible request recipients, containing guild labels, pseudonymous member IDs and team grants, never Battle.net account IDs or Discord identities.
 
 Mutations pass strict schemas, section/team authorization, and ownership/admin checks. Client flags cannot grant admin access. Conflicts use the canonical revision and GitHub file SHA; successful requests are idempotent. Structure, awards and membership require an admin even if a raider can view the section.
 
@@ -36,7 +36,7 @@ Revocation prevents future responses. It cannot erase previously viewed, downloa
 
 ## Input and dependencies
 
-Imports and raid text reject common credential patterns, but no scan can recognize every secret. Imported values render as text, never injected HTML. Item-service requests contain only item IDs, never exports or authentication. Icon URLs and source protocols are constrained. Demo data is fictional and browser-local.
+Imports and raid text reject common credential patterns, but no scan can recognize every secret. Imported values render as text, never injected HTML. Item-service requests contain only item IDs and bounded numeric modifiers, never exports or authentication. Icon URLs and source protocols are constrained. Demo data is fictional and browser-local.
 
 Source/build scans check common tokens and private keys and reject server secret variable names in public bundles. Pages Actions has no gateway credentials and uses pinned actions with explicit permissions. Run tests, type checks, build validation and dependency audit before release.
 
@@ -45,3 +45,15 @@ Source/build scans check common tokens and private keys and reject server secret
 Report vulnerabilities privately to the owner; never post credentials in issues. Revoke exposed credentials immediately, rotate secrets, and review artifacts and history. Deleting a file does not delete prior Git revisions. Restoring old data may restore old permissions; review the member policy during recovery.
 
 Automated tests cover public projections, team isolation, section grants, nested records, forged admin fields, live-session revocation, read/write responses, private-repository enforcement, OAuth state/redemption, ownership and conflicts. They are not an independent security audit or a guarantee that every defect is impossible. On November 11, 2026, real Battle.net sign-in, owner access, a private save, and anonymous read/write rejection were verified in the deployed system. Separate-account checks of raider section/team access and suspension remain an onboarding check.
+
+## Discord and coordination
+
+Canonical announcements, scheduling polls, site votes, material requests, fulfillment history and short replies live in the private guild repository. Public projections exclude all of them. Officers may create and publish coordination records only with the relevant section and team grants; rank alone does not grant access. Only a request recipient or Admin can update fulfillment. The new Guild board section requires an explicit per-person grant.
+
+The bot token and OAuth client secret live only in Worker secrets. The integration uses no privileged Gateway intents and does not ingest channel discussions. Native poll counts and delivery receipts are operational data in D1. Discord account IDs and opt-in preferences also stay in D1, outside public source and guild exports. They are not returned as a member directory.
+
+Discord account linking uses identify scope, a one-use app-session-bound ticket, PKCE, an HttpOnly state cookie, a fresh live-session and membership check, and membership in the configured Discord server. Access tokens are used server-side and revoked after identity lookup; OAuth tokens are never persisted or sent to the app. Linking does not grant a guild rank. DMs are off by default and require the recipient's linked account and explicit opt-in.
+
+Every outbound post requires an Admin/Officer action on a record they can access. Destination IDs are validated against the configured server. A preview explains that Discord channel membership determines who can read that copy; site restrictions cannot recall a Discord post. All payloads suppress mentions. Durable delivery locks and Discord nonces prevent routine duplicate sends; ambiguous delivery failures are marked unconfirmed and cannot be blindly retried. No credentialed upstream request follows redirects.
+
+Wowhead content is reduced to bounded plain text; no provider scripts or raw HTML run in the app. Shared caches contain only public item metadata, keyed by item ID and supported modifiers. Item lookups never receive or forward app authorization headers.
