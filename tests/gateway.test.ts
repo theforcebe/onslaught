@@ -33,7 +33,7 @@ function environment() {
     DB: db,
     BNET_CLIENT_ID: "test-client",
     BNET_CLIENT_SECRET: "test-secret",
-    GITHUB_TOKEN: "test-service-value",
+    GITHUB_TOKEN: "github_pat_" + "t".repeat(60),
     IDENTITY_KEY: "test-identity-key-long-enough",
     APP_ORIGIN: "https://theforcebe.github.io",
     PUBLIC_API_URL: "https://gateway.example",
@@ -49,6 +49,9 @@ function mockRepository(doc = privateFixture(), isPrivate = true) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
+      // workerd supports manual/follow, not Fetch's "error" redirect mode.
+      // Service credentials must never be forwarded by automatic redirects.
+      expect(init?.redirect).toBe("manual");
       if (init?.method === "PUT") {
         writes.push(JSON.parse(String(init.body)));
         return Response.json({});

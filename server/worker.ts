@@ -190,8 +190,14 @@ async function authenticated(req: Request, env: Env): Promise<Identity> {
   return { provider: "battlenet", id: stored.id, label: stored.label, admin };
 }
 function githubHeaders(env: Env) {
+  const token = env.GITHUB_TOKEN.trim();
+  if (!/^github_pat_[A-Za-z0-9_]{35,}$/.test(token))
+    throw new ChangeError(
+      "The GitHub gateway secret has the wrong format. Re-enter the generated fine-grained token as GITHUB_TOKEN in Cloudflare.",
+      503,
+    );
   return {
-    Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+    Authorization: `Bearer ${token}`,
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
     "User-Agent": "Onslaught-Guild-Gateway",
@@ -204,7 +210,7 @@ export async function readRepository(env: Env) {
   // A misconfigured public repository must fail closed, including for anonymous reads.
   const meta = await fetch(
     `https://api.github.com/repos/${env.GITHUB_REPOSITORY}`,
-    { headers: githubHeaders(env), redirect: "error" },
+    { headers: githubHeaders(env), redirect: "manual" },
   );
   if (
     !meta.ok ||
@@ -212,7 +218,10 @@ export async function readRepository(env: Env) {
   )
     throw new ChangeError("A private guild data repository is required.", 503);
   const url = `https://api.github.com/repos/${env.GITHUB_REPOSITORY}/contents/data/guild.json`;
-  const r = await fetch(`${url}?ref=main`, { headers: githubHeaders(env) });
+  const r = await fetch(`${url}?ref=main`, {
+    headers: githubHeaders(env),
+    redirect: "manual",
+  });
   if (!r.ok)
     throw new ChangeError(
       "The guild repository is unavailable. No changes were saved.",
@@ -239,6 +248,7 @@ async function writeRepository(
   for (const b of bytes) binary += String.fromCharCode(b);
   const r = await fetch(url, {
     method: "PUT",
+    redirect: "manual",
     headers: githubHeaders(env),
     body: JSON.stringify({
       message: `raid: ${document.state.audit[0].action} (revision ${document.state.revision})`,
@@ -322,6 +332,7 @@ async function route(req: Request, env: Env): Promise<Response> {
         return callbackPage(env, { error: true });
       const tokenResponse = await fetch("https://oauth.battle.net/token", {
         method: "POST",
+        redirect: "manual",
         headers: {
           Authorization: `Basic ${btoa(`${env.BNET_CLIENT_ID}:${env.BNET_CLIENT_SECRET}`)}`,
           "Content-Type": "application/x-www-form-urlencoded",
@@ -336,6 +347,7 @@ async function route(req: Request, env: Env): Promise<Response> {
       const token = (await tokenResponse.json()) as { access_token?: string };
       if (!token.access_token) return callbackPage(env, { error: true });
       const response = await fetch("https://oauth.battle.net/userinfo", {
+        redirect: "manual",
         headers: { Authorization: `Bearer ${token.access_token}` },
       });
       if (!response.ok) return callbackPage(env, { error: true });
