@@ -13,7 +13,7 @@ export { itemLink } from "./item-data";
 const API = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 const memory = new Map<string, ItemResult>(),
   inFlight = new Map<string, Promise<ItemResult>>();
-const PREFIX = "onslaught:tooltip:v1:";
+const PREFIX = "onslaught:tooltip:v2:";
 let active = 0;
 const waiting: (() => void)[] = [];
 async function slot() {

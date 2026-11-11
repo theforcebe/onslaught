@@ -1366,7 +1366,7 @@ export function GuildHub(p: Props) {
           </div>
           <p className="muted">
             {sendRecord.destination === "channel"
-              ? "Anyone with access to that Discord channel can read this copy. Site access rules still control the linked record."
+              ? "Anyone with access to that Discord channel can read this copy and vote in native Discord polls. Site access rules still control the linked record."
               : "Only linked members who opted into request DMs can receive this. If Discord blocks the DM, use the shared channel."}{" "}
             No mass mentions are sent.
           </p>

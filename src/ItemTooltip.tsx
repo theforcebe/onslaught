@@ -80,6 +80,8 @@ export function ItemTooltip({
     };
     panel.current?.showPopover?.();
     position();
+    const observer = new ResizeObserver(position);
+    if (panel.current) observer.observe(panel.current);
     const keydown = (e: KeyboardEvent) => {
       if (e.key === "Escape") hide();
     };
@@ -95,6 +97,7 @@ export function ItemTooltip({
     document.addEventListener("keydown", keydown);
     document.addEventListener("pointerdown", outside);
     return () => {
+      observer.disconnect();
       window.removeEventListener("resize", position);
       window.removeEventListener("scroll", position, true);
       document.removeEventListener("keydown", keydown);

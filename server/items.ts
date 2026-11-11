@@ -31,7 +31,7 @@ export async function serveItem(
   if ([...url.searchParams].some(([k, v]) => params.get(k) !== v))
     return new Response("Invalid modifiers", { status: 400 });
   const id = Number(match[1]),
-    key = new Request(`${url.origin}/item-cache/v1/${id}?${params}`);
+    key = new Request(`${url.origin}/item-cache/v2/${id}?${params}`);
   let cached: ItemResult | undefined;
   try {
     const r = await cache.match(key);

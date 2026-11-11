@@ -66,6 +66,7 @@ export function tooltipText(html: string) {
     .slice(0, 100000)
     .replace(/<(script|style|iframe)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "")
     .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<(?:table|tr|div|p)\b[^>]*>/gi, "\n")
     .replace(
       /<span\b[^>]*class=["'][^"']*money(gold|silver|copper)[^"']*["'][^>]*>([\s\S]*?)<\/span>/gi,
       "$2 $1 ",
