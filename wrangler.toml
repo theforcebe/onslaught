@@ -1,0 +1,21 @@
+name = "onslaught-gateway"
+main = "server/worker.ts"
+compatibility_date = "2026-11-10"
+workers_dev = true
+
+[observability]
+enabled = false
+
+[vars]
+APP_ORIGIN = "https://theforcebe.github.io"
+PUBLIC_API_URL = "https://REPLACE_WITH_YOUR_WORKER.workers.dev"
+GITHUB_REPOSITORY = "theforcebe/onslaught"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "onslaught-auth"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+# Store BNET_CLIENT_ID, BNET_CLIENT_SECRET, GITHUB_TOKEN, IDENTITY_KEY,
+# ADMIN_BNET_IDS, and MEMBER_BNET_IDS with `wrangler secret put`.
+# Never put their values in this file or in VITE_ environment variables.

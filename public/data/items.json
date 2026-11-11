@@ -1,0 +1,369 @@
+{
+  "provider": "TheWoWDB",
+  "attribution": "https://thewowdb.com/developers/",
+  "items": {
+    "4251": {
+      "status": "resolved",
+      "checkedAt": 1794376607370,
+      "item": {
+        "armor": null,
+        "attribution": {
+          "required": true,
+          "terms": "https://thewowdb.com/developers/#terms",
+          "text": "Data from TheWoWDB (thewowdb.com)",
+          "url": "https://thewowdb.com/wow-forever/item/hillman-s-shoulders-4251/"
+        },
+        "binding": "Binds when equipped",
+        "build": "wow_classic_beta-1.60.1.70532",
+        "classes": [],
+        "effects": [],
+        "faction_prices": [
+          {
+            "badge_url": "https://thewowdb.com/assets/pvp/faction/alliance.jpg",
+            "faction": "Alliance",
+            "min": null,
+            "realm": null,
+            "region": "us",
+            "updated_at": null
+          },
+          {
+            "badge_url": "https://thewowdb.com/assets/pvp/faction/horde.jpg",
+            "faction": "Horde",
+            "min": null,
+            "realm": null,
+            "region": "us",
+            "updated_at": null
+          }
+        ],
+        "flavor": null,
+        "icon_url": "https://render.worldofwarcraft.com/us/icons/56/inv_shoulder_08.jpg",
+        "id": 4251,
+        "item_level": 26,
+        "item_set": null,
+        "item_subtype": "Leather",
+        "item_type": "Armor",
+        "kind": "item",
+        "links": {
+          "api": "https://thewowdb.com/api/v1/forever/item/4251",
+          "html": "https://thewowdb.com/wow-forever/item/hillman-s-shoulders-4251/",
+          "tooltip": "https://thewowdb.com/api/v1/tooltip/forever/item/4251"
+        },
+        "name": "Hillman's Shoulders",
+        "price": {
+          "available": 277,
+          "market": 1000,
+          "min": 800,
+          "realms": 10,
+          "region": "us",
+          "scope": "WoW Forever Alliance 2",
+          "updated_at": "2026-11-11T04:22:42+00:00"
+        },
+        "quality": "uncommon",
+        "required_level": 21,
+        "slot": "Shoulder",
+        "socket_bonus": null,
+        "sockets": [],
+        "stats": [
+          {
+            "name": "Stamina",
+            "value": 5
+          },
+          {
+            "name": "Spirit",
+            "value": 3
+          }
+        ],
+        "unique": null,
+        "vendor_sell": 1199,
+        "version": "forever",
+        "version_label": "WoW Forever",
+        "weapon": null
+      }
+    },
+    "4385": {
+      "status": "resolved",
+      "checkedAt": 1794376606419,
+      "item": {
+        "armor": null,
+        "attribution": {
+          "required": true,
+          "terms": "https://thewowdb.com/developers/#terms",
+          "text": "Data from TheWoWDB (thewowdb.com)",
+          "url": "https://thewowdb.com/wow-forever/item/green-tinted-goggles-4385/"
+        },
+        "binding": "Binds when equipped",
+        "build": "wow_classic_beta-1.60.1.70532",
+        "classes": [],
+        "effects": [],
+        "faction_prices": [
+          {
+            "badge_url": "https://thewowdb.com/assets/pvp/faction/alliance.jpg",
+            "faction": "Alliance",
+            "min": null,
+            "realm": null,
+            "region": "us",
+            "updated_at": null
+          },
+          {
+            "badge_url": "https://thewowdb.com/assets/pvp/faction/horde.jpg",
+            "faction": "Horde",
+            "min": null,
+            "realm": null,
+            "region": "us",
+            "updated_at": null
+          }
+        ],
+        "flavor": null,
+        "icon_url": "https://thewowdb.com/assets/icons/inv_helmet_47.jpg",
+        "id": 4385,
+        "item_level": 30,
+        "item_set": null,
+        "item_subtype": "Cloth",
+        "item_type": "Armor",
+        "kind": "item",
+        "links": {
+          "api": "https://thewowdb.com/api/v1/forever/item/4385",
+          "html": "https://thewowdb.com/wow-forever/item/green-tinted-goggles-4385/",
+          "tooltip": "https://thewowdb.com/api/v1/tooltip/forever/item/4385"
+        },
+        "name": "Green Tinted Goggles",
+        "price": {
+          "available": 43,
+          "market": 2300,
+          "min": 1500,
+          "realms": 8,
+          "region": "us",
+          "scope": "WoW Forever Horde 2",
+          "updated_at": "2026-11-11T04:22:43+00:00"
+        },
+        "quality": "uncommon",
+        "required_level": null,
+        "slot": "Head",
+        "socket_bonus": null,
+        "sockets": [],
+        "stats": [
+          {
+            "name": "Stamina",
+            "value": 8
+          },
+          {
+            "name": "Spirit",
+            "value": 7
+          }
+        ],
+        "unique": null,
+        "vendor_sell": 1410,
+        "version": "forever",
+        "version_label": "WoW Forever",
+        "weapon": null
+      }
+    },
+    "4498": {
+      "status": "resolved",
+      "checkedAt": 1794376609494,
+      "item": {
+        "armor": null,
+        "attribution": {
+          "required": true,
+          "terms": "https://thewowdb.com/developers/#terms",
+          "text": "Data from TheWoWDB (thewowdb.com)",
+          "url": "https://thewowdb.com/wow-forever/item/brown-leather-satchel-4498/"
+        },
+        "binding": null,
+        "build": "wow_classic_beta-1.60.1.70532",
+        "classes": [],
+        "effects": [],
+        "faction_prices": [
+          {
+            "badge_url": "https://thewowdb.com/assets/pvp/faction/alliance.jpg",
+            "faction": "Alliance",
+            "min": null,
+            "realm": null,
+            "region": "us",
+            "updated_at": null
+          },
+          {
+            "badge_url": "https://thewowdb.com/assets/pvp/faction/horde.jpg",
+            "faction": "Horde",
+            "min": null,
+            "realm": null,
+            "region": "us",
+            "updated_at": null
+          }
+        ],
+        "flavor": null,
+        "icon_url": "https://render.worldofwarcraft.com/us/icons/56/inv_misc_bag_09.jpg",
+        "id": 4498,
+        "item_level": 15,
+        "item_set": null,
+        "item_subtype": null,
+        "item_type": "Container",
+        "kind": "item",
+        "links": {
+          "api": "https://thewowdb.com/api/v1/forever/item/4498",
+          "html": "https://thewowdb.com/wow-forever/item/brown-leather-satchel-4498/",
+          "tooltip": "https://thewowdb.com/api/v1/tooltip/forever/item/4498"
+        },
+        "name": "Brown Leather Satchel",
+        "price": {
+          "available": 53,
+          "market": 1100,
+          "min": 700,
+          "realms": 9,
+          "region": "us",
+          "scope": "WoW Forever Horde 1",
+          "updated_at": "2026-11-11T04:22:43+00:00"
+        },
+        "quality": "common",
+        "required_level": null,
+        "slot": "Bag",
+        "socket_bonus": null,
+        "sockets": [],
+        "stats": [],
+        "unique": null,
+        "vendor_sell": 625,
+        "version": "forever",
+        "version_label": "WoW Forever",
+        "weapon": null
+      }
+    },
+    "4661": {
+      "status": "resolved",
+      "checkedAt": 1794376608778,
+      "item": {
+        "armor": null,
+        "attribution": {
+          "required": true,
+          "terms": "https://thewowdb.com/developers/#terms",
+          "text": "Data from TheWoWDB (thewowdb.com)",
+          "url": "https://thewowdb.com/wow-forever/item/bright-mantle-4661/"
+        },
+        "binding": "Binds when equipped",
+        "build": "wow_classic_beta-1.60.1.70532",
+        "classes": [],
+        "effects": [],
+        "faction_prices": [
+          {
+            "badge_url": "https://thewowdb.com/assets/pvp/faction/alliance.jpg",
+            "faction": "Alliance",
+            "min": null,
+            "realm": null,
+            "region": "us",
+            "updated_at": null
+          },
+          {
+            "badge_url": "https://thewowdb.com/assets/pvp/faction/horde.jpg",
+            "faction": "Horde",
+            "min": null,
+            "realm": null,
+            "region": "us",
+            "updated_at": null
+          }
+        ],
+        "flavor": null,
+        "icon_url": "https://thewowdb.com/assets/icons/inv_shoulder_09.jpg",
+        "id": 4661,
+        "item_level": 26,
+        "item_set": null,
+        "item_subtype": "Cloth",
+        "item_type": "Armor",
+        "kind": "item",
+        "links": {
+          "api": "https://thewowdb.com/api/v1/forever/item/4661",
+          "html": "https://thewowdb.com/wow-forever/item/bright-mantle-4661/",
+          "tooltip": "https://thewowdb.com/api/v1/tooltip/forever/item/4661"
+        },
+        "name": "Bright Mantle",
+        "price": {
+          "available": 12,
+          "market": 1300,
+          "min": 1000,
+          "realms": 8,
+          "region": "us",
+          "scope": "WoW Forever Horde 2",
+          "updated_at": "2026-11-11T04:22:43+00:00"
+        },
+        "quality": "uncommon",
+        "required_level": 21,
+        "slot": "Shoulder",
+        "socket_bonus": null,
+        "sockets": [],
+        "stats": [],
+        "unique": null,
+        "vendor_sell": 929,
+        "version": "forever",
+        "version_label": "WoW Forever",
+        "weapon": null
+      }
+    },
+    "8183": {
+      "status": "resolved",
+      "checkedAt": 1794376608073,
+      "item": {
+        "armor": null,
+        "attribution": {
+          "required": true,
+          "terms": "https://thewowdb.com/developers/#terms",
+          "text": "Data from TheWoWDB (thewowdb.com)",
+          "url": "https://thewowdb.com/wow-forever/item/precision-bow-8183/"
+        },
+        "binding": "Binds when equipped",
+        "build": "wow_classic_beta-1.60.1.70532",
+        "classes": [],
+        "effects": [],
+        "faction_prices": [
+          {
+            "badge_url": "https://thewowdb.com/assets/pvp/faction/alliance.jpg",
+            "faction": "Alliance",
+            "min": null,
+            "realm": null,
+            "region": "us",
+            "updated_at": null
+          },
+          {
+            "badge_url": "https://thewowdb.com/assets/pvp/faction/horde.jpg",
+            "faction": "Horde",
+            "min": null,
+            "realm": null,
+            "region": "us",
+            "updated_at": null
+          }
+        ],
+        "flavor": null,
+        "icon_url": "https://thewowdb.com/assets/icons/inv_weapon_bow_04.jpg",
+        "id": 8183,
+        "item_level": 27,
+        "item_set": null,
+        "item_subtype": "Bow",
+        "item_type": "Weapon",
+        "kind": "item",
+        "links": {
+          "api": "https://thewowdb.com/api/v1/forever/item/8183",
+          "html": "https://thewowdb.com/wow-forever/item/precision-bow-8183/",
+          "tooltip": "https://thewowdb.com/api/v1/tooltip/forever/item/8183"
+        },
+        "name": "Precision Bow",
+        "price": {
+          "available": 4,
+          "market": 3250,
+          "min": 2700,
+          "realms": 8,
+          "region": "us",
+          "scope": "WoW Forever Horde 5",
+          "updated_at": "2026-11-11T04:22:35+00:00"
+        },
+        "quality": "uncommon",
+        "required_level": 22,
+        "slot": "Ranged",
+        "socket_bonus": null,
+        "sockets": [],
+        "stats": [],
+        "unique": null,
+        "vendor_sell": 2426,
+        "version": "forever",
+        "version_label": "WoW Forever",
+        "weapon": null
+      }
+    }
+  }
+}
