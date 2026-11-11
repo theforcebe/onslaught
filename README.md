@@ -26,11 +26,11 @@ An import is not proof of in-game ownership or simulated DPS. Guild admins handl
 
 ## Battle.net sign-in
 
-Battle.net sign-in and private saving are **active** through the Cloudflare Worker in `server/worker.ts`. On November 11, 2026, the owner completed real sign-in, confirmed admin access, and saved guild settings through the app; the resulting commit was verified in the private repository. Anonymous private reads and writes return HTTP 401. The live roster remains empty.
+Battle.net sign-in and private saving are **active** through the Cloudflare Worker in `server/worker.ts`. On November 11, 2026, the owner completed real sign-in, confirmed admin access, and saved guild settings through the app; the resulting commit was verified in the private repository. Anonymous private reads and writes return HTTP 401. The initial live roster was published empty; members add their own records through the app.
 
 The app never asks visitors for passwords or personal access tokens. Provider credentials and the repository-scoped service token stay in Cloudflare secret storage. See [deployment and renewal instructions](docs/DEPLOYMENT.md); the current GitHub token expires February 8, 2027.
 
-Refreshing the page preserves the one-hour app session in the current browser tab. The app rechecks identity and permissions with the gateway before showing private data. Sign-out clears the saved session; expiry requires signing in again. The browser stores only the short-lived app token and its expiry, never Battle.net credentials.
+Refreshing the page preserves the one-hour app session in the current browser tab; the owner verified this in the deployed app on November 11, 2026. The app rechecks identity and permissions with the gateway before showing private data. Sign-out clears the saved session; expiry requires signing in again. The browser stores only the short-lived app token and its expiry, never Battle.net credentials.
 
 The gateway uses Battle.net for identity only. Automatic Battle.net armory synchronization and a Forever simulation engine are not implemented. No stable official Forever item API was verified during this build; the app uses a separate Forever-specific public database and preserves unknown variants.
 

@@ -4,7 +4,7 @@ The public app is https://theforcebe.github.io/onslaught/. Source lives in `thef
 
 The gateway is deployed at `https://onslaught-gateway.onslaught-raid.workers.dev`. D1 is initialized, and `IDENTITY_KEY` has been generated directly into Cloudflare secret storage. Do not regenerate that key during onboarding. Cloudflare CLI authentication uses encrypted storage backed by Windows Credential Manager.
 
-Activation is complete as of November 11, 2026. The Battle.net client credentials, private-repository `GITHUB_TOKEN`, and verified owner configuration `ADMIN_BNET_IDS` are installed as Cloudflare secrets. Pages is connected to the gateway. The owner completed real Battle.net sign-in, confirmed the admin interface, and saved guild settings through the app. The resulting private commit was verified. Live checks confirm an empty public roster and HTTP 401 for anonymous private reads and writes. The demo is fictional and browser-local. Public GitHub issues are no longer an editing channel.
+Activation is complete as of November 11, 2026. The Battle.net client credentials, private-repository `GITHUB_TOKEN`, and verified owner configuration `ADMIN_BNET_IDS` are installed as Cloudflare secrets. Pages is connected to the gateway. The owner completed real Battle.net sign-in, confirmed the admin interface, and saved guild settings through the app. The resulting private commit was verified. The initial roster was published empty. Live checks confirm HTTP 401 for anonymous private reads and writes. The demo is fictional and browser-local. Public GitHub issues are no longer an editing channel.
 
 The sections below document setup and recovery; do not recreate the existing OAuth client, database, or identity key during routine use.
 
@@ -98,7 +98,7 @@ Use a character's **Admin: assign Battle.net ownership** control to attach an ex
 - Sign out and confirm only roster and schedule basics remain. Check the calendar export too.
 - Confirm private commits exist and public Pages artifacts remain empty of guild records.
 
-The current deployment passed real owner sign-in, admin access, private saving, and anonymous read/write checks. A separate raider account is still needed to repeat the section/team and suspension checks end to end; automated tests cover those permission boundaries. Live OAuth popup behavior and provider configuration require actual accounts for verification. Local tests cannot substitute for it. The first sign-in was verified in the owner's regular browser; the embedded browser panel did not expose a usable popup.
+The current deployment passed real owner sign-in, admin access, private saving, session restoration after refresh, and anonymous read/write checks. Rank controls and individual assignments were exercised in the fictional demo on desktop and mobile, including keyboard filters and time-zone selection. All 84 automated tests pass. A separate raider account is still needed to repeat the section/team and suspension checks end to end; automated tests cover those permission boundaries. Live OAuth popup behavior and provider configuration require actual accounts for verification. Local tests cannot substitute for it. The first sign-in and refresh restoration were verified in the owner's regular browser; the embedded browser panel did not expose a usable sign-in popup.
 
 ## Operations
 
