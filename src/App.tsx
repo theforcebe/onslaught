@@ -45,6 +45,7 @@ import {
 } from "./components";
 import Dialogs from "./dialogs";
 import { AccessPanel } from "./AccessPanel";
+import { Dropdown } from "./Dropdown";
 import {
   PUBLIC_ACCESS,
   ADMIN_ACCESS,
@@ -140,7 +141,7 @@ export default function App() {
     {
       id: "demo-member",
       label: "Example raider",
-      role: "member",
+      role: "guild_member",
       status: "pending",
       sections: [],
       allTeams: false,
@@ -170,6 +171,7 @@ export default function App() {
   const effectiveAccess = demo ? ADMIN_ACCESS : access;
   function acceptView(next: GuildView) {
     if (!sessionActive()) setIdentity(undefined);
+    else if (next.identity) setIdentity(next.identity);
     const signature = JSON.stringify(next.access);
     if (accessSignature.current !== signature) setDialog(undefined);
     accessSignature.current = signature;
@@ -861,30 +863,34 @@ export default function App() {
               onChange={(e) => setFilter(e.target.value)}
             />
           </label>
-          <select
-            aria-label="Filter by class"
+          <Dropdown
+            label="Filter by class"
             value={classFilter}
-            onChange={(e) => setClassFilter(e.target.value)}
-          >
-            <option value="all">All classes</option>
-            {CLASSES.map((c) => (
-              <option value={c} key={c}>
-                {label(c)}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Filter by role"
+            onChange={setClassFilter}
+            icon={<Users size={16} />}
+            options={[
+              { value: "all", label: "All classes" },
+              ...CLASSES.map((c) => ({
+                value: c,
+                label: label(c),
+                icon: <ClassIcon cls={c} size={21} />,
+              })),
+            ]}
+          />
+          <Dropdown
+            label="Filter by role"
             value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
-          >
-            <option value="all">All roles</option>
-            {ROLES.map((r) => (
-              <option key={r} value={r}>
-                {label(r)}
-              </option>
-            ))}
-          </select>
+            onChange={setRoleFilter}
+            icon={<Swords size={16} />}
+            options={[
+              { value: "all", label: "All roles" },
+              ...ROLES.map((r) => ({
+                value: r,
+                label: label(r),
+                icon: <RoleIcon role={r} />,
+              })),
+            ]}
+          />
         </div>
         {addButton("import", "Import character")}
       </div>
@@ -1187,12 +1193,14 @@ export default function App() {
   const schedule = (
     <>
       <div className="toolbar">
-        <Field label="Display times in">
-          <select
+        <div className="timezone-control">
+          <span>Times shown in</span>
+          <Dropdown
+            label="Display times in"
             value={timeZone}
-            onChange={(e) => setTimeZone(e.target.value)}
-          >
-            {[
+            onChange={setTimeZone}
+            icon={<Clock3 size={16} />}
+            options={[
               ...new Set([
                 Intl.DateTimeFormat().resolvedOptions().timeZone,
                 state.guild.timeZone,
@@ -1203,11 +1211,16 @@ export default function App() {
                 "Australia/Sydney",
                 "UTC",
               ]),
-            ].map((z) => (
-              <option key={z}>{z}</option>
-            ))}
-          </select>
-        </Field>
+            ].map((zone) => ({
+              value: zone,
+              label: zone.split("/").at(-1)!.replaceAll("_", " "),
+              detail:
+                zone === "UTC"
+                  ? "Coordinated Universal Time"
+                  : zone.replaceAll("_", " "),
+            }))}
+          />
+        </div>
         {addButton("event", "Schedule a raid")}
       </div>
       <div className="event-list">
@@ -1536,7 +1549,8 @@ export default function App() {
         </div>
         <p className="muted">
           Passwords are handled by Battle.net. OAuth secrets stay on the server.
-          App sessions stay in memory and expire automatically.
+          Your app session survives refreshes in this tab and expires after an
+          hour.
         </p>
         <a
           className="btn secondary"

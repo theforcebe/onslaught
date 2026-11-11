@@ -5,6 +5,7 @@ import {
   updateMember,
   accessFor,
   SECTIONS,
+  DocumentSchema,
 } from "../src/lib/access";
 import { applyChange } from "../src/lib/reducer";
 import { privateFixture } from "./access-fixture";
@@ -20,6 +21,106 @@ const owner = {
   admin: true,
 };
 describe("section and team privacy", () => {
+  it("migrates the original member role to Raider without broadening its grants", () => {
+    const before = privateFixture();
+    const legacy = {
+      ...before,
+      members: [{ ...before.members[0], role: "member" }],
+    };
+    const migrated = DocumentSchema.parse(legacy);
+    expect(migrated.members[0]).toEqual({
+      ...before.members[0],
+      role: "raider",
+    });
+    expect(JSON.stringify(project(migrated, member))).not.toContain(
+      "PRIVATE-SECOND",
+    );
+  });
+  it.each(["officer", "raider", "guild_member"] as const)(
+    "%s only receives explicitly assigned permissions",
+    (role) => {
+      const d = privateFixture();
+      d.members[0].role = role;
+      d.members[0].sections = [];
+      d.members[0].allTeams = true;
+      expect(accessFor(d, member).role).toBe(role);
+      expect(accessFor(d, member).admin).toBe(false);
+      expect(JSON.stringify(project(d, member))).not.toContain("PRIVATE-");
+      d.members[0].sections = ["gear"];
+      d.members[0].allTeams = false;
+      const view = project(d, member);
+      expect(view.state.characters[0].notes).toBe("PRIVATE-FIRST-NOTE");
+      expect(view.state.characters[1].notes).toBe("");
+      expect(view.state.loot).toEqual([]);
+      expect(view.members).toBeUndefined();
+      expect(() =>
+        updateMember(d, member, {
+          id: "promote",
+          expectedRevision: 0,
+          member: { ...d.members[0], role: "admin" },
+        }),
+      ).toThrow("Only an admin");
+    },
+  );
+  it("keeps permissions independent for two people with the same rank", () => {
+    const d = privateFixture();
+    d.members[0].role = "officer";
+    d.members[0].sections = ["gear"];
+    d.members.push({
+      ...d.members[0],
+      id: "other-member",
+      label: "Other",
+      sections: ["loot"],
+      teamIds: ["second"],
+    });
+    const first = project(d, member);
+    const second = project(d, { ...member, id: "other-member" });
+    expect(first.state.characters[0].notes).toBe("PRIVATE-FIRST-NOTE");
+    expect(first.state.loot).toEqual([]);
+    expect(second.state.characters[0].notes).toBe("");
+    expect(second.state.loot.map((loot) => loot.id)).toEqual(["second-loot"]);
+  });
+  it("removes admin privileges immediately when an admin assigns a lower rank", () => {
+    const d = privateFixture();
+    d.members[0].role = "admin";
+    expect(project(d, member).members).toBeDefined();
+    const next = updateMember(d, owner, {
+      id: "demote",
+      expectedRevision: 0,
+      member: { ...d.members[0], role: "officer", sections: ["gear"] },
+    });
+    expect(accessFor(next, member).role).toBe("officer");
+    expect(project(next, member).members).toBeUndefined();
+    expect(JSON.stringify(project(next, member))).not.toContain(
+      "PRIVATE-SECOND",
+    );
+    expect(project(next, member).state.loot).toEqual([]);
+  });
+  it("does not let any non-admin rank edit structure even with all sections", () => {
+    for (const rank of ["officer", "raider", "guild_member"] as const) {
+      const d = privateFixture();
+      d.members[0].role = rank;
+      const action = {
+        type: "team.save" as const,
+        team: { ...d.state.teams[0], size: 40 },
+      };
+      expect(() =>
+        applyChange(
+          d.state,
+          { version: 1, id: "attempt", expectedRevision: 0, action },
+          authorizeAction(d, member, action),
+        ),
+      ).toThrow("Only a guild admin");
+    }
+  });
+  it("suspension removes even a configured admin rank, while recovery ownership remains separate", () => {
+    const d = privateFixture();
+    d.members[0].role = "admin";
+    d.members[0].status = "suspended";
+    expect(accessFor(d, member).admin).toBe(false);
+    expect(JSON.stringify(project(d, member))).not.toContain("PRIVATE-");
+    expect(accessFor(d, owner).admin).toBe(true);
+  });
   it("publishes only roster basics and schedule details", () => {
     const d = privateFixture(),
       v = project(d),
@@ -29,6 +130,7 @@ describe("section and team privacy", () => {
     expect(text).not.toContain("ownerBattleNet");
     expect(text).not.toContain("snapshot");
     expect(v.members).toBeUndefined();
+    expect(v.identity).toBeUndefined();
     expect(v.state.characters).toHaveLength(2);
     expect(v.state.events).toHaveLength(2);
     expect(v.state.characters[1].name).toBe("Public second name");

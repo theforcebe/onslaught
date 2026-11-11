@@ -80,6 +80,100 @@ const post = (
     body: JSON.stringify(body),
   });
 describe("credential and OAuth boundaries", () => {
+  it.each(["officer", "raider", "guild_member"] as const)(
+    "saves an admin's %s assignment with individual grants in the private repository",
+    async (role) => {
+      const doc = privateFixture(),
+        writes = mockRepository(doc),
+        { env, rows } = environment();
+      const token = "t".repeat(43);
+      rows.set(`session:${await digest(token)}`, {
+        payload: JSON.stringify({
+          subject: "123",
+          id: "owner-id",
+          label: "Owner",
+        }),
+        expires_at: Date.now() + 3600000,
+      });
+      const response = await worker.fetch(
+        post(
+          "/api/members",
+          {
+            id: "rank-change",
+            expectedRevision: 0,
+            member: {
+              ...doc.members[0],
+              role,
+              sections: ["gear"],
+              allTeams: false,
+              teamIds: ["vanguard"],
+            },
+          },
+          env.APP_ORIGIN,
+          { Authorization: `Bearer ${token}` },
+        ),
+        env,
+        ctx,
+      );
+      expect(response.status).toBe(200);
+      const view = (await response.json()) as any;
+      expect(view.members[0].role).toBe(role);
+      expect(view.members[0].sections).toEqual(["gear"]);
+      expect(writes).toHaveLength(1);
+      const saved = JSON.parse(
+        Buffer.from(writes[0].content, "base64").toString("utf8"),
+      );
+      expect(saved.members[0]).toMatchObject({
+        role,
+        sections: ["gear"],
+        teamIds: ["vanguard"],
+        allTeams: false,
+      });
+    },
+  );
+  it("starts new applicants as pending Guild Members without private grants", async () => {
+    const writes = mockRepository(),
+      { env, rows } = environment();
+    const token = "t".repeat(43);
+    rows.set(`session:${await digest(token)}`, {
+      payload: JSON.stringify({
+        subject: "456",
+        id: "new-account",
+        label: "New member",
+      }),
+      expires_at: Date.now() + 3600000,
+    });
+    const response = await worker.fetch(
+      post("/api/join", {}, env.APP_ORIGIN, {
+        Authorization: `Bearer ${token}`,
+      }),
+      env,
+      ctx,
+    );
+    expect(response.status).toBe(200);
+    const view = (await response.json()) as any;
+    expect(view.identity).toMatchObject({
+      provider: "battlenet",
+      id: "new-account",
+      admin: false,
+      accountId: "456",
+    });
+    expect(view.access).toMatchObject({
+      status: "pending",
+      role: "guild_member",
+      admin: false,
+      sections: [],
+      allTeams: false,
+      teamIds: [],
+    });
+    expect(view.members).toBeUndefined();
+    const saved = JSON.parse(
+      Buffer.from(writes[0].content, "base64").toString("utf8"),
+    );
+    expect(
+      saved.members.find((m: any) => m.id === "new-account"),
+    ).toMatchObject({ role: "guild_member", status: "pending", sections: [] });
+  });
   it("only permits the exact configured CORS origin", () => {
     const { env } = environment();
     expect(cors("https://attacker.example", env)).toEqual({});

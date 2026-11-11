@@ -90,7 +90,7 @@ export function privateFixture(): GuildDocument {
         id: "member-id",
         label: "PRIVATE-BATTLETAG",
         status: "active",
-        role: "member",
+        role: "raider",
         sections: [...SECTIONS],
         allTeams: false,
         teamIds: ["vanguard"],

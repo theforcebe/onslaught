@@ -2,14 +2,16 @@ import { StateSchema } from "./model";
 import type { ChangeRequest, Identity } from "./model";
 import { ViewSchema, PUBLIC_ACCESS } from "./access";
 import type { GuildView, Member } from "./access";
+import { createSessionStore, tabStorage } from "./session";
 export const REPOSITORY = "theforcebe/onslaught";
 export const REPO_URL = `https://github.com/${REPOSITORY}`;
 export const API_URL = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
-let sessionToken = "";
+const session = createSessionStore(tabStorage());
 let sessionEpoch = 0;
-export const sessionActive = () => !!sessionToken;
+export const sessionActive = () => !!session.token();
 async function api(path: string, body?: unknown): Promise<GuildView> {
   const epoch = sessionEpoch;
+  const sessionToken = session.token();
   const r = await fetch(`${API_URL}${path}`, {
     method: body === undefined ? "GET" : "POST",
     headers: {
@@ -24,18 +26,27 @@ async function api(path: string, body?: unknown): Promise<GuildView> {
   if (epoch !== sessionEpoch)
     throw new Error("Session changed. Refresh the guild view.");
   if (r.status === 401) {
-    sessionToken = "";
+    session.clear();
     sessionEpoch++;
   }
   if (!r.ok) throw new Error(data.error || "The guild could not be loaded.");
   return ViewSchema.parse(data);
 }
 export async function loadGuild(): Promise<GuildView & { isCurrent: boolean }> {
-  if (API_URL)
-    return {
-      ...(await api(sessionToken ? "/api/state" : "/api/public")),
-      isCurrent: true,
-    };
+  if (API_URL) {
+    const restoring = sessionActive();
+    try {
+      return {
+        ...(await api(restoring ? "/api/state" : "/api/public")),
+        isCurrent: true,
+      };
+    } catch (error) {
+      // A revoked/expired stored session returns to the public view without trapping the page.
+      if (restoring && !sessionActive())
+        return { ...(await api("/api/public")), isCurrent: true };
+      throw error;
+    }
+  }
   const r = await fetch(`${import.meta.env.BASE_URL}data/raid-state.json`, {
     cache: "no-store",
     signal: AbortSignal.timeout(10000),
@@ -61,6 +72,7 @@ export async function loginBattleNet(): Promise<Identity> {
     "width=600,height=740",
   );
   if (!popup) throw new Error("Allow pop-ups to sign in with Battle.net.");
+  const loginEpoch = sessionEpoch;
   const verifier = crypto.randomUUID() + crypto.randomUUID();
   const bytes = await crypto.subtle.digest(
     "SHA-256",
@@ -102,7 +114,9 @@ export async function loginBattleNet(): Promise<Identity> {
               ? `Your account needs a guild invitation. Give your account ID ${data.accountId} to the guild owner privately.`
               : data.error || "Sign-in expired. Try again.",
           );
-        sessionToken = data.token;
+        if (sessionEpoch !== loginEpoch)
+          throw new Error("Session changed. Please sign in again.");
+        session.save(data.token, data.expiresIn);
         sessionEpoch++;
         resolve(data.identity);
       } catch (error) {
@@ -125,8 +139,8 @@ export async function loginBattleNet(): Promise<Identity> {
   });
 }
 export async function logout() {
-  const token = sessionToken;
-  sessionToken = "";
+  const token = session.token();
+  session.clear();
   sessionEpoch++;
   try {
     if (token)
@@ -135,12 +149,12 @@ export async function logout() {
         headers: { Authorization: `Bearer ${token}` },
         signal: AbortSignal.timeout(10000),
       });
-  } finally {
-    sessionToken = "";
+  } catch {
+    /* Local sign-out has already cleared the session. */
   }
 }
 export async function saveShared(request: ChangeRequest): Promise<GuildView> {
-  if (!sessionToken) throw new Error("Sign in before saving to the guild.");
+  if (!sessionActive()) throw new Error("Sign in before saving to the guild.");
   return api("/api/change", request);
 }
 export const requestMembership = () => api("/api/join", {});

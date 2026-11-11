@@ -25,12 +25,24 @@ export const SECTION_NAMES: Record<Section, string> = {
 const key = z
   .string()
   .regex(/^(?!__proto__$|constructor$|prototype$)[A-Za-z0-9_-]{1,100}$/);
+export const RANKS = ["admin", "officer", "raider", "guild_member"] as const;
+export type Rank = (typeof RANKS)[number];
+export const RANK_NAMES: Record<Rank, string> = {
+  admin: "Admin",
+  officer: "Officer",
+  raider: "Raider",
+  guild_member: "Guild Member",
+};
+// The original "member" role was displayed as Raider. Preserve its exact grants.
+export const RankSchema = z
+  .enum([...RANKS, "member"])
+  .transform((rank): Rank => (rank === "member" ? "raider" : rank));
 export const MemberSchema = z
   .object({
     id: key,
     label: z.string().min(1).max(100),
     status: z.enum(["pending", "active", "suspended"]),
-    role: z.enum(["member", "admin"]),
+    role: RankSchema,
     sections: z.array(z.enum(SECTIONS)).max(SECTIONS.length),
     allTeams: z.boolean(),
     teamIds: z.array(key).max(25),
@@ -52,6 +64,7 @@ export type GuildDocument = z.infer<typeof DocumentSchema>;
 export const AccessSchema = z.object({
   status: z.enum(["visitor", "unregistered", "pending", "active", "suspended"]),
   admin: z.boolean(),
+  role: RankSchema.optional(),
   sections: z.array(z.enum(SECTIONS)),
   allTeams: z.boolean(),
   teamIds: z.array(key),
@@ -67,6 +80,7 @@ export const PUBLIC_ACCESS: Access = {
 export const ADMIN_ACCESS: Access = {
   status: "active",
   admin: true,
+  role: "admin",
   sections: [...SECTIONS],
   allTeams: true,
   teamIds: [],
@@ -76,6 +90,16 @@ export const ViewSchema = z
     state: StateSchema,
     access: AccessSchema,
     members: z.array(MemberSchema).optional(),
+    identity: z
+      .object({
+        provider: z.literal("battlenet"),
+        id: key,
+        label: z.string().min(1).max(100),
+        admin: z.boolean(),
+        accountId: z.string().regex(/^\d+$/).optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export type GuildView = z.infer<typeof ViewSchema>;
@@ -92,12 +116,17 @@ export function accessFor(doc: GuildDocument, identity?: Identity): Access {
   if (identity.admin) return { ...ADMIN_ACCESS };
   const m = doc.members.find((x) => x.id === identity.id);
   if (!m || m.status !== "active")
-    return { ...PUBLIC_ACCESS, status: m?.status || "unregistered" };
+    return {
+      ...PUBLIC_ACCESS,
+      status: m?.status || "unregistered",
+      role: m?.role,
+    };
   return m.role === "admin"
     ? { ...ADMIN_ACCESS }
     : {
         status: "active",
         admin: false,
+        role: m.role,
         sections: m.sections,
         allTeams: m.allTeams,
         teamIds: m.teamIds,
@@ -228,6 +257,17 @@ export function project(doc: GuildDocument, identity?: Identity): GuildView {
     state,
     access: a,
     ...(a.admin ? { members: doc.members } : {}),
+    ...(identity?.provider === "battlenet"
+      ? {
+          identity: {
+            provider: "battlenet",
+            id: identity.id,
+            label: identity.label,
+            admin: a.admin,
+            accountId: identity.accountId,
+          },
+        }
+      : {}),
   });
 }
 

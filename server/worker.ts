@@ -187,7 +187,13 @@ async function authenticated(req: Request, env: Env): Promise<Identity> {
     label: string;
   };
   const admin = list(env.ADMIN_BNET_IDS).includes(stored.subject);
-  return { provider: "battlenet", id: stored.id, label: stored.label, admin };
+  return {
+    provider: "battlenet",
+    id: stored.id,
+    label: stored.label,
+    admin,
+    accountId: stored.subject,
+  };
 }
 function githubHeaders(env: Env) {
   const token = env.GITHUB_TOKEN.trim();
@@ -443,7 +449,7 @@ async function route(req: Request, env: Env): Promise<Response> {
         id: identity.id,
         label: identity.label,
         status: identity.admin ? "active" : "pending",
-        role: identity.admin ? "admin" : "member",
+        role: identity.admin ? "admin" : "guild_member",
         sections: [],
         allTeams: false,
         teamIds: [],

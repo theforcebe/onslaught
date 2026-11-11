@@ -14,19 +14,23 @@ The raid headquarters for Ønslaught on WoW Forever. A responsive React app on G
 - **Progress:** configurable encounters, attempts, best remaining health, strategy notes and kill status.
 - **History:** a revisioned data file, attributed audit entries, Git commits, conflict detection and idempotent requests.
 - **Practice workspace:** an explicitly labeled sample guild with local, persisted edits. Demo data never enters the real roster.
-- **Members & access:** verified membership requests, admin approval, section permissions, selected raid teams, suspension and private audit history. Structural edits remain admin-only.
+- **Members & access:** Admin, Officer, Raider, and Guild Member ranks; verified requests, approval, individual section/team permissions, suspension and private audit history. Structural edits remain admin-only.
 
 ## Shared editing and visibility
 
 Canonical data lives in **theforcebe/onslaught-data**, a private repository. The Worker returns a filtered view for every request and commits validated edits privately. The public roster contains names, classes, levels, roles, specs and team names. The public schedule contains raid titles, instances, teams and times. Equipment, imports, plans, notes, attendance and member identities never enter the public build.
 
-After gateway activation, raiders sign in with Battle.net and request membership. Admins choose private sections and specific teams in **Members & access**. Approved raiders can edit their own records within that access. Only admins configure structure, membership, targets and awards. Raiders do not need GitHub accounts or repository access. Public GitHub issue submissions have been removed because they cannot protect private data.
+Members sign in with Battle.net and request membership. Admins assign a rank and choose private sections and specific teams for each person in **Members & access**. Admin has full control; Officer, Raider, and Guild Member receive only their explicit grants. Two people with the same rank can have different access. Approved members can edit their own records within that access. Only admins configure structure, membership, targets and awards. Members do not need GitHub accounts or repository access. Public GitHub issue submissions have been removed because they cannot protect private data.
 
 An import is not proof of in-game ownership or simulated DPS. Guild admins handle ownership disputes. Equipment comparisons retain unknown data instead of inventing an upgrade score.
 
 ## Battle.net sign-in
 
-A Cloudflare Worker gateway is implemented in `server/worker.ts`. It is **not active until configured** with Blizzard OAuth credentials, a token scoped only to the private data repository, a stable identity key, and an initial owner account ID. See [deployment instructions](docs/DEPLOYMENT.md). Until then, live editing is unavailable and the fictional demo remains usable. The app never asks visitors for passwords or personal access tokens.
+Battle.net sign-in and private saving are **active** through the Cloudflare Worker in `server/worker.ts`. On November 11, 2026, the owner completed real sign-in, confirmed admin access, and saved guild settings through the app; the resulting commit was verified in the private repository. Anonymous private reads and writes return HTTP 401. The live roster remains empty.
+
+The app never asks visitors for passwords or personal access tokens. Provider credentials and the repository-scoped service token stay in Cloudflare secret storage. See [deployment and renewal instructions](docs/DEPLOYMENT.md); the current GitHub token expires February 8, 2027.
+
+Refreshing the page preserves the one-hour app session in the current browser tab. The app rechecks identity and permissions with the gateway before showing private data. Sign-out clears the saved session; expiry requires signing in again. The browser stores only the short-lived app token and its expiry, never Battle.net credentials.
 
 The gateway uses Battle.net for identity only. Automatic Battle.net armory synchronization and a Forever simulation engine are not implemented. No stable official Forever item API was verified during this build; the app uses a separate Forever-specific public database and preserves unknown variants.
 

@@ -4,7 +4,9 @@ The public app is https://theforcebe.github.io/onslaught/. Source lives in `thef
 
 The gateway is deployed at `https://onslaught-gateway.onslaught-raid.workers.dev`. D1 is initialized, and `IDENTITY_KEY` has been generated directly into Cloudflare secret storage. Do not regenerate that key during onboarding. Cloudflare CLI authentication uses encrypted storage backed by Windows Credential Manager.
 
-The Battle.net client credentials and private-repository `GITHUB_TOKEN` are installed as Cloudflare secrets. Pages is connected to the gateway. Live checks confirm an empty public roster and HTTP 401 for anonymous private reads and writes. Remaining activation: verify real sign-in and establish the owner using `ADMIN_BNET_IDS`. The demo is fictional and browser-local. Public GitHub issues are no longer an editing channel.
+Activation is complete as of November 11, 2026. The Battle.net client credentials, private-repository `GITHUB_TOKEN`, and verified owner configuration `ADMIN_BNET_IDS` are installed as Cloudflare secrets. Pages is connected to the gateway. The owner completed real Battle.net sign-in, confirmed the admin interface, and saved guild settings through the app. The resulting private commit was verified. Live checks confirm an empty public roster and HTTP 401 for anonymous private reads and writes. The demo is fictional and browser-local. Public GitHub issues are no longer an editing channel.
+
+The sections below document setup and recovery; do not recreate the existing OAuth client, database, or identity key during routine use.
 
 ## 1. Connect Cloudflare
 
@@ -74,12 +76,14 @@ Sign in with your Battle.net account. Open **Members & access → Owner setup re
 
 1. Raider signs in with Battle.net and clicks **Request membership** in Members & access.
 2. An admin sees the verified BattleTag and pending request privately.
-3. Set membership to **Active**, role to **Raider**, choose private sections, and select raid teams (or all teams).
+3. Set membership to **Active**, choose **Officer**, **Raider**, or **Guild Member**, choose private sections, and select raid teams (or all teams). Use **Admin** only for someone who should have full control.
 4. Save. Permissions are checked from the current private document on every API read and save. Suspended and pending accounts get only the public view.
 
 Roster basics (name, class, level, role, specialization, team name) and event basics (title, instance, team name, time) are public. Equipment, raw imports, character notes, group assignments, attendance and raid notes, loot, consumables, progress, and audit history are private.
 
 Each private section needs its own grant. Team-scoped records also need the matching team. Guild-wide loot/progress/supply records are visible to anyone with that section, so choose a specific team or raid event when needed. Unassigned character gear is visible to its owner with Gear access and to members with Gear plus all-team access. Activity entries additionally require their source section and team; legacy unscoped entries and access-management history are admin-only.
+
+Permissions are assigned per person, not inherited from a shared rank template. Officer, Raider, and Guild Member have no automatic private grants. Changing between those ranks preserves the selected permissions. New requests start as pending Guild Members without private access. Existing records using the original `member` role are read as Raider with exactly the same grants; they normalize on the next private save. Pending and suspended memberships remain restricted regardless of rank. The separate recovery-owner configuration is unchanged.
 
 Admins can see all records and manage structure, membership, ownership, schedules, targets, priorities and awards. Section access does not grant structural editing. Raiders can edit their own character and personal responses. A signed-in owner from `ADMIN_BNET_IDS` retains recovery access independently of the editable member list.
 
@@ -94,11 +98,11 @@ Use a character's **Admin: assign Battle.net ownership** control to attach an ex
 - Sign out and confirm only roster and schedule basics remain. Check the calendar export too.
 - Confirm private commits exist and public Pages artifacts remain empty of guild records.
 
-Live OAuth popup behavior and provider configuration require actual accounts for final verification. Local tests cannot substitute for it.
+The current deployment passed real owner sign-in, admin access, private saving, and anonymous read/write checks. A separate raider account is still needed to repeat the section/team and suspension checks end to end; automated tests cover those permission boundaries. Live OAuth popup behavior and provider configuration require actual accounts for verification. Local tests cannot substitute for it. The first sign-in was verified in the owner's regular browser; the embedded browser panel did not expose a usable popup.
 
 ## Operations
 
-Sessions last one hour and stay in memory; reload requires sign-in. Failed refreshes clear displayed private state. Revocation stops future responses; it cannot retract information already seen or downloaded. Guild settings exports only the authorized view. Full backups are in the private repository, including historical access grants and exports.
+Sessions last one hour. The app token and absolute expiry are retained in tab-scoped `sessionStorage`, so page refresh does not require another Battle.net connection. Reload never extends the expiry. Identity and access are fetched afresh from the gateway. Sign-out clears the local copy immediately and attempts server revocation; revoked or expired sessions return to the public view. If browser storage is blocked, the app falls back to memory and refresh will require sign-in. Failed refreshes clear displayed private state. Revocation stops future responses; it cannot retract information already seen or downloaded. Guild settings exports only the authorized view. Full backups are in the private repository, including historical access grants and exports.
 
 Run `npm test`, `npm run check:data`, `npx tsc -p tsconfig.server.json`, `npm run build`, and `node scripts/scan-secrets.mjs` before release. CI rejects live guild records in the public bootstrap. Do not copy the private data repo into the website checkout or build output.
 
