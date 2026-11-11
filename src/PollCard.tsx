@@ -90,8 +90,13 @@ export function PollCard({
           <h3>{p.title}</h3>
           <p>
             {p.timeZone} ·{" "}
-            {p.voting === "discord" ? "Vote in Discord" : "Vote here"} · Choose
-            all that work
+            {summary
+              ? p.voting === "discord"
+                ? "Discord results"
+                : "Results · vote in Raid planner"
+              : p.voting === "discord"
+                ? "Vote in Discord · choose all that work"
+                : "Vote here · choose all that work"}
           </p>
         </div>
         <BarChart3 size={24} />

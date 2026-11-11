@@ -803,7 +803,11 @@ export function RaidPlanner({
               minute: "2-digit",
             })}
             –
-            {new Date(event.end).toLocaleTimeString(undefined, {
+            {new Date(event.end).toLocaleString(undefined, {
+              ...(new Date(event.end).toDateString() !==
+              new Date(event.start).toDateString()
+                ? { month: "short" as const, day: "numeric" as const }
+                : {}),
               hour: "numeric",
               minute: "2-digit",
               timeZoneName: "short",
