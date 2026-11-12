@@ -1,230 +1,253 @@
-/* The guild's old-web home: stone, brass, burgundy banners and inset game panels. */
+/* Retro fantasy, refined: heraldic art, angular lettering, crisp metal edges. */
+@font-face {
+  font-family: "Goodmountain";
+  src: url("/fonts/Goodmountain-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
 :root {
-  font-family: Tahoma, Verdana, sans-serif;
-  font-size: 13px;
-  color: #e9e0c8;
-  background: #1c1d19;
-  --bg: #1c1d19;
-  --panel: #2c2c25;
-  --raised: #38372d;
-  --line: #5a5543;
-  --muted: #b9b4a2;
-  --gold: #e4c174;
-  --bone: #ecdfbc;
-  --red: #c16552;
-  --red-dark: #783831;
-  --green: #9ac485;
+  font-family: "Barlow", Tahoma, sans-serif;
+  font-size: 14px;
+  font-weight: 450;
+  color: #f0edf3;
+  background: #101117;
+  --bg: #101117;
+  --panel: #1d1d28;
+  --raised: #292633;
+  --line: #61576b;
+  --muted: #c0bdce;
+  --gold: #ffd293;
+  --bone: #f7f1e7;
+  --red: #f26879;
+  --red-dark: #951e39;
+  --green: #8cdbb0;
 }
 body {
-  background-color: var(--bg);
-  background-image:
-    repeating-linear-gradient(0deg, #ffffff02 0 1px, transparent 1px 4px),
-    repeating-linear-gradient(90deg, #00000010 0 1px, transparent 1px 4px);
+  background:
+    radial-gradient(ellipse at 85% 0, #50152b24, transparent 55%), #101117;
 }
 h1,
 h2,
 .brand strong {
-  font-family: "Marcellus", Georgia, serif;
-  color: #e8ca85;
-  text-shadow: 1px 2px #11130e;
-}
-h1 {
-  letter-spacing: 0;
+  font-family: "Goodmountain", "Marcellus", Georgia, serif;
+  font-weight: 400;
+  color: #e5edff;
+  text-shadow: 0 2px 1px #080a11;
+  letter-spacing: 0.01em;
 }
 h3,
 h4 {
-  font-weight: 700;
+  font-weight: 650;
+  color: #f1edf6;
 }
 p {
   line-height: 1.6;
 }
 .eyebrow {
+  font-family: "Barlow", Tahoma, sans-serif;
+  color: #ded0e0;
   letter-spacing: 0.04em;
-  font-family: Tahoma, Verdana, sans-serif;
-  color: #cdbd92;
 }
 .sidebar {
-  background:
-    repeating-linear-gradient(0deg, #ffffff03 0 1px, transparent 1px 4px),
-    #2c2b24;
-  border-right: 3px ridge #807556;
-  box-shadow: 4px 0 0 #10130f;
+  background: linear-gradient(180deg, #221722, #14151e 45%);
+  border-right: 1px solid #746072;
+  box-shadow: 4px 0 20px #05060b55;
   padding-top: 24px;
 }
 .brand {
-  padding-bottom: 22px;
+  padding-bottom: 24px;
+  gap: 9px;
 }
 .brand img {
-  filter: sepia(0.25);
   width: 44px;
   height: 50px;
+  filter: drop-shadow(0 0 12px #e5384b33);
 }
 .brand strong {
-  font-size: 27px;
+  font-size: 28px;
+  line-height: 1.1;
 }
 .brand span {
-  color: #b5aa8e;
-  font-size: 10px;
+  color: #c4b9cd;
+  font-size: 11px;
 }
 .guild-switch {
-  background: #1e211b;
-  border: 2px groove #776b4d;
-  border-radius: 0;
-  margin-bottom: 20px;
-  box-shadow: inset 0 0 12px #080b0855;
+  background: #171722;
+  border: 1px solid #776276;
+  border-radius: 4px;
+  margin-bottom: 22px;
+  box-shadow: inset 0 1px #fff08;
 }
 .guild-emblem {
-  background: #713c34;
-  border: 2px outset #ae8460;
-  border-radius: 0;
+  background: linear-gradient(140deg, #8d253e, #361e34);
+  border: 1px solid #c06979;
+  border-radius: 3px;
+  color: #ffe1ad;
 }
 .guild-switch > svg {
   display: none;
 }
+.guild-switch strong {
+  font-size: 14px;
+  color: #f4eaf3;
+}
+.guild-switch small {
+  color: #c2bfd0;
+  font-size: 11px;
+}
 .sidebar nav {
-  gap: 7px;
+  gap: 6px;
 }
 .sidebar nav button,
 .settings-nav {
-  border-radius: 1px;
-  color: #d3cbb6;
-  border: 1px solid #5b5644;
-  background: linear-gradient(#3b3b31, #302f27);
-  box-shadow:
-    inset 1px 1px #ffffff09,
-    1px 1px #15170f;
-  font-size: 12px;
+  border-radius: 4px;
+  color: #d8d4e2;
+  border: 1px solid #454152;
+  background: #1b1b26;
+  box-shadow: none;
+  font-size: 14px;
   min-height: 42px;
+  padding: 10px 12px;
 }
 .sidebar nav button:hover,
 .settings-nav:hover {
-  background: #4a4636;
-  color: #fff1c5;
-  border-color: #988459;
+  color: #fff3e5;
+  background: #302333;
+  border-color: #a27388;
 }
 .sidebar nav button.active,
 .settings-nav.active {
-  color: #ffe2a0;
-  background: #21221b;
-  border: 1px solid #a88e57;
-  box-shadow: inset 2px 2px #10120c;
+  color: #ffe4bc;
+  background: linear-gradient(90deg, #5f2035, #281d2b);
+  border-color: #bc677c;
+  box-shadow: inset 3px 0 #f7727d;
 }
 .sidebar nav button.active:before {
   display: none;
 }
 .sidebar nav .guild-nav {
-  background: linear-gradient(#773e34, #5e302b);
-  border: 2px outset #a47754;
-  box-shadow: none;
-  color: #f2dfba;
   margin: 9px 0;
+  background: linear-gradient(115deg, #a52640, #651d35);
+  border: 1px solid #e37583;
+  box-shadow: inset 0 1px #ffd8c326;
+  color: #fff0e5;
 }
 .sidebar nav .guild-nav:hover,
 .sidebar nav .guild-nav.active {
-  background: #8a4938;
+  background: linear-gradient(115deg, #bd2e4a, #7e223e);
+  border-color: #ffb699;
 }
 .sidebar nav .guild-nav svg {
-  color: #edc68a;
+  color: #ffe0ae;
 }
 .sidebar nav button small {
-  border-radius: 0;
-  background: #21251e;
-  color: #e7d59e;
-  border: 1px inset #5a5a45;
+  background: #0f121d;
+  color: #e9d8ef;
+  border: 1px solid #70617c;
+  border-radius: 3px;
 }
 .guild-note {
-  margin-top: 15px;
-  margin-bottom: 15px;
-  color: #b4aa8c;
+  margin: 15px 12px;
+  color: #c9b7bd;
 }
 .guild-note strong,
 .github-link {
-  color: #b8b09a;
+  color: #bebdce;
 }
 .sidebar-user {
-  background: #20221b;
-  border-top: 2px ridge #776e50;
+  background: #11131d;
+  border-top: 1px solid #66546b;
+}
+.sidebar-user strong {
+  color: #f4ebf6;
+  font-size: 13px;
+}
+.sidebar-user small {
+  color: #c2bdcf;
+  font-size: 11px;
 }
 .topbar {
-  background: #2c2c24;
-  border-bottom: 3px ridge #756c50;
   height: 62px;
-  box-shadow: 0 2px #10130d;
+  background: #16151fee;
+  border-bottom: 1px solid #6b596d;
+  box-shadow: 0 2px 16px #05060c44;
 }
-.breadcrumbs,
-.breadcrumbs strong {
-  color: #c5bea7;
+.breadcrumbs {
+  color: #bdb7cc;
 }
-.mode-button,
-.live-status {
-  color: #d7cfb5;
+.breadcrumbs strong,
+.live-status,
+.mode-button {
+  color: #e4dbea;
 }
 .mode-button {
-  border-radius: 0;
-  background: #21261c;
-  border: 1px inset #665e46;
+  background: #251d2c;
+  border: 1px solid #756179;
+  border-radius: 4px;
 }
 main {
   max-width: 1650px;
   padding-bottom: 100px;
 }
 .page-heading {
-  padding-bottom: 18px;
-  border-bottom: 1px solid #645c42;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #5c5066;
   margin-bottom: 22px;
 }
 .page-heading h1 {
-  font-size: 30px;
+  font-size: 38px;
+  line-height: 1.15;
 }
 .page-heading p {
-  color: #c2bba7;
-  font-size: 12px;
+  color: #c9c2d4;
+  font-size: 14px;
 }
 .btn {
-  border-radius: 2px;
-  font-size: 12px;
+  border-radius: 4px;
+  font-size: 14px;
   font-weight: 600;
-  min-height: 37px;
+  min-height: 38px;
 }
 .btn.primary,
 .btn.gold {
-  background: linear-gradient(#94503e, #74382f);
-  color: #fff1cf;
-  border: 2px outset #b68b5d;
-  box-shadow: 1px 2px #15150f;
-  text-shadow: 0 1px #381b16;
+  background: linear-gradient(130deg, #b42041, #801a35);
+  color: #fff5ea;
+  border: 1px solid #f17888;
+  box-shadow:
+    inset 0 1px #ffd3b62b,
+    0 3px 10px #09071044;
+  text-shadow: none;
 }
 .btn.primary:hover,
 .btn.gold:hover {
-  background: linear-gradient(#a75d45, #854332);
-  border-color: #dfb47a;
-}
-.btn.primary:active,
-.btn.gold:active {
-  border-style: inset;
+  background: linear-gradient(130deg, #d62b4c, #a22242);
+  border-color: #ffc09e;
 }
 .btn.secondary,
 .btn.hero-secondary {
-  background: linear-gradient(#494638, #38372b);
-  border: 2px outset #8c8160;
-  color: #ecdfbd;
-  box-shadow: 1px 1px #11150d;
+  background: linear-gradient(130deg, #34283b, #252331);
+  color: #f1e7f2;
+  border: 1px solid #8b738f;
+  box-shadow: inset 0 1px #fff08;
 }
 .btn.secondary:hover,
 .btn.hero-secondary:hover {
-  background: #58503b;
-  border-color: #b6a274;
+  background: #483148;
+  border-color: #cfa6bd;
 }
 .btn.text {
-  color: #e4c174;
+  color: #ffd293;
 }
 .btn.bnet {
-  background: #26393d;
-  border: 2px outset #638183;
-  border-radius: 2px;
+  background: #192e44;
+  border: 1px solid #79b2dc;
+  color: #c7e8ff;
+  border-radius: 4px;
 }
 .icon-btn {
-  border-radius: 2px;
+  border-radius: 4px;
+  color: #c5bfd1;
 }
 .panel,
 .raid-team-card,
@@ -234,369 +257,519 @@ main {
 .material-card,
 .hub-poll,
 .hub-announcement {
-  border: 2px ridge #776d50;
-  border-radius: 2px;
+  border: 1px solid #766279;
+  border-radius: 5px;
   background: var(--panel);
-  box-shadow: 2px 3px #10130d70;
+  box-shadow:
+    inset 0 1px #ffffff08,
+    0 5px 20px #03050a22;
 }
 .panel-title {
-  border-bottom-color: #5e5842;
+  border-color: #69556b;
 }
 .badge,
 .tag,
 .pill {
-  border-radius: 2px;
+  border-radius: 3px;
 }
 .badge {
-  background: #32362a;
-  border-color: #6b694c;
-  color: #d8d0b6;
+  background: #30283a;
+  border-color: #89718d;
+  color: #f3dff0;
 }
 input:not([type="checkbox"]):not([type="radio"]),
 textarea,
 select,
 .dropdown-trigger {
-  border-radius: 1px;
-  background: #1d231c;
-  color: #ece4cc;
-  border: 2px inset #6c654e;
-  box-shadow: inset 1px 1px #11180c;
+  border-radius: 4px;
+  background: #121620;
+  color: #f0f1fa;
+  border: 1px solid #81708d;
+  box-shadow: inset 0 1px 4px #0003;
 }
 input::placeholder,
 textarea::placeholder {
-  color: #9d9f8b;
+  color: #abb3c6;
 }
 .dropdown-menu {
-  border-radius: 1px;
-  border: 2px outset #8e805d;
-  background: #303328;
-  box-shadow: 4px 5px #10120bd9;
+  border-radius: 4px;
+  border: 1px solid #af8ba9;
+  background: #211e2d;
+  box-shadow: 0 12px 30px #0009;
 }
 .dropdown-option {
-  border-radius: 0;
+  border-radius: 3px;
+  color: #e6deed;
 }
 .dropdown-option:hover,
-.dropdown-option.highlighted,
+.dropdown-option.is-active,
 .dropdown-option[aria-selected="true"] {
-  background: #504b36;
-  color: #ffdda0;
+  background: #49283e;
+  color: #fff0d2;
+}
+.dropdown-chevron {
+  background: #48253a;
+  color: #ffccba;
+  border-radius: 3px;
 }
 .modal {
-  border: 3px ridge #a18b59;
-  border-radius: 2px;
-  background: #2d2e25;
-  box-shadow: 8px 10px #090d0799;
+  border: 1px solid #b6889f;
+  border-radius: 5px;
+  background: #201c2b;
+  box-shadow: 0 22px 80px #000b;
 }
 .modal h2 {
-  color: #efd397;
+  color: #e7ecff;
+  font-size: 30px;
 }
 .modal::backdrop {
-  background: #080b07ba;
-  backdrop-filter: none;
+  background: #060711c9;
+  backdrop-filter: blur(4px);
 }
 .modal-head,
 .modal-footer {
-  background: #343329;
-  border-color: #6e6348;
+  background: #291f30;
+  border-color: #796179;
 }
 .notice {
-  border-radius: 2px;
+  border-radius: 4px;
 }
 .war-room-banner {
-  background:
-    repeating-linear-gradient(0deg, #ffffff03 0 1px, transparent 1px 3px),
-    linear-gradient(90deg, #5e302c, #392b24);
-  border: 3px ridge #b59b64;
-  border-radius: 1px;
-  padding: 24px;
-  box-shadow:
-    inset 0 0 0 3px #251b14,
-    3px 4px #0c110b;
   position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  min-height: 300px;
+  padding: 34px;
+  border: 1px solid #c38480;
+  border-radius: 6px;
+  background: #211b26;
+  box-shadow:
+    0 14px 35px #0005,
+    inset 0 1px #ffe3c230;
+  overflow: hidden;
 }
-.war-room-banner img {
-  filter: sepia(0.3);
-  width: 74px;
-  height: 84px;
+.war-room-banner > .guild-hall-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 65% 19%;
+  filter: none;
+  z-index: -3;
+}
+.war-room-banner:before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, #0d1017ee, #17121aa8 42%, #21131a18 75%),
+    linear-gradient(0deg, #181019b0, transparent 60%);
+}
+.war-room-banner:after {
+  content: "";
+  display: block;
+  position: absolute;
+  inset: 7px;
+  width: auto;
+  height: auto;
+  border: 1px solid #e9b08f55;
+  border-radius: 2px;
+  transform: none;
+  background: none;
+  pointer-events: none;
+  z-index: -1;
+}
+.war-room-banner > div {
+  max-width: 560px;
+  padding-right: 75px;
 }
 .war-room-banner h2 {
-  font-size: 31px;
-  color: #f2d99d;
-  margin-bottom: 8px;
+  font-size: clamp(36px, 3.3vw, 48px);
+  max-width: 430px;
+  color: #e7efff;
+  line-height: 1.12;
+  margin: 10px 0 12px;
 }
 .war-room-banner p {
-  color: #d3bea1;
-  font-size: 12px;
+  color: #f1dbe1;
+  font-size: 15px;
+  margin: 0;
+  max-width: 360px;
 }
 .war-room-banner .eyebrow {
-  color: #cfb891;
-  text-transform: none;
-  letter-spacing: 0;
+  color: #ffd4a5;
+  letter-spacing: 0.04em;
   font-size: 12px;
+}
+.war-room-banner > .btn {
+  justify-self: start;
+  margin: 20px 0 0;
+  width: auto;
+  background: #8b1f3ad9;
+  border: 1px solid #f48c91;
+  color: #fff0e2;
+  z-index: 1;
+}
+.war-room-banner > .btn:hover {
+  background: #ae2947;
+  border-color: #ffcea4;
+}
+@supports (background-clip: text) {
+  .brand strong,
+  .page-heading h1,
+  .war-room-banner h2,
+  .raid-hero h2 {
+    color: transparent;
+    background: linear-gradient(
+      180deg,
+      #fff6f1 10%,
+      #dce7ff 44%,
+      #b2c5e5 49%,
+      #f4f4ff 53%,
+      #bed0ef 85%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    text-shadow: none;
+    filter: drop-shadow(0 2px 1px #080910);
+  }
 }
 .watchboard-grid {
   gap: 18px;
 }
 .dispatch-card {
-  background: #d9c99e;
-  color: #342c20;
-  border-color: #b49b65;
-  box-shadow:
-    inset 0 0 25px #7c5d2422,
-    2px 3px #10130d70;
+  position: relative;
+  background: linear-gradient(125deg, #302031, #201d2b);
+  border-color: #ad7c91;
+  border-top: 2px solid #eeaa83;
+  color: #f4e9f2;
 }
 .dispatch-card h2,
 .dispatch-card h3 {
-  color: #6d3228;
+  color: #ffe1b5;
   text-shadow: none;
+  font-size: 29px;
 }
 .dispatch-card .dispatch-body {
-  color: #3e3425;
+  color: #f1e5ef;
+  font-size: 15px;
 }
-.dispatch-card .eyebrow,
-.dispatch-card .muted,
+.dispatch-card .eyebrow {
+  color: #ffd5a4;
+}
+.dispatch-card .muted {
+  color: #cdbecf;
+}
 .dispatch-card .btn.text {
-  color: #665333;
+  color: #ffcb9b;
 }
 .dispatch-card .panel-title {
-  border-bottom: 1px solid #b19b6d;
+  border-bottom: 1px solid #805869;
   padding-bottom: 10px;
 }
 .watchboard-grid .panel-title .eyebrow {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 .watchboard-grid .next-raid-card {
-  background: #30382b;
-  border-color: #78815b;
+  background: #1c2230;
+  border-color: #7784a2;
+  border-top: 2px solid #a6bce3;
+}
+.next-raid-card h2 {
+  font-size: 29px;
+  color: #e8edff;
+}
+.next-raid-card p {
+  color: #d7dcea;
+}
+.attendance-totals strong {
+  color: #f5e6cf;
 }
 .raid-hero {
   background:
-    repeating-linear-gradient(0deg, #ffffff03 0 1px, transparent 1px 3px),
-    linear-gradient(110deg, #64352e, #2e2d24);
-  border: 3px ridge #a9905b;
-  border-radius: 1px;
+    linear-gradient(90deg, #10121aee, #17121a75 50%, #17121a08),
+    url("/art/onslaught-warhost.jpg") 65% 19% / cover;
+  border: 1px solid #c28b89;
+  border-radius: 6px;
+  box-shadow:
+    inset 0 0 0 6px #14111b44,
+    0 10px 25px #0004;
+}
+.raid-hero h2 {
+  font-size: clamp(38px, 4vw, 56px);
+}
+.raid-hero p {
+  color: #f0dce7;
+}
+.raid-hero::before,
+.raid-hero::after {
+  display: none;
+}
+.raid-hero-bottom {
+  background: #12141bcc;
+  color: #ddd9e8;
+  border-color: #a37b8d;
 }
 .raid-workspace-tabs,
 .hub-tabs {
-  border-radius: 1px;
-  background: #25291f;
-  border-color: #655f46;
+  border-radius: 4px;
+  background: #191722;
+  border-color: #7a637e;
 }
 .raid-workspace-tabs button,
 .hub-tabs button {
-  border-radius: 1px;
-  color: #bfbba6;
+  color: #d4c7db;
+  border-radius: 3px;
+  font-size: 14px;
 }
 .raid-workspace-tabs button.active,
 .hub-tabs button.active {
-  background: #514b34;
-  color: #ffe0a0;
-  border-color: #b09a5c;
-  box-shadow: inset 1px 1px #766e4c;
+  background: #542139;
+  border-color: #cc718d;
+  color: #ffe5c6;
+  box-shadow: inset 0 1px #fff08;
 }
 .team-strip button,
 .team-tab {
-  border-radius: 2px;
+  border-radius: 4px;
 }
-.raid-group {
-  border-radius: 1px;
-  background: #252a21;
-  border: 2px groove #6e674b;
+.raid-group,
+.raid-group-grid > .raid-group {
+  border-radius: 4px;
+  background: #1a202c;
+  border: 1px solid #7b718d;
 }
 .raid-group header {
-  background: #3c4030;
-  border-bottom: 1px solid #6c7051;
+  background: #242a3a;
+  border-bottom: 1px solid #6e7290;
+  padding: 8px;
+  border-radius: 2px;
 }
 .raid-group header h3 {
-  color: #e4d5a1;
+  color: #f1e7ff;
 }
 .raid-slot,
 .lineup-player,
-.buff-card {
-  border-radius: 1px;
+.buff-card,
+.raid-person,
+.raid-empty-slot {
+  border-radius: 3px;
+  background: #121923;
+  border-color: #59697e;
 }
-.raid-slot {
-  background: #20251d;
-  border-color: #50583e;
+.raid-person-main strong {
+  font-size: 13px;
+}
+.raid-person-main small {
+  font-size: 11px;
 }
 .buff-map,
 .confirmed-bench,
 .availability-panel {
-  border-radius: 1px;
-  background: #292d23;
-  border-color: #65634b;
+  border-radius: 4px;
+  background: #1c202d;
+  border-color: #7c7896;
 }
 .buff-provider {
-  border-radius: 1px;
+  border-radius: 3px;
+}
+.buff-cell {
+  border-radius: 4px;
+  background: #161b27;
+  border-color: #697088;
+}
+.buff-cell strong {
+  color: #e8e9f5;
+  font-size: 12px;
+}
+.buff-cell small {
+  color: #bac3d8;
+  font-size: 11px;
+}
+.buff-cell.selected {
+  outline-color: #f0c48a;
+}
+.buff-cell.available {
+  background: #17352c;
+  border-color: #6ab69a;
+}
+.buff-cell.bench {
+  background: #352817;
+  border-left-color: #dfad64;
+}
+.group-destination {
+  background: #2c283c;
+  border-color: #9280a3;
+  border-radius: 3px;
 }
 .material-card {
-  background: #2d3026;
+  background: #201f2c;
 }
 .material-card-head,
 .request-card {
-  border-color: #655e45;
+  border-color: #77627b;
 }
+.item-search,
+.item-results,
 .item-picker-results {
-  background: #2c3024;
-  border-color: #8d805a;
-  border-radius: 1px;
+  background: #151923;
+  border-color: #817191;
+  border-radius: 4px;
+}
+.item-result.active,
+.item-selected {
+  background: #3c263d;
+  border-color: #bf85a7;
+  border-radius: 4px;
 }
 .recipient-grid button,
-.rank-option {
-  border-radius: 2px;
+.rank-option,
+.recipient-picker,
+.recipient-option {
+  border-radius: 4px;
 }
+.recipient-picker {
+  border-color: #857090;
+}
+.recipient-picker legend {
+  color: #f4d7ee;
+}
+.recipient-option {
+  background: #1c202b;
+  border-color: #69748a;
+}
+.recipient-option.selected {
+  background: #4d263c;
+  border-color: #dd8baa;
+}
+.recipient-option small,
+.recipient-picker > small {
+  color: #c7c9dc;
+}
+.guide-nav,
 .setup-guide-button {
-  border-radius: 1px;
-  border: 1px solid #857246;
-  background: #3e3d2c;
+  border-radius: 4px;
+  border: 1px solid #9e718d;
+  background: #332137;
+  color: #f6d7ec;
 }
-.guide-nav {
-  border-radius: 1px;
-  border: 1px solid #857246;
-  background: #3e3d2c;
-  color: #ebd29a;
+.guide-nav span,
+.guide-detail p {
+  color: #d4c6da;
 }
 .board-availability {
-  background: #30382a;
-  border: 1px solid #777c54;
-  border-left: 3px solid #b6a363;
-  border-radius: 1px;
+  background: transparent;
+  border: 0;
 }
 .board-rsvp,
 .availability-strip {
-  background: #30382a;
-  border-color: #777c54;
-  border-left-color: #b6a363;
-  border-radius: 1px;
-}
-.segmented {
-  background: #252b20;
-  border: 1px inset #70694a;
-  border-radius: 1px;
-}
-.segmented button {
-  border-radius: 0;
-}
-.segmented button.active {
-  background: #5a4e32;
-  color: #ffe0a0;
-}
-.dropdown-chevron {
-  background: #4d4b33;
-  color: #e7cc8a;
-  border-radius: 0;
-}
-.dropdown-option.is-active {
-  background: #504b36;
-  color: #ffdda0;
-}
-.buff-cell {
-  border-radius: 1px;
-  background: #22291d;
-  border-color: #585d40;
-}
-.buff-cell.selected {
-  outline-color: #dfbb69;
-}
-.buff-cell.available {
-  background: #293f29;
-  border-color: #7d9a5d;
-}
-.buff-cell.bench {
-  background: #3b3320;
-  border-left-color: #cfac59;
+  background: #242235;
+  border: 1px solid #8c759b;
+  border-left: 3px solid #ca8fbb;
+  border-radius: 4px;
 }
 .board-rsvp > span {
-  color: #c2c6a6;
+  color: #d4c4dd;
+}
+.segmented {
+  background: #171a24;
+  border: 1px solid #746780;
+  border-radius: 4px;
+}
+.segmented button {
+  border-radius: 3px;
+}
+.segmented button.active {
+  background: #76243d;
+  color: #ffe6cd;
 }
 .contributor-strip,
 .hub-connection-strip,
 .planner-event-picker,
 .guide-detail,
 .move-instructions {
-  background: #2a2f23;
-  border-color: #666448;
-  border-radius: 1px;
-}
-.guide-nav span,
-.guide-detail p {
-  color: #c4bea5;
+  background: #201d2c;
+  border-color: #816c8c;
+  border-radius: 4px;
 }
 .guide-steps button {
-  background: #24291f;
-  border-radius: 1px;
+  background: #181c29;
+  border-color: #776a8b;
+  border-radius: 4px;
 }
 .guide-steps button.active {
-  background: #4c4932;
-  border-color: #b39b5e;
-  color: #f1d69a;
-}
-.war-room-banner > .btn {
-  background: #553b2d;
-  border: 2px outset #ae925e;
-}
-.war-room-banner:after {
-  display: none;
-}
-.raid-group-grid > .raid-group {
-  background: #292f23;
-  border-color: #6d6f4d;
-}
-.raid-person,
-.raid-empty-slot {
-  background: #1f261b;
-  border-color: #565d40;
-  border-radius: 1px;
-}
-.group-destination {
-  background: #3c402d;
-  border-color: #76794d;
-  border-radius: 1px;
-}
-.item-search,
-.item-results {
-  background: #20271c;
-  border-color: #6e734b;
-  border-radius: 1px;
-}
-.item-result.active,
-.item-selected {
-  background: #404831;
-  border-color: #a19a61;
-  border-radius: 1px;
-}
-.recipient-picker {
-  border-color: #77704e;
-  border-radius: 1px;
-}
-.recipient-picker legend {
-  color: #d1c49c;
-}
-.recipient-option {
-  background: #292f22;
-  border-color: #616747;
-  border-radius: 1px;
-}
-.recipient-option.selected {
-  background: #4a4d31;
-  border-color: #c2ab69;
-}
-.recipient-option small,
-.recipient-picker > small {
-  color: #bdc2a6;
+  background: #542840;
+  border-color: #e59bab;
+  color: #ffe2c3;
 }
 .page-footer {
-  color: #a6a58e;
-  border-color: #5d583f;
+  color: #c0bbcf;
+  border-color: #61536f;
 }
 .toast {
-  border-radius: 1px;
-  background: #373b2b;
-  border: 2px outset #a28d58;
+  border-radius: 4px;
+  background: #282338;
+  border: 1px solid #ca96b0;
   bottom: 78px;
 }
+@media (max-width: 1200px) {
+  .brand strong {
+    font-size: 26px;
+  }
+  .brand img {
+    width: 36px;
+  }
+}
+@media (max-width: 700px) {
+  .page-heading h1 {
+    font-size: 34px;
+  }
+  .war-room-banner {
+    min-height: 300px;
+    padding: 24px;
+  }
+  .war-room-banner > div {
+    padding-right: 0;
+    max-width: 260px;
+  }
+  .war-room-banner h2 {
+    font-size: 36px;
+    max-width: 250px;
+  }
+  .war-room-banner > .guild-hall-art {
+    object-position: 72% 20%;
+  }
+  .war-room-banner:before {
+    background:
+      linear-gradient(90deg, #10111ae8, #15111b55 90%),
+      linear-gradient(0deg, #14121bd9, transparent);
+  }
+  .war-room-banner p {
+    max-width: 225px;
+    font-size: 14px;
+  }
+  .raid-hero h2 {
+    font-size: 39px;
+  }
+}
+@media (forced-colors: active) {
+  .brand strong,
+  .page-heading h1,
+  .war-room-banner h2,
+  .raid-hero h2 {
+    color: CanvasText;
+    background: none;
+    filter: none;
+  }
+}
+
 .chat-launcher {
   position: fixed;
   right: 24px;
@@ -605,16 +778,20 @@ textarea::placeholder {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 18px;
-  color: #ffe0a3;
-  background: linear-gradient(#733f33, #4d2d26);
-  border: 3px outset #b0935b;
-  border-radius: 2px;
-  box-shadow: 3px 3px #0d110c;
+  padding: 11px 17px;
+  color: #fff5ee;
+  background: linear-gradient(135deg, #a61934, #69152b);
+  border: 1px solid #ed6876;
+  border-radius: 4px;
+  box-shadow:
+    0 8px 30px #0008,
+    inset 0 1px #ffac8e33;
   font-weight: 700;
+  font-size: 14px;
 }
 .chat-launcher:hover {
-  background: #804d37;
+  background: #bd2944;
+  border-color: #ffb98c;
 }
 .chat-launcher b,
 .messenger-tabs b,
@@ -624,52 +801,55 @@ textarea::placeholder {
   min-width: 20px;
   height: 20px;
   padding: 0 4px;
-  background: #d0af67;
-  color: #272718;
-  border: 1px solid #ead394;
-  font-size: 10px;
+  background: #f2c98d;
+  color: #24151e;
+  border: 1px solid #ffe0ab;
+  font-size: 11px;
 }
 .guild-messenger {
   position: fixed;
   right: 24px;
   bottom: 80px;
-  width: 410px;
-  height: min(650px, calc(100dvh - 104px));
+  width: 395px;
+  height: min(610px, calc(100dvh - 104px));
   min-height: 300px;
   z-index: 36;
   display: flex;
   flex-direction: column;
-  background: #252b21;
-  color: #e3ddc8;
-  border: 3px ridge #a08b58;
-  border-radius: 2px;
-  box-shadow: 7px 7px #0a100bb8;
-  font-size: 12px;
+  background: #191b25;
+  color: #e9edf6;
+  border: 1px solid #9b7890;
+  border-radius: 4px;
+  box-shadow:
+    0 20px 70px #000b,
+    0 0 0 1px #0b0c11;
+  font-size: 14px;
+  overflow: hidden;
 }
 .messenger-title {
   display: flex;
   align-items: center;
   gap: 9px;
   min-height: 41px;
-  padding: 4px 10px;
-  background: linear-gradient(90deg, #733a2e, #45362a);
-  border-bottom: 2px ridge #a18b56;
-  color: #ffe0a6;
+  padding: 8px 13px;
+  background: linear-gradient(100deg, #7e1831, #261a2a);
+  border-bottom: 1px solid #c05f70;
+  color: #eef2ff;
 }
 .messenger-title strong {
-  font-family: "Marcellus", Georgia, serif;
-  font-size: 17px;
+  font-family: "Goodmountain", "Marcellus", Georgia, serif;
+  font-size: 23px;
   font-weight: 400;
 }
 .messenger-title .icon-btn {
   margin-left: auto;
-  color: #edcf91;
+  color: #f1e4ed;
 }
 .messenger-tabs {
   display: flex;
-  gap: 3px;
-  padding: 7px 7px 0;
-  background: #34392c;
+  gap: 7px;
+  padding: 10px 10px 0;
+  background: #14151e;
 }
 .messenger-tabs button {
   flex: 1;
@@ -677,36 +857,36 @@ textarea::placeholder {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  border: 1px solid #67684b;
-  border-bottom: 0;
-  background: #2a2f24;
-  color: #c0bfa8;
+  border: 1px solid #5e566e;
+  border-bottom: 1px solid #5e566e;
+  background: #20212d;
+  color: #d2d4e1;
   padding: 9px 4px;
-  font-size: 11px;
-  border-radius: 2px 2px 0 0;
+  font-size: 13px;
+  border-radius: 4px;
 }
 .messenger-tabs button.active {
-  background: #4a4b34;
-  border-color: #b4a064;
-  color: #ffdfa1;
+  background: #432033;
+  border-color: #d9798d;
+  color: #fff0dc;
 }
 .chat-conversation-heading {
   padding: 12px;
   display: flex;
   gap: 10px;
   align-items: center;
-  border-bottom: 1px solid #505a3d;
-  background: #303628;
+  border-bottom: 1px solid #4d485d;
+  background: #191b25;
 }
 .chat-conversation-heading strong {
   display: block;
-  font-size: 12px;
+  font-size: 14px;
   overflow-wrap: anywhere;
 }
 .chat-conversation-heading small {
   display: block;
-  color: #b1b6a1;
-  font-size: 10px;
+  color: #bcc3d4;
+  font-size: 12px;
   line-height: 1.5;
   margin-top: 3px;
 }
@@ -716,10 +896,8 @@ textarea::placeholder {
   overflow-y: auto;
   padding: 12px 15px;
   overscroll-behavior: contain;
-  scrollbar-color: #74734d #20261c;
-  background:
-    repeating-linear-gradient(0deg, #00000008 0 1px, transparent 1px 3px),
-    #20271d;
+  scrollbar-color: #72566d #10121b;
+  background: #10121b;
 }
 .chat-message {
   margin-bottom: 16px;
@@ -729,47 +907,49 @@ textarea::placeholder {
   align-items: baseline;
   gap: 8px;
   margin-bottom: 5px;
-  font-size: 10px;
+  font-size: 13px;
 }
 .chat-byline strong {
-  color: #dfbf71;
+  color: #ffd396;
   overflow-wrap: anywhere;
 }
 .chat-byline time {
-  color: #a7b198;
-  font-size: 9px;
+  color: #b1b9cb;
+  font-size: 11px;
   white-space: nowrap;
 }
 .chat-message.own .chat-byline strong {
-  color: #a9ca8c;
+  color: #9bdbff;
 }
 .chat-message p {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   margin: 0;
-  color: #e4e1cb;
+  color: #f1f2f8;
   line-height: 1.6;
+  font-size: 14px;
 }
 .chat-date {
   text-align: center;
-  color: #b8b99c;
-  font-size: 10px;
+  color: #c1c8d8;
+  font-size: 11px;
   margin: 10px 0 18px;
-  border-bottom: 1px solid #414d34;
+  border-bottom: 1px solid #45465a;
   padding-bottom: 7px;
 }
 .chat-compose {
   padding: 10px;
-  border-top: 2px ridge #72744d;
-  background: #33382a;
+  border-top: 1px solid #716174;
+  background: #21202c;
 }
 .chat-compose textarea {
   resize: none;
   width: 100%;
   min-height: 60px;
   padding: 9px;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.5;
+  background: #10121b;
 }
 .chat-compose > div {
   display: flex;
@@ -779,7 +959,7 @@ textarea::placeholder {
   margin-top: 7px;
 }
 .chat-compose small {
-  font-size: 9px;
+  font-size: 11px;
 }
 .chat-compose .btn {
   min-height: 32px;
@@ -788,9 +968,9 @@ textarea::placeholder {
 .chat-footnote {
   padding: 7px;
   text-align: center;
-  font-size: 9px;
-  color: #b3b99d;
-  background: #282e21;
+  font-size: 11px;
+  color: #b8bed0;
+  background: #181822;
 }
 .chat-empty {
   min-height: 160px;
@@ -800,27 +980,27 @@ textarea::placeholder {
   align-items: center;
   gap: 10px;
   text-align: center;
-  color: #b9c1a1;
+  color: #c1c8da;
   padding: 20px;
 }
 .chat-empty strong {
-  color: #dbc789;
-  font-family: "Marcellus", Georgia, serif;
-  font-size: 19px;
+  color: #f1dcaf;
+  font-family: "Goodmountain", "Marcellus", Georgia, serif;
+  font-size: 26px;
 }
 .chat-empty p {
   margin: 0;
   max-width: 260px;
-  font-size: 11px;
+  font-size: 13px;
 }
 .chat-history {
   display: block;
   margin: 0 auto 14px;
-  border: 1px solid #666e48;
-  background: #353e29;
-  color: #e0cf95;
+  border: 1px solid #786479;
+  background: #2b2637;
+  color: #f7d69d;
   padding: 6px 12px;
-  font-size: 10px;
+  font-size: 11px;
 }
 .chat-directory {
   flex: 1;
@@ -830,9 +1010,9 @@ textarea::placeholder {
   padding: 12px;
 }
 .chat-directory > p {
-  font-size: 11px;
+  font-size: 13px;
   margin: 10px 0;
-  color: #b3bba2;
+  color: #c2c9db;
 }
 .chat-search {
   display: flex;
@@ -856,11 +1036,11 @@ textarea::placeholder {
   padding: 12px 6px;
   background: transparent;
   border: 0;
-  border-bottom: 1px solid #4d563e;
-  color: #e4d5b1;
+  border-bottom: 1px solid #4c465c;
+  color: #eef2ff;
 }
 .chat-people button:hover {
-  background: #3b432e;
+  background: #312337;
 }
 .chat-people button > span:nth-child(2) {
   flex: 1;
@@ -872,7 +1052,7 @@ textarea::placeholder {
   display: block;
 }
 .chat-people small {
-  font-size: 10px;
+  font-size: 11px;
   margin-top: 4px;
 }
 .chat-avatar {
@@ -881,20 +1061,22 @@ textarea::placeholder {
   flex-shrink: 0;
   width: 34px;
   height: 36px;
-  border: 2px outset #9e9059;
-  background: #494b31;
-  color: #f1d389;
+  border: 1px solid #b48190;
+  background: linear-gradient(140deg, #702c46, #29283d);
+  color: #ffe2ab;
   font:
     21px Georgia,
     serif;
+  font-family: "Goodmountain", Georgia, serif;
+  font-size: 23px;
 }
 .chat-error {
-  background: #56362b;
-  color: #f3d6b5;
-  border-bottom: 1px solid #9a6d45;
+  background: #4a1d2b;
+  color: #ffdfd4;
+  border-bottom: 1px solid #c16677;
   padding: 10px;
   margin: 0;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.5;
 }
 @media (min-width: 1200px) {
@@ -908,20 +1090,6 @@ textarea::placeholder {
   }
   .topbar {
     height: 58px;
-  }
-  .page-heading h1 {
-    font-size: 26px;
-  }
-  .war-room-banner {
-    padding: 18px 14px;
-    gap: 13px;
-  }
-  .war-room-banner h2 {
-    font-size: 25px;
-  }
-  .war-room-banner img {
-    width: 48px;
-    height: 60px;
   }
   .chat-launcher {
     right: 12px;
@@ -938,7 +1106,7 @@ textarea::placeholder {
     font-size: 16px;
   }
   .chat-byline {
-    font-size: 11px;
+    font-size: 13px;
   }
   .chat-message p {
     font-size: 13px;

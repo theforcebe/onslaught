@@ -44,7 +44,14 @@ export function GuildBoard({
   return (
     <div className="guild-board">
       <div className="war-room-banner">
-        <img src={`${import.meta.env.BASE_URL}crest.svg`} alt="" />
+        <img
+          className="guild-hall-art"
+          src={`${import.meta.env.BASE_URL}art/onslaught-warhost.jpg`}
+          alt=""
+          width={1774}
+          height={887}
+          fetchPriority="high"
+        />
         <div>
           <span className="eyebrow">Ønslaught on WoW Forever</span>
           <h2>Welcome to the guild hall</h2>
