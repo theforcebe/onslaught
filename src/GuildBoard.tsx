@@ -46,9 +46,9 @@ export function GuildBoard({
       <div className="war-room-banner">
         <img src={`${import.meta.env.BASE_URL}crest.svg`} alt="" />
         <div>
-          <span className="eyebrow">ØNSLAUGHT · FOR THE HORDE</span>
-          <h2>The guild’s watchboard</h2>
-          <p>Raid readiness, guild dispatches, and the work we share.</p>
+          <span className="eyebrow">Ønslaught on WoW Forever</span>
+          <h2>Welcome to the guild hall</h2>
+          <p>Our raids. Our people. One home for the Horde.</p>
         </div>
         <button className="btn hero-secondary" onClick={() => go("community")}>
           <Megaphone size={16} />

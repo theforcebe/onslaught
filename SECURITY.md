@@ -61,3 +61,7 @@ Wowhead content is reduced to bounded plain text; no provider scripts or raw HTM
 ## Personal availability
 
 All active approved members can set availability for their own verified roster characters on public raid events, without private Attendance or Planner grants. Non-admin ownership is checked on the server; pending and suspended accounts cannot participate. A restricted projection includes only the viewer’s own responses, while other attendance, notes, lineups and character exports remain protected. An admin may record responses for other characters.
+
+## Guild chat
+
+Guild chat is stored in private D1 and excluded from public projections, GitHub guild snapshots, and Discord. Approved members can read General; private messages require the requesting member to be a participant, without an admin override. Sessions are checked on every request and membership is cached for at most 15 seconds, with invalidation after membership changes. Plain-text rendering, strict request schemas, nonce-based retry deduplication, bounded history queries, and per-member rate limits apply. This is application-level privacy, not end-to-end encryption; infrastructure operators can access D1. See [chat operations and retention](docs/CHAT.md).

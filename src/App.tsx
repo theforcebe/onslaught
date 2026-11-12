@@ -54,6 +54,9 @@ import { RaidPlanner } from "./RaidPlanner";
 const GuildHub = lazy(() =>
   import("./GuildHub").then((module) => ({ default: module.GuildHub })),
 );
+const GuildChat = lazy(() =>
+  import("./GuildChat").then((m) => ({ default: m.GuildChat })),
+);
 import {
   PUBLIC_ACCESS,
   ADMIN_ACCESS,
@@ -1608,6 +1611,15 @@ export default function App() {
             <X size={15} />
           </button>
         </div>
+      )}
+      {!demo && identity && effectiveAccess.status === "active" && (
+        <Suspense fallback={null}>
+          <GuildChat
+            key={identity.id}
+            identity={identity}
+            refresh={() => void refresh()}
+          />
+        </Suspense>
       )}
       {dialog && (
         <Dialogs

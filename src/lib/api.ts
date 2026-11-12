@@ -161,6 +161,42 @@ export const requestMembership = () => api("/api/join", {});
 export const saveMember = (member: Member, expectedRevision: number) =>
   api("/api/members", { member, expectedRevision, id: crypto.randomUUID() });
 
+export class ChatError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+  ) {
+    super(message);
+  }
+}
+export async function chatCall<T>(path: string, body?: unknown): Promise<T> {
+  const epoch = sessionEpoch,
+    token = session.token();
+  if (!token) throw new ChatError("Sign in to use guild chat.", 401);
+  const r = await fetch(`${API_URL}/api/chat/${path}`, {
+    method: body === undefined ? "GET" : "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    cache: "no-store",
+    signal: AbortSignal.timeout(15000),
+  });
+  const data = await r.json();
+  if (epoch !== sessionEpoch) throw new ChatError("Your session changed.", 401);
+  if (r.status === 401) {
+    session.clear();
+    sessionEpoch++;
+  }
+  if (!r.ok)
+    throw new ChatError(
+      data.error || "Chat could not connect. Try again.",
+      r.status,
+    );
+  return data;
+}
+
 export async function discordCall(path: string, body?: unknown) {
   const epoch = sessionEpoch,
     token = session.token();

@@ -14,6 +14,7 @@ import {
 import type { GuildDocument } from "../src/lib/access";
 import { ZodError } from "zod";
 import { handleDiscord } from "./discord";
+import { handleChat, invalidateChatMembers } from "./chat";
 import { serveItem, serveItemSearch, publicItemCache } from "./items";
 export interface Env {
   DB: D1Database;
@@ -325,6 +326,14 @@ async function route(req: Request, env: Env): Promise<Response> {
   if (req.method === "POST" && origin !== env.APP_ORIGIN)
     return json({ error: "Origin not allowed." }, 403);
   const ipHash = await digest(req.headers.get("CF-Connecting-IP") || "local");
+  const chatResponse = await handleChat(req, env, {
+    authenticated,
+    readRepository,
+    json,
+    boundedJSON,
+    limit,
+  });
+  if (chatResponse) return chatResponse;
   const discordResponse = await handleDiscord(req, env, {
     authenticated,
     readRepository,
@@ -502,6 +511,7 @@ async function route(req: Request, env: Env): Promise<Response> {
         current.sha,
         DocumentSchema.parse(doc),
       );
+      await invalidateChatMembers(env);
       return json(project(doc, identity));
     }
     return json(project(current.document, identity));
@@ -515,8 +525,10 @@ async function route(req: Request, env: Env): Promise<Response> {
       identity,
       await boundedJSON(req),
     );
-    if (next.state.revision !== current.document.state.revision)
+    if (next.state.revision !== current.document.state.revision) {
       await writeRepository(env, current.url, current.sha, next);
+      await invalidateChatMembers(env);
+    }
     return json(project(next, identity));
   }
   if (u.pathname === "/api/change" && req.method === "POST") {

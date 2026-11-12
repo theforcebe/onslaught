@@ -1,0 +1,960 @@
+/* The guild's old-web home: stone, brass, burgundy banners and inset game panels. */
+:root {
+  font-family: Tahoma, Verdana, sans-serif;
+  font-size: 13px;
+  color: #e9e0c8;
+  background: #1c1d19;
+  --bg: #1c1d19;
+  --panel: #2c2c25;
+  --raised: #38372d;
+  --line: #5a5543;
+  --muted: #b9b4a2;
+  --gold: #e4c174;
+  --bone: #ecdfbc;
+  --red: #c16552;
+  --red-dark: #783831;
+  --green: #9ac485;
+}
+body {
+  background-color: var(--bg);
+  background-image:
+    repeating-linear-gradient(0deg, #ffffff02 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(90deg, #00000010 0 1px, transparent 1px 4px);
+}
+h1,
+h2,
+.brand strong {
+  font-family: "Marcellus", Georgia, serif;
+  color: #e8ca85;
+  text-shadow: 1px 2px #11130e;
+}
+h1 {
+  letter-spacing: 0;
+}
+h3,
+h4 {
+  font-weight: 700;
+}
+p {
+  line-height: 1.6;
+}
+.eyebrow {
+  letter-spacing: 0.04em;
+  font-family: Tahoma, Verdana, sans-serif;
+  color: #cdbd92;
+}
+.sidebar {
+  background:
+    repeating-linear-gradient(0deg, #ffffff03 0 1px, transparent 1px 4px),
+    #2c2b24;
+  border-right: 3px ridge #807556;
+  box-shadow: 4px 0 0 #10130f;
+  padding-top: 24px;
+}
+.brand {
+  padding-bottom: 22px;
+}
+.brand img {
+  filter: sepia(0.25);
+  width: 44px;
+  height: 50px;
+}
+.brand strong {
+  font-size: 27px;
+}
+.brand span {
+  color: #b5aa8e;
+  font-size: 10px;
+}
+.guild-switch {
+  background: #1e211b;
+  border: 2px groove #776b4d;
+  border-radius: 0;
+  margin-bottom: 20px;
+  box-shadow: inset 0 0 12px #080b0855;
+}
+.guild-emblem {
+  background: #713c34;
+  border: 2px outset #ae8460;
+  border-radius: 0;
+}
+.guild-switch > svg {
+  display: none;
+}
+.sidebar nav {
+  gap: 7px;
+}
+.sidebar nav button,
+.settings-nav {
+  border-radius: 1px;
+  color: #d3cbb6;
+  border: 1px solid #5b5644;
+  background: linear-gradient(#3b3b31, #302f27);
+  box-shadow:
+    inset 1px 1px #ffffff09,
+    1px 1px #15170f;
+  font-size: 12px;
+  min-height: 42px;
+}
+.sidebar nav button:hover,
+.settings-nav:hover {
+  background: #4a4636;
+  color: #fff1c5;
+  border-color: #988459;
+}
+.sidebar nav button.active,
+.settings-nav.active {
+  color: #ffe2a0;
+  background: #21221b;
+  border: 1px solid #a88e57;
+  box-shadow: inset 2px 2px #10120c;
+}
+.sidebar nav button.active:before {
+  display: none;
+}
+.sidebar nav .guild-nav {
+  background: linear-gradient(#773e34, #5e302b);
+  border: 2px outset #a47754;
+  box-shadow: none;
+  color: #f2dfba;
+  margin: 9px 0;
+}
+.sidebar nav .guild-nav:hover,
+.sidebar nav .guild-nav.active {
+  background: #8a4938;
+}
+.sidebar nav .guild-nav svg {
+  color: #edc68a;
+}
+.sidebar nav button small {
+  border-radius: 0;
+  background: #21251e;
+  color: #e7d59e;
+  border: 1px inset #5a5a45;
+}
+.guild-note {
+  margin-top: 15px;
+  margin-bottom: 15px;
+  color: #b4aa8c;
+}
+.guild-note strong,
+.github-link {
+  color: #b8b09a;
+}
+.sidebar-user {
+  background: #20221b;
+  border-top: 2px ridge #776e50;
+}
+.topbar {
+  background: #2c2c24;
+  border-bottom: 3px ridge #756c50;
+  height: 62px;
+  box-shadow: 0 2px #10130d;
+}
+.breadcrumbs,
+.breadcrumbs strong {
+  color: #c5bea7;
+}
+.mode-button,
+.live-status {
+  color: #d7cfb5;
+}
+.mode-button {
+  border-radius: 0;
+  background: #21261c;
+  border: 1px inset #665e46;
+}
+main {
+  max-width: 1650px;
+  padding-bottom: 100px;
+}
+.page-heading {
+  padding-bottom: 18px;
+  border-bottom: 1px solid #645c42;
+  margin-bottom: 22px;
+}
+.page-heading h1 {
+  font-size: 30px;
+}
+.page-heading p {
+  color: #c2bba7;
+  font-size: 12px;
+}
+.btn {
+  border-radius: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  min-height: 37px;
+}
+.btn.primary,
+.btn.gold {
+  background: linear-gradient(#94503e, #74382f);
+  color: #fff1cf;
+  border: 2px outset #b68b5d;
+  box-shadow: 1px 2px #15150f;
+  text-shadow: 0 1px #381b16;
+}
+.btn.primary:hover,
+.btn.gold:hover {
+  background: linear-gradient(#a75d45, #854332);
+  border-color: #dfb47a;
+}
+.btn.primary:active,
+.btn.gold:active {
+  border-style: inset;
+}
+.btn.secondary,
+.btn.hero-secondary {
+  background: linear-gradient(#494638, #38372b);
+  border: 2px outset #8c8160;
+  color: #ecdfbd;
+  box-shadow: 1px 1px #11150d;
+}
+.btn.secondary:hover,
+.btn.hero-secondary:hover {
+  background: #58503b;
+  border-color: #b6a274;
+}
+.btn.text {
+  color: #e4c174;
+}
+.btn.bnet {
+  background: #26393d;
+  border: 2px outset #638183;
+  border-radius: 2px;
+}
+.icon-btn {
+  border-radius: 2px;
+}
+.panel,
+.raid-team-card,
+.team-settings,
+.access-member,
+.member-card,
+.material-card,
+.hub-poll,
+.hub-announcement {
+  border: 2px ridge #776d50;
+  border-radius: 2px;
+  background: var(--panel);
+  box-shadow: 2px 3px #10130d70;
+}
+.panel-title {
+  border-bottom-color: #5e5842;
+}
+.badge,
+.tag,
+.pill {
+  border-radius: 2px;
+}
+.badge {
+  background: #32362a;
+  border-color: #6b694c;
+  color: #d8d0b6;
+}
+input:not([type="checkbox"]):not([type="radio"]),
+textarea,
+select,
+.dropdown-trigger {
+  border-radius: 1px;
+  background: #1d231c;
+  color: #ece4cc;
+  border: 2px inset #6c654e;
+  box-shadow: inset 1px 1px #11180c;
+}
+input::placeholder,
+textarea::placeholder {
+  color: #9d9f8b;
+}
+.dropdown-menu {
+  border-radius: 1px;
+  border: 2px outset #8e805d;
+  background: #303328;
+  box-shadow: 4px 5px #10120bd9;
+}
+.dropdown-option {
+  border-radius: 0;
+}
+.dropdown-option:hover,
+.dropdown-option.highlighted,
+.dropdown-option[aria-selected="true"] {
+  background: #504b36;
+  color: #ffdda0;
+}
+.modal {
+  border: 3px ridge #a18b59;
+  border-radius: 2px;
+  background: #2d2e25;
+  box-shadow: 8px 10px #090d0799;
+}
+.modal h2 {
+  color: #efd397;
+}
+.modal::backdrop {
+  background: #080b07ba;
+  backdrop-filter: none;
+}
+.modal-head,
+.modal-footer {
+  background: #343329;
+  border-color: #6e6348;
+}
+.notice {
+  border-radius: 2px;
+}
+.war-room-banner {
+  background:
+    repeating-linear-gradient(0deg, #ffffff03 0 1px, transparent 1px 3px),
+    linear-gradient(90deg, #5e302c, #392b24);
+  border: 3px ridge #b59b64;
+  border-radius: 1px;
+  padding: 24px;
+  box-shadow:
+    inset 0 0 0 3px #251b14,
+    3px 4px #0c110b;
+  position: relative;
+}
+.war-room-banner img {
+  filter: sepia(0.3);
+  width: 74px;
+  height: 84px;
+}
+.war-room-banner h2 {
+  font-size: 31px;
+  color: #f2d99d;
+  margin-bottom: 8px;
+}
+.war-room-banner p {
+  color: #d3bea1;
+  font-size: 12px;
+}
+.war-room-banner .eyebrow {
+  color: #cfb891;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+}
+.watchboard-grid {
+  gap: 18px;
+}
+.dispatch-card {
+  background: #d9c99e;
+  color: #342c20;
+  border-color: #b49b65;
+  box-shadow:
+    inset 0 0 25px #7c5d2422,
+    2px 3px #10130d70;
+}
+.dispatch-card h2,
+.dispatch-card h3 {
+  color: #6d3228;
+  text-shadow: none;
+}
+.dispatch-card .dispatch-body {
+  color: #3e3425;
+}
+.dispatch-card .eyebrow,
+.dispatch-card .muted,
+.dispatch-card .btn.text {
+  color: #665333;
+}
+.dispatch-card .panel-title {
+  border-bottom: 1px solid #b19b6d;
+  padding-bottom: 10px;
+}
+.watchboard-grid .panel-title .eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+.watchboard-grid .next-raid-card {
+  background: #30382b;
+  border-color: #78815b;
+}
+.raid-hero {
+  background:
+    repeating-linear-gradient(0deg, #ffffff03 0 1px, transparent 1px 3px),
+    linear-gradient(110deg, #64352e, #2e2d24);
+  border: 3px ridge #a9905b;
+  border-radius: 1px;
+}
+.raid-workspace-tabs,
+.hub-tabs {
+  border-radius: 1px;
+  background: #25291f;
+  border-color: #655f46;
+}
+.raid-workspace-tabs button,
+.hub-tabs button {
+  border-radius: 1px;
+  color: #bfbba6;
+}
+.raid-workspace-tabs button.active,
+.hub-tabs button.active {
+  background: #514b34;
+  color: #ffe0a0;
+  border-color: #b09a5c;
+  box-shadow: inset 1px 1px #766e4c;
+}
+.team-strip button,
+.team-tab {
+  border-radius: 2px;
+}
+.raid-group {
+  border-radius: 1px;
+  background: #252a21;
+  border: 2px groove #6e674b;
+}
+.raid-group header {
+  background: #3c4030;
+  border-bottom: 1px solid #6c7051;
+}
+.raid-group header h3 {
+  color: #e4d5a1;
+}
+.raid-slot,
+.lineup-player,
+.buff-card {
+  border-radius: 1px;
+}
+.raid-slot {
+  background: #20251d;
+  border-color: #50583e;
+}
+.buff-map,
+.confirmed-bench,
+.availability-panel {
+  border-radius: 1px;
+  background: #292d23;
+  border-color: #65634b;
+}
+.buff-provider {
+  border-radius: 1px;
+}
+.material-card {
+  background: #2d3026;
+}
+.material-card-head,
+.request-card {
+  border-color: #655e45;
+}
+.item-picker-results {
+  background: #2c3024;
+  border-color: #8d805a;
+  border-radius: 1px;
+}
+.recipient-grid button,
+.rank-option {
+  border-radius: 2px;
+}
+.setup-guide-button {
+  border-radius: 1px;
+  border: 1px solid #857246;
+  background: #3e3d2c;
+}
+.guide-nav {
+  border-radius: 1px;
+  border: 1px solid #857246;
+  background: #3e3d2c;
+  color: #ebd29a;
+}
+.board-availability {
+  background: #30382a;
+  border: 1px solid #777c54;
+  border-left: 3px solid #b6a363;
+  border-radius: 1px;
+}
+.board-rsvp,
+.availability-strip {
+  background: #30382a;
+  border-color: #777c54;
+  border-left-color: #b6a363;
+  border-radius: 1px;
+}
+.segmented {
+  background: #252b20;
+  border: 1px inset #70694a;
+  border-radius: 1px;
+}
+.segmented button {
+  border-radius: 0;
+}
+.segmented button.active {
+  background: #5a4e32;
+  color: #ffe0a0;
+}
+.dropdown-chevron {
+  background: #4d4b33;
+  color: #e7cc8a;
+  border-radius: 0;
+}
+.dropdown-option.is-active {
+  background: #504b36;
+  color: #ffdda0;
+}
+.buff-cell {
+  border-radius: 1px;
+  background: #22291d;
+  border-color: #585d40;
+}
+.buff-cell.selected {
+  outline-color: #dfbb69;
+}
+.buff-cell.available {
+  background: #293f29;
+  border-color: #7d9a5d;
+}
+.buff-cell.bench {
+  background: #3b3320;
+  border-left-color: #cfac59;
+}
+.board-rsvp > span {
+  color: #c2c6a6;
+}
+.contributor-strip,
+.hub-connection-strip,
+.planner-event-picker,
+.guide-detail,
+.move-instructions {
+  background: #2a2f23;
+  border-color: #666448;
+  border-radius: 1px;
+}
+.guide-nav span,
+.guide-detail p {
+  color: #c4bea5;
+}
+.guide-steps button {
+  background: #24291f;
+  border-radius: 1px;
+}
+.guide-steps button.active {
+  background: #4c4932;
+  border-color: #b39b5e;
+  color: #f1d69a;
+}
+.war-room-banner > .btn {
+  background: #553b2d;
+  border: 2px outset #ae925e;
+}
+.war-room-banner:after {
+  display: none;
+}
+.raid-group-grid > .raid-group {
+  background: #292f23;
+  border-color: #6d6f4d;
+}
+.raid-person,
+.raid-empty-slot {
+  background: #1f261b;
+  border-color: #565d40;
+  border-radius: 1px;
+}
+.group-destination {
+  background: #3c402d;
+  border-color: #76794d;
+  border-radius: 1px;
+}
+.item-search,
+.item-results {
+  background: #20271c;
+  border-color: #6e734b;
+  border-radius: 1px;
+}
+.item-result.active,
+.item-selected {
+  background: #404831;
+  border-color: #a19a61;
+  border-radius: 1px;
+}
+.recipient-picker {
+  border-color: #77704e;
+  border-radius: 1px;
+}
+.recipient-picker legend {
+  color: #d1c49c;
+}
+.recipient-option {
+  background: #292f22;
+  border-color: #616747;
+  border-radius: 1px;
+}
+.recipient-option.selected {
+  background: #4a4d31;
+  border-color: #c2ab69;
+}
+.recipient-option small,
+.recipient-picker > small {
+  color: #bdc2a6;
+}
+.page-footer {
+  color: #a6a58e;
+  border-color: #5d583f;
+}
+.toast {
+  border-radius: 1px;
+  background: #373b2b;
+  border: 2px outset #a28d58;
+  bottom: 78px;
+}
+.chat-launcher {
+  position: fixed;
+  right: 24px;
+  bottom: 18px;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  color: #ffe0a3;
+  background: linear-gradient(#733f33, #4d2d26);
+  border: 3px outset #b0935b;
+  border-radius: 2px;
+  box-shadow: 3px 3px #0d110c;
+  font-weight: 700;
+}
+.chat-launcher:hover {
+  background: #804d37;
+}
+.chat-launcher b,
+.messenger-tabs b,
+.chat-people b {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  background: #d0af67;
+  color: #272718;
+  border: 1px solid #ead394;
+  font-size: 10px;
+}
+.guild-messenger {
+  position: fixed;
+  right: 24px;
+  bottom: 80px;
+  width: 410px;
+  height: min(650px, calc(100dvh - 104px));
+  min-height: 300px;
+  z-index: 36;
+  display: flex;
+  flex-direction: column;
+  background: #252b21;
+  color: #e3ddc8;
+  border: 3px ridge #a08b58;
+  border-radius: 2px;
+  box-shadow: 7px 7px #0a100bb8;
+  font-size: 12px;
+}
+.messenger-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 41px;
+  padding: 4px 10px;
+  background: linear-gradient(90deg, #733a2e, #45362a);
+  border-bottom: 2px ridge #a18b56;
+  color: #ffe0a6;
+}
+.messenger-title strong {
+  font-family: "Marcellus", Georgia, serif;
+  font-size: 17px;
+  font-weight: 400;
+}
+.messenger-title .icon-btn {
+  margin-left: auto;
+  color: #edcf91;
+}
+.messenger-tabs {
+  display: flex;
+  gap: 3px;
+  padding: 7px 7px 0;
+  background: #34392c;
+}
+.messenger-tabs button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #67684b;
+  border-bottom: 0;
+  background: #2a2f24;
+  color: #c0bfa8;
+  padding: 9px 4px;
+  font-size: 11px;
+  border-radius: 2px 2px 0 0;
+}
+.messenger-tabs button.active {
+  background: #4a4b34;
+  border-color: #b4a064;
+  color: #ffdfa1;
+}
+.chat-conversation-heading {
+  padding: 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  border-bottom: 1px solid #505a3d;
+  background: #303628;
+}
+.chat-conversation-heading strong {
+  display: block;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.chat-conversation-heading small {
+  display: block;
+  color: #b1b6a1;
+  font-size: 10px;
+  line-height: 1.5;
+  margin-top: 3px;
+}
+.chat-log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 15px;
+  overscroll-behavior: contain;
+  scrollbar-color: #74734d #20261c;
+  background:
+    repeating-linear-gradient(0deg, #00000008 0 1px, transparent 1px 3px),
+    #20271d;
+}
+.chat-message {
+  margin-bottom: 16px;
+}
+.chat-byline {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 5px;
+  font-size: 10px;
+}
+.chat-byline strong {
+  color: #dfbf71;
+  overflow-wrap: anywhere;
+}
+.chat-byline time {
+  color: #a7b198;
+  font-size: 9px;
+  white-space: nowrap;
+}
+.chat-message.own .chat-byline strong {
+  color: #a9ca8c;
+}
+.chat-message p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: #e4e1cb;
+  line-height: 1.6;
+}
+.chat-date {
+  text-align: center;
+  color: #b8b99c;
+  font-size: 10px;
+  margin: 10px 0 18px;
+  border-bottom: 1px solid #414d34;
+  padding-bottom: 7px;
+}
+.chat-compose {
+  padding: 10px;
+  border-top: 2px ridge #72744d;
+  background: #33382a;
+}
+.chat-compose textarea {
+  resize: none;
+  width: 100%;
+  min-height: 60px;
+  padding: 9px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.chat-compose > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+  margin-top: 7px;
+}
+.chat-compose small {
+  font-size: 9px;
+}
+.chat-compose .btn {
+  min-height: 32px;
+  padding: 5px 10px;
+}
+.chat-footnote {
+  padding: 7px;
+  text-align: center;
+  font-size: 9px;
+  color: #b3b99d;
+  background: #282e21;
+}
+.chat-empty {
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  color: #b9c1a1;
+  padding: 20px;
+}
+.chat-empty strong {
+  color: #dbc789;
+  font-family: "Marcellus", Georgia, serif;
+  font-size: 19px;
+}
+.chat-empty p {
+  margin: 0;
+  max-width: 260px;
+  font-size: 11px;
+}
+.chat-history {
+  display: block;
+  margin: 0 auto 14px;
+  border: 1px solid #666e48;
+  background: #353e29;
+  color: #e0cf95;
+  padding: 6px 12px;
+  font-size: 10px;
+}
+.chat-directory {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+}
+.chat-directory > p {
+  font-size: 11px;
+  margin: 10px 0;
+  color: #b3bba2;
+}
+.chat-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chat-search input {
+  width: 100%;
+  min-width: 0;
+  padding: 9px;
+}
+.chat-people {
+  overflow-y: auto;
+}
+.chat-people button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 6px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #4d563e;
+  color: #e4d5b1;
+}
+.chat-people button:hover {
+  background: #3b432e;
+}
+.chat-people button > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.chat-people strong,
+.chat-people small {
+  display: block;
+}
+.chat-people small {
+  font-size: 10px;
+  margin-top: 4px;
+}
+.chat-avatar {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 36px;
+  border: 2px outset #9e9059;
+  background: #494b31;
+  color: #f1d389;
+  font:
+    21px Georgia,
+    serif;
+}
+.chat-error {
+  background: #56362b;
+  color: #f3d6b5;
+  border-bottom: 1px solid #9a6d45;
+  padding: 10px;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+@media (min-width: 1200px) {
+  .main-shell {
+    padding-right: 10px;
+  }
+}
+@media (max-width: 700px) {
+  :root {
+    font-size: 14px;
+  }
+  .topbar {
+    height: 58px;
+  }
+  .page-heading h1 {
+    font-size: 26px;
+  }
+  .war-room-banner {
+    padding: 18px 14px;
+    gap: 13px;
+  }
+  .war-room-banner h2 {
+    font-size: 25px;
+  }
+  .war-room-banner img {
+    width: 48px;
+    height: 60px;
+  }
+  .chat-launcher {
+    right: 12px;
+    bottom: 12px;
+    padding: 10px 13px;
+  }
+  .guild-messenger {
+    right: 8px;
+    bottom: 72px;
+    width: calc(100% - 16px);
+    height: min(650px, calc(100dvh - 88px));
+  }
+  .chat-compose textarea {
+    font-size: 16px;
+  }
+  .chat-byline {
+    font-size: 11px;
+  }
+  .chat-message p {
+    font-size: 13px;
+  }
+  .chat-search input {
+    font-size: 16px;
+  }
+  .chat-compose small {
+    max-width: 185px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}
