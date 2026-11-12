@@ -139,8 +139,8 @@ const titles: Record<string, [string, string]> = {
     "Guild identity, permissions, data, and connections.",
   ],
   access: [
-    "The right access. For every member.",
-    "Public roster and schedule. Private coordination, controlled by you.",
+    "Members & access",
+    "Review your guild. Choose a member to manage their rank and permissions.",
   ],
 };
 const safeURL = (url: string) => (/^https:\/\//i.test(url) ? url : undefined);
@@ -1189,6 +1189,7 @@ export default function App() {
             }
           } catch (e) {
             toast((e as Error).message);
+            throw e;
           }
         }}
         join={async () => {

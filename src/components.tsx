@@ -90,11 +90,13 @@ export function Modal({
   children,
   onClose,
   wide = false,
+  className = "",
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
   wide?: boolean;
+  className?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -104,8 +106,12 @@ export function Modal({
   return (
     <dialog
       ref={ref}
-      className={wide ? "modal wide" : "modal"}
-      onCancel={onClose}
+      className={`${wide ? "modal wide" : "modal"} ${className}`}
+      aria-label={title}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
