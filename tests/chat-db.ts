@@ -6,6 +6,8 @@ export function chatDatabase() {
   sqlite.exec(readFileSync("server/schema.sql", "utf8"));
   sqlite.exec(readFileSync("server/chat-schema.sql", "utf8"));
   sqlite.exec(readFileSync("server/chat-mentions.sql", "utf8"));
+  sqlite.exec(readFileSync("server/discord-schema.sql", "utf8"));
+  sqlite.exec(readFileSync("server/chat-notifications.sql", "utf8"));
   const db = {
     async batch(statements: { run: () => Promise<unknown> }[]) {
       sqlite.exec("BEGIN");

@@ -290,7 +290,7 @@ describe("lineup privacy", () => {
     expect(project(d).state.characters[0].buffs).toBeUndefined();
     expect(project(d).state.events[0].lineup).toBeUndefined();
   });
-  it("gates lineup audit history by planner as well as attendance", () => {
+  it("keeps lineup audit history admin-only even with legacy activity and planning grants", () => {
     const d = fixture(),
       a = assign("raider-0", 1);
     d.state.audit = [
@@ -306,6 +306,7 @@ describe("lineup privacy", () => {
     d.members[0].sections = ["attendance", "activity"];
     expect(project(d, member).state.audit).toEqual([]);
     d.members[0].sections.push("planner");
-    expect(project(d, member).state.audit).toHaveLength(1);
+    expect(project(d, member).state.audit).toEqual([]);
+    expect(project(d, { ...member, admin: true }).state.audit).toHaveLength(1);
   });
 });

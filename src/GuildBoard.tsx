@@ -69,41 +69,43 @@ export function GuildBoard({
         </p>
       )}
       <div className="watchboard-grid">
-        <section className="panel dispatch-card">
-          <div className="panel-title">
-            <span className="eyebrow">
-              <Megaphone size={16} />
-              LATEST DISPATCH
-            </span>
-            <button className="btn text" onClick={() => go("community")}>
-              View board
-              <ArrowUpRight size={14} />
-            </button>
-          </div>
-          {announcement ? (
-            <>
-              <h2>{announcement.title}</h2>
-              <p className="dispatch-body">{announcement.body}</p>
-              <small className="muted">
-                {announcement.createdByName} ·{" "}
-                {new Date(announcement.createdAt).toLocaleString()}
-              </small>
-            </>
-          ) : (
-            <>
-              <h3>
-                {hasSection(access, "community")
-                  ? "No announcements yet"
-                  : "Guild announcements"}
-              </h3>
-              <p className="muted">
-                {hasSection(access, "community")
-                  ? "The latest message from your guild leadership will appear here."
-                  : "Your admin can grant access to the guild board."}
-              </p>
-            </>
-          )}
-        </section>
+        {hasSection(access, "community") && (
+          <section className="panel dispatch-card">
+            <div className="panel-title">
+              <span className="eyebrow">
+                <Megaphone size={16} />
+                LATEST DISPATCH
+              </span>
+              <button className="btn text" onClick={() => go("community")}>
+                View board
+                <ArrowUpRight size={14} />
+              </button>
+            </div>
+            {announcement ? (
+              <>
+                <h2>{announcement.title}</h2>
+                <p className="dispatch-body">{announcement.body}</p>
+                <small className="muted">
+                  {announcement.createdByName} ·{" "}
+                  {new Date(announcement.createdAt).toLocaleString()}
+                </small>
+              </>
+            ) : (
+              <>
+                <h3>
+                  {hasSection(access, "community")
+                    ? "No announcements yet"
+                    : "Guild announcements"}
+                </h3>
+                <p className="muted">
+                  {hasSection(access, "community")
+                    ? "The latest message from your guild leadership will appear here."
+                    : "Your admin can grant access to the guild board."}
+                </p>
+              </>
+            )}
+          </section>
+        )}
         <section className="panel next-raid-card">
           <div className="panel-title">
             <span className="eyebrow">
@@ -233,36 +235,38 @@ export function GuildBoard({
             Updates refresh automatically while this page is open.
           </small>
         </section>
-        <section className="poll-preview">
-          <div className="panel-title">
-            <h3>Latest scheduling poll</h3>
-            <button className="btn text" onClick={() => go("polls")}>
-              All polls
-              <ArrowUpRight size={14} />
-            </button>
-          </div>
-          {poll ? (
-            <PollCard
-              summary
-              poll={poll}
-              actorId={demo ? "demo-admin" : identity?.id || ""}
-              lead={false}
-              connected={true}
-              demo={demo}
-              change={change}
-              send={() => go("polls")}
-              onError={setError}
-            />
-          ) : (
-            <div className="panel">
-              <p className="muted">
-                {hasSection(access, "attendance")
-                  ? "Raid-night polls and their results will appear here."
-                  : "Your admin can grant access to scheduling polls."}
-              </p>
+        {hasSection(access, "attendance") && (
+          <section className="poll-preview">
+            <div className="panel-title">
+              <h3>Latest scheduling poll</h3>
+              <button className="btn text" onClick={() => go("polls")}>
+                All polls
+                <ArrowUpRight size={14} />
+              </button>
             </div>
-          )}
-        </section>
+            {poll ? (
+              <PollCard
+                summary
+                poll={poll}
+                actorId={demo ? "demo-admin" : identity?.id || ""}
+                lead={false}
+                connected={true}
+                demo={demo}
+                change={change}
+                send={() => go("polls")}
+                onError={setError}
+              />
+            ) : (
+              <div className="panel">
+                <p className="muted">
+                  {hasSection(access, "attendance")
+                    ? "Raid-night polls and their results will appear here."
+                    : "Your admin can grant access to scheduling polls."}
+                </p>
+              </div>
+            )}
+          </section>
+        )}
       </div>
       <section className="contributor-strip">
         <span>

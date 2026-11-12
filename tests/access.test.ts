@@ -6,6 +6,8 @@ import {
   accessFor,
   SECTIONS,
   DocumentSchema,
+  hasSection,
+  ASSIGNABLE_SECTIONS,
 } from "../src/lib/access";
 import { applyChange } from "../src/lib/reducer";
 import { privateFixture } from "./access-fixture";
@@ -21,6 +23,32 @@ const owner = {
   admin: true,
 };
 describe("section and team privacy", () => {
+  it.each(["officer", "raider", "guild_member"] as const)(
+    "keeps Activity admin-only even when a %s has a legacy activity grant and every team",
+    (role) => {
+      const doc = privateFixture();
+      doc.members[0] = {
+        ...doc.members[0],
+        role,
+        allTeams: true,
+        sections: [...SECTIONS],
+      };
+      const view = project(doc, member);
+      expect(view.access.sections).not.toContain("activity");
+      expect(view.state.audit).toEqual([]);
+      expect(
+        hasSection({ ...view.access, sections: [...SECTIONS] }, "activity"),
+      ).toBe(false);
+      expect(project(doc, owner).state.audit).toEqual(doc.state.audit);
+      expect(ASSIGNABLE_SECTIONS).not.toContain("activity");
+      const next = updateMember(doc, owner, {
+        id: "clean-legacy-grants",
+        expectedRevision: 0,
+        member: doc.members[0],
+      });
+      expect(next.members[0].sections).not.toContain("activity");
+    },
+  );
   it("migrates the original member role to Raider without broadening its grants", () => {
     const before = privateFixture();
     const legacy = {
@@ -180,7 +208,7 @@ describe("section and team privacy", () => {
       if (section !== "loot") expect(v.state.loot).toEqual([]);
       if (section !== "consumables") expect(v.state.supplies).toEqual([]);
       if (section !== "progress") expect(v.state.bosses).toEqual([]);
-      // Activity requires access to the source section as well.
+      // Activity remains admin-only regardless of section grants.
       expect(v.state.audit).toEqual([]);
     },
   );

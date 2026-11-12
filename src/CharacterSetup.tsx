@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, Upload } from "lucide-react";
 import { ClassIcon, Field, RoleIcon } from "./components";
 import {
@@ -211,6 +211,10 @@ export function CharacterImport({
     buffs: [],
   });
   const [step, setStep] = useState(0);
+  const setup = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    setup.current?.closest("dialog")?.scrollTo({ top: 0 });
+  }, [step]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const proceed = () => {
@@ -252,7 +256,7 @@ export function CharacterImport({
     }
   };
   return (
-    <div className="character-setup">
+    <div className="character-setup" ref={setup}>
       <ol className="setup-steps" aria-label="Import progress">
         {["Export", "Role & spec", "Buffs", "Review"].map((name, i) => (
           <li
@@ -301,15 +305,17 @@ export function CharacterImport({
                 }}
               />
             </label>
-            <button
-              className="btn text"
-              onClick={() => {
-                setRaw(EXAMPLE_EXPORT);
-                setError("");
-              }}
-            >
-              Load fictional example
-            </button>
+            {demo && (
+              <button
+                className="btn text"
+                onClick={() => {
+                  setRaw(EXAMPLE_EXPORT);
+                  setError("");
+                }}
+              >
+                Load fictional example
+              </button>
+            )}
           </div>
           <Field label="Character export">
             <textarea

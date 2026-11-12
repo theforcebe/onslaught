@@ -419,6 +419,11 @@ export async function handleDiscord(
       if (existing && existing.member_id !== saved.memberId)
         return linkPage(false);
       await env.DB.prepare(
+        "DELETE FROM chat_discord_preferences WHERE member_id=?",
+      )
+        .bind(saved.memberId)
+        .run();
+      await env.DB.prepare(
         "INSERT INTO discord_links (member_id,discord_id,display_name,dm_opt_in) VALUES (?,?,?,0) ON CONFLICT(member_id) DO UPDATE SET discord_id=excluded.discord_id,display_name=excluded.display_name,dm_opt_in=0",
       )
         .bind(
@@ -540,6 +545,11 @@ export async function handleDiscord(
     return d.json({ ok: true });
   }
   if (u.pathname === "/api/discord/unlink" && req.method === "POST") {
+    await env.DB.prepare(
+      "DELETE FROM chat_discord_preferences WHERE member_id=?",
+    )
+      .bind(identity.id)
+      .run();
     await env.DB.prepare("DELETE FROM discord_links WHERE member_id=?")
       .bind(identity.id)
       .run();

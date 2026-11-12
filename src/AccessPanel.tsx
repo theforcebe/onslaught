@@ -9,7 +9,12 @@ import {
   Search,
 } from "lucide-react";
 import { Empty } from "./components";
-import { SECTIONS, SECTION_NAMES, RANKS, RANK_NAMES } from "./lib/access";
+import {
+  ASSIGNABLE_SECTIONS,
+  SECTION_NAMES,
+  RANKS,
+  RANK_NAMES,
+} from "./lib/access";
 import type { Access, Member, Rank, Section } from "./lib/access";
 import type { Identity, RaidState } from "./lib/model";
 
@@ -32,7 +37,7 @@ const sectionDetails: Record<Section, string> = {
   consumables: "Supplies and personal pledges",
   attendance: "Raid notes and personal RSVPs",
   progress: "Encounters and strategy",
-  activity: "History for permitted records",
+  activity: "Admin-only guild history",
   community: "Announcements and focused conversations",
 };
 
@@ -48,6 +53,9 @@ function MemberCard({
   const [draft, setDraft] = useState(member);
   const [saving, setSaving] = useState(false);
   const dirty = JSON.stringify(draft) !== JSON.stringify(member);
+  const assignedCount = draft.sections.filter(
+    (section) => section !== "activity",
+  ).length;
   const RankIcon = rankIcons[member.role];
   const toggleSection = (section: Section) =>
     setDraft((m) => ({
@@ -157,11 +165,11 @@ function MemberCard({
               <legend>
                 Private sections{" "}
                 <span>
-                  {draft.sections.length} of {SECTIONS.length}
+                  {assignedCount} of {ASSIGNABLE_SECTIONS.length}
                 </span>
               </legend>
               <div className="permission-options">
-                {SECTIONS.map((section) => (
+                {ASSIGNABLE_SECTIONS.map((section) => (
                   <label key={section} className="permission-option">
                     <input
                       type="checkbox"
@@ -236,8 +244,8 @@ function MemberCard({
             <p className="access-help">
               <LockKeyhole size={14} />
               These choices apply to this person. Section access allows viewing
-              and personal contributions. Structure, awards, and membership
-              remain admin-only.
+              and personal contributions. Structure, awards, membership, and
+              Activity history remain admin-only.
             </p>
           </>
         )}
@@ -253,7 +261,7 @@ function MemberCard({
             ) : draft.role === "admin" ? (
               "All sections · All teams"
             ) : (
-              `${draft.sections.length} private section${draft.sections.length === 1 ? "" : "s"} · ${draft.allTeams ? "All teams" : `${draft.teamIds.length} selected team${draft.teamIds.length === 1 ? "" : "s"}`}`
+              `${assignedCount} private section${assignedCount === 1 ? "" : "s"} · ${draft.allTeams ? "All teams" : `${draft.teamIds.length} selected team${draft.teamIds.length === 1 ? "" : "s"}`}`
             )}
           </p>
           {dirty && <span className="unsaved-label">Unsaved changes</span>}
@@ -335,7 +343,7 @@ export function AccessPanel({
           )}
         </section>
       )}
-      {identity?.accountId && (
+      {access.admin && identity?.accountId && (
         <details className="panel owner-reference">
           <summary>Owner setup reference</summary>
           <p className="muted">

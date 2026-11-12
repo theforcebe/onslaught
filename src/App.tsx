@@ -51,6 +51,7 @@ import Dialogs from "./dialogs";
 import { AccessPanel } from "./AccessPanel";
 import { Dropdown } from "./Dropdown";
 import { RaidPlanner } from "./RaidPlanner";
+import { canOpenPage } from "./lib/navigation";
 const GuildHub = lazy(() =>
   import("./GuildHub").then((module) => ({ default: module.GuildHub })),
 );
@@ -1283,19 +1284,18 @@ export default function App() {
       </div>
     </>
   );
-  const pageSection: Record<string, Section> = {
-    polls: "attendance",
-    loot: "loot",
-    consumables: "consumables",
-    progress: "progress",
-    activity: "activity",
-  };
-  const pageAllowed = (id: string) =>
-    id === "community"
-      ? effectiveAccess.status === "active"
-      : id === "settings"
-        ? effectiveAccess.admin
-        : !pageSection[id] || hasSection(effectiveAccess, pageSection[id]);
+  const pageAllowed = (id: string) => canOpenPage(effectiveAccess, id);
+  const navigationName = (id: string) =>
+    id === "access" && !effectiveAccess.admin
+      ? "Your membership"
+      : nav.find((n) => n.id === id)?.name || "Guild settings";
+  const raidTabs = [
+    ["planner", "Lineup & availability"],
+    ["polls", "Night polls"],
+    ["loot", "Loot council"],
+    ["consumables", "Raid supplies"],
+    ["progress", "Progress"],
+  ].filter(([id]) => pageAllowed(id));
   const locked = (
     <section className="panel">
       <Empty icon={<LockKeyhole size={36} />} title="This section is private.">
@@ -1320,7 +1320,12 @@ export default function App() {
     "schedule",
   ].includes(page);
   const [title, subtitle] =
-    titles[raidPage ? "planner" : page] || titles.overview;
+    page === "access" && !effectiveAccess.admin
+      ? [
+          "Your guild membership",
+          "Your rank, assigned sections, and raid team access.",
+        ]
+      : titles[raidPage ? "planner" : page] || titles.overview;
   return (
     <div
       className="app"
@@ -1360,21 +1365,22 @@ export default function App() {
           <ChevronDown size={14} />
         </div>
         <nav aria-label="Main navigation">
-          {nav.map((n) => (
-            <button
-              key={n.id}
-              className={`${page === n.id || (n.id === "planner" && raidPage) ? "active" : ""} ${n.id === "community" ? "guild-nav" : ""}`}
-              onClick={() => go(n.id)}
-            >
-              <n.icon size={18} />
-              <span>{n.name}</span>
-              {!pageAllowed(n.id) && <LockKeyhole size={13} />}
-              {n.id === "roster" && <small>{state.characters.length}</small>}
-              {n.id === "loot" && pendingLoot.length > 0 && (
-                <span className="nav-dot" />
-              )}
-            </button>
-          ))}
+          {nav
+            .filter((n) => pageAllowed(n.id))
+            .map((n) => (
+              <button
+                key={n.id}
+                className={`${page === n.id || (n.id === "planner" && raidPage) ? "active" : ""} ${n.id === "community" ? "guild-nav" : ""}`}
+                onClick={() => go(n.id)}
+              >
+                <n.icon size={18} />
+                <span>{navigationName(n.id)}</span>
+                {n.id === "roster" && <small>{state.characters.length}</small>}
+                {n.id === "loot" && pendingLoot.length > 0 && (
+                  <span className="nav-dot" />
+                )}
+              </button>
+            ))}
         </nav>
         <div className="sidebar-bottom">
           <SetupGuide
@@ -1403,16 +1409,6 @@ export default function App() {
               Guild settings
             </button>
           )}
-          <a
-            className="github-link"
-            href={REPO_URL}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <Github size={16} />
-            Built with the guild
-            <ExternalLink size={12} />
-          </a>
           <div className="sidebar-user">
             <ClassIcon cls="hunter" size={32} />
             <div>
@@ -1475,11 +1471,7 @@ export default function App() {
             </button>
             <span>Guild headquarters</span>
             <ChevronRight size={13} />
-            <strong>
-              {raidPage
-                ? "Raid planner"
-                : nav.find((n) => n.id === page)?.name || "Guild settings"}
-            </strong>
+            <strong>{raidPage ? "Raid planner" : navigationName(page)}</strong>
           </div>
           <div className="top-actions">
             {effectiveAccess.admin || import.meta.env.DEV ? (
@@ -1550,25 +1542,17 @@ export default function App() {
               {error}
             </p>
           )}
-          {raidPage && (
+          {raidPage && raidTabs.length > 1 && (
             <div className="raid-workspace-tabs" aria-label="Raid workspace">
-              {[
-                ["planner", "Lineup & availability"],
-                ["polls", "Night polls"],
-                ["loot", "Loot council"],
-                ["consumables", "Raid supplies"],
-                ["progress", "Progress"],
-              ]
-                .filter(([id]) => id === "planner" || pageAllowed(id))
-                .map(([id, name]) => (
-                  <button
-                    key={id}
-                    className={page === id ? "active" : ""}
-                    onClick={() => go(id)}
-                  >
-                    {name}
-                  </button>
-                ))}
+              {raidTabs.map(([id, name]) => (
+                <button
+                  key={id}
+                  className={page === id ? "active" : ""}
+                  onClick={() => go(id)}
+                >
+                  {name}
+                </button>
+              ))}
             </div>
           )}
           {pageAllowed(page)

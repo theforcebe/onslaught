@@ -19,6 +19,10 @@ export const SECTIONS = [
   "community",
 ] as const;
 export type Section = (typeof SECTIONS)[number];
+// Activity is reserved for admins. Keep its schema key for older saved documents.
+export const ASSIGNABLE_SECTIONS = SECTIONS.filter(
+  (section) => section !== "activity",
+);
 export const SECTION_NAMES: Record<Section, string> = {
   planner: "Raid planner",
   gear: "Gear & character notes",
@@ -144,7 +148,7 @@ export function accessFor(doc: GuildDocument, identity?: Identity): Access {
         status: "active",
         admin: false,
         role: m.role,
-        sections: m.sections,
+        sections: m.sections.filter((section) => section !== "activity"),
         allTeams: m.allTeams,
         teamIds: m.teamIds,
       };
@@ -152,7 +156,8 @@ export function accessFor(doc: GuildDocument, identity?: Identity): Access {
 export function hasSection(access: Access, section: Section) {
   return (
     access.status === "active" &&
-    (access.admin || access.sections.includes(section))
+    (access.admin ||
+      (section !== "activity" && access.sections.includes(section)))
   );
 }
 export function hasTeam(access: Access, teamId?: string) {
@@ -288,17 +293,7 @@ export function project(doc: GuildDocument, identity?: Identity): GuildView {
         ),
       })),
     bosses: s.bosses.filter((b) => allowed("progress", b.teamId)),
-    audit: s.audit.filter(
-      (entry) =>
-        a.admin ||
-        (hasSection(a, "activity") &&
-          !!entry.scope &&
-          hasSection(a, entry.scope.section as Section) &&
-          (!["event.assign", "event.fill"].includes(entry.action) ||
-            hasSection(a, "planner")) &&
-          entry.scope.teamIds.every((t) => hasTeam(a, t)) &&
-          entry.scope.characterIds.every(visibleCharacter)),
-    ),
+    audit: a.admin ? s.audit : [],
     processedRequests: [],
     community: (() => {
       const c = s.community || emptyCommunity();
@@ -546,7 +541,15 @@ export function updateMember(
   const next = structuredClone(doc);
   // Preserve the verified BattleTag; administrators edit permissions, never the identity.
   next.members = next.members.map((m) =>
-    m.id === req.member.id ? { ...req.member, label: m.label } : m,
+    m.id === req.member.id
+      ? {
+          ...req.member,
+          label: m.label,
+          sections: req.member.sections.filter(
+            (section) => section !== "activity",
+          ),
+        }
+      : m,
   );
   next.state.revision++;
   next.state.processedRequests.push(req.id);

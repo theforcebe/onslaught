@@ -98,6 +98,136 @@ async function setup() {
   return { db, env, doc, call, send, upstream };
 }
 describe("private guild messenger", () => {
+  it("returns targeted alert metadata only to the DM recipient and clears it on read", async () => {
+    const { call, send } = await setup();
+    const sent = await send("alice", "Private content", "bob");
+    expect((await call("bob", "status")).data.latestNotification).toEqual({
+      seq: sent.data.message.seq,
+      peer: "alice",
+      senderName: "alice#1234",
+      kind: "dm",
+    });
+    for (const id of ["alice", "carol", "admin"])
+      expect((await call(id, "status")).data.latestNotification).toBeNull();
+    await call("bob", "read", {
+      peer: "alice",
+      through: sent.data.message.seq,
+    });
+    expect((await call("bob", "status")).data.latestNotification).toBeNull();
+  });
+  it("requires separate recipient consent, forwards to their linked Discord only, and deduplicates retries", async () => {
+    const { db, env, upstream, send, call } = await setup();
+    env.DISCORD_BOT_TOKEN = "fixture-bot";
+    db.sqlite
+      .prepare("INSERT INTO discord_links VALUES(?,?,?,1)")
+      .run("bob", "111111111111111111", "Bob");
+    db.sqlite
+      .prepare("INSERT INTO discord_config VALUES('guild',?)")
+      .run(JSON.stringify({ guildId: "222222222222222222" }));
+    const original = upstream.getMockImplementation()!;
+    upstream.mockImplementation(async (url, init) =>
+      url.includes("discord.com")
+        ? Response.json({ id: "333333333333333333" })
+        : original(url, init),
+    );
+    expect(
+      (await send("alice", "No chat consent yet", "bob")).data.discordDelivery,
+    ).toBe("disabled");
+    expect(
+      upstream.mock.calls.filter(([url]) => url.includes("discord.com")),
+    ).toHaveLength(0);
+    expect(
+      (await call("alice", "preferences", { discordDM: true })).status,
+    ).toBe(400);
+    expect(
+      (await call("bob", "preferences", { discordDM: true, memberId: "carol" }))
+        .status,
+    ).toBe(400);
+    expect(
+      (await call("bob", "preferences", { discordDM: true })).data.discord
+        .enabled,
+    ).toBe(true);
+    const nonce = crypto.randomUUID();
+    expect(
+      (await send("alice", "Ready? @everyone", "bob", nonce)).data
+        .discordDelivery,
+    ).toBe("sent");
+    await send("alice", "Ready? @everyone", "bob", nonce);
+    const sends = upstream.mock.calls.filter(([url]) =>
+      url.endsWith("/messages"),
+    );
+    expect(sends).toHaveLength(1);
+    expect(JSON.parse(String(sends[0][1]!.body))).toMatchObject({
+      allowed_mentions: { parse: [] },
+      embeds: [
+        { description: "Ready? @everyone", author: { name: "alice#1234" } },
+      ],
+    });
+    await call("bob", "preferences", { discordDM: false });
+    expect(
+      (await send("alice", "After opt-out", "bob")).data.discordDelivery,
+    ).toBe("disabled");
+    await call("bob", "preferences", { discordDM: true });
+    db.sqlite
+      .prepare(
+        "UPDATE discord_links SET discord_id='444444444444444444' WHERE member_id='bob'",
+      )
+      .run();
+    expect(
+      (await send("alice", "New account needs consent", "bob")).data
+        .discordDelivery,
+    ).toBe("disabled");
+    await call("bob", "preferences", { discordDM: true });
+    expect((await call("bob", "/api/discord/unlink", {})).status).toBe(200);
+    expect(
+      db.sqlite
+        .prepare(
+          "SELECT COUNT(*) AS n FROM chat_discord_preferences WHERE member_id='bob'",
+        )
+        .get()?.n,
+    ).toBe(0);
+  });
+  it("preserves site messages and reports blocked or uncertain Discord delivery without resending", async () => {
+    const { db, env, upstream, send, call } = await setup();
+    env.DISCORD_BOT_TOKEN = "fixture-bot";
+    db.sqlite
+      .prepare("INSERT INTO discord_links VALUES(?,?,?,0)")
+      .run("bob", "111111111111111111", "Bob");
+    db.sqlite
+      .prepare("INSERT INTO discord_config VALUES('guild',?)")
+      .run(JSON.stringify({ guildId: "222222222222222222" }));
+    await call("bob", "preferences", { discordDM: true });
+    const original = upstream.getMockImplementation()!;
+    upstream.mockImplementation(async (url, init) =>
+      url.includes("discord.com")
+        ? new Response("", { status: 403 })
+        : original(url, init),
+    );
+    expect(
+      (await send("alice", "Blocked Discord", "bob")).data.discordDelivery,
+    ).toBe("failed");
+    upstream.mockImplementation(async (url, init) => {
+      if (url.endsWith("/messages")) throw new Error("timeout");
+      return url.includes("discord.com")
+        ? Response.json({ id: "333333333333333333" })
+        : original(url, init);
+    });
+    const nonce = crypto.randomUUID();
+    expect(
+      (await send("alice", "Ambiguous Discord", "bob", nonce)).data
+        .discordDelivery,
+    ).toBe("uncertain");
+    await send("alice", "Ambiguous Discord", "bob", nonce);
+    expect(
+      upstream.mock.calls.filter(([url]) => url.endsWith("/messages")),
+    ).toHaveLength(1);
+    expect(
+      (await call("bob", "messages?peer=alice")).data.messages,
+    ).toHaveLength(2);
+    expect(
+      (await send("alice", "General stays here")).data.discordDelivery,
+    ).toBeUndefined();
+  });
   it("notifies only selected members, keeps mentions through ordinary reads and clears only the recipient's viewed messages", async () => {
     const { call, send } = await setup();
     const first = await call("alice", "messages", {

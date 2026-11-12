@@ -267,29 +267,31 @@ export function GuildHub(p: Props) {
         : c.requests.find((x) => x.id === sendRecord?.id)?.item;
   return (
     <div className="guild-hub">
-      <div
-        className="hub-tabs"
-        role="tablist"
-        aria-label={
-          p.mode === "polls" ? "Scheduling polls" : "Guild coordination"
-        }
-      >
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            role="tab"
-            aria-selected={tab === t.id}
-            className={tab === t.id ? "active" : ""}
-            onClick={() => {
-              setSelected(t.id);
-              void refreshDiscord();
-            }}
-          >
-            <t.icon size={17} />
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {tabs.length > 1 && (
+        <div
+          className="hub-tabs"
+          role="tablist"
+          aria-label={
+            p.mode === "polls" ? "Scheduling polls" : "Guild coordination"
+          }
+        >
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              role="tab"
+              aria-selected={tab === t.id}
+              className={tab === t.id ? "active" : ""}
+              onClick={() => {
+                setSelected(t.id);
+                void refreshDiscord();
+              }}
+            >
+              <t.icon size={17} />
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
       {error && (
         <p className="notice danger" role="alert">
           {error}
@@ -467,6 +469,10 @@ export function GuildHub(p: Props) {
                   <p className="muted">
                     Your Discord privacy settings must also allow the bot to
                     send you DMs.
+                  </p>
+                  <p className="muted">
+                    For private chat copies, open Guild chat → notification
+                    settings and enable Discord forwarding.
                   </p>
                   <button
                     className="btn secondary"

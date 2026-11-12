@@ -28,6 +28,7 @@ Put the returned database ID in `wrangler.toml`. It is not a secret. Initialize 
 npx wrangler d1 execute onslaught-auth --remote --file=server/schema.sql
 npx wrangler d1 execute onslaught-auth --remote --file=server/chat-schema.sql
 npx wrangler d1 execute onslaught-auth --remote --file=server/chat-mentions.sql
+npx wrangler d1 execute onslaught-auth --remote --file=server/chat-notifications.sql
 npm run worker:deploy
 ```
 

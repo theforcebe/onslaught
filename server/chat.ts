@@ -13,6 +13,7 @@ import {
 } from "../src/lib/chat";
 import { ChangeError } from "../src/lib/reducer";
 import { rejectCredentials } from "../src/lib/parser";
+import { chatDiscordPreference, forwardChatDM } from "./chat-discord";
 
 type Dependencies = {
   authenticated: (r: Request, e: Env) => Promise<Identity>;
@@ -103,7 +104,31 @@ async function notificationCounts(
   )
     .bind(identity.id)
     .first<{ count: number }>();
-  return { unread, unreadMentions: mentions?.count || 0 };
+  const notifications = await env.DB.prepare(
+    `SELECT m.seq,m.sender_id,m.sender_label,m.recipient_id FROM chat_messages m
+     LEFT JOIN chat_reads r ON r.member_id=? AND r.thread_key=m.thread_key
+     WHERE m.sender_id<>? AND (
+       (m.recipient_id=? AND m.seq>COALESCE(r.last_seq,0)) OR
+       (m.thread_key='general' AND EXISTS (SELECT 1 FROM chat_mentions n WHERE n.message_seq=m.seq AND n.member_id=? AND n.read_at IS NULL))
+     ) ORDER BY m.seq DESC LIMIT 100`,
+  )
+    .bind(identity.id, identity.id, identity.id, identity.id)
+    .all<Pick<Row, "seq" | "sender_id" | "sender_label" | "recipient_id">>();
+  const latest = notifications.results.find((n) =>
+    active.some((m) => m.id === n.sender_id),
+  );
+  return {
+    unread,
+    unreadMentions: mentions?.count || 0,
+    latestNotification: latest
+      ? {
+          seq: latest.seq,
+          peer: latest.recipient_id ? latest.sender_id : "",
+          senderName: latest.sender_label,
+          kind: latest.recipient_id ? ("dm" as const) : ("mention" as const),
+        }
+      : null,
+  };
 }
 export async function handleChat(
   req: Request,
@@ -131,6 +156,31 @@ export async function handleChat(
         .filter((m) => m.id !== identity.id)
         .map(({ id, label, role }) => ({ id, label, role })),
       ...(await notificationCounts(env, identity, active)),
+      discord: await chatDiscordPreference(env, identity.id),
+    });
+  }
+  if (u.pathname === "/api/chat/preferences" && req.method === "POST") {
+    const input = z
+      .object({ discordDM: z.boolean() })
+      .strict()
+      .parse(await deps.boundedJSON(req));
+    const linked = await chatDiscordPreference(env, identity.id);
+    if (input.discordDM && !linked.linked)
+      throw new ChangeError("Link your Discord in Guild coordination first.");
+    if (input.discordDM) {
+      await env.DB.prepare(
+        "INSERT INTO chat_discord_preferences(member_id,discord_id) SELECT member_id,discord_id FROM discord_links WHERE member_id=? ON CONFLICT(member_id) DO UPDATE SET discord_id=excluded.discord_id",
+      )
+        .bind(identity.id)
+        .run();
+    } else
+      await env.DB.prepare(
+        "DELETE FROM chat_discord_preferences WHERE member_id=?",
+      )
+        .bind(identity.id)
+        .run();
+    return deps.json({
+      discord: await chatDiscordPreference(env, identity.id),
     });
   }
   if (u.pathname === "/api/chat/messages" && req.method === "GET") {
@@ -242,7 +292,23 @@ export async function handleChat(
         "This send was already used for another message. Refresh before trying again.",
         409,
       );
-    return deps.json({ message: message(saved) });
+    // Saving site chat succeeds even when Discord is unavailable.
+    let discordDelivery;
+    if (saved.recipient_id) {
+      try {
+        discordDelivery = await forwardChatDM(
+          env,
+          saved.recipient_id,
+          message(saved),
+        );
+      } catch {
+        discordDelivery = "uncertain";
+      }
+    }
+    return deps.json({
+      message: message(saved),
+      ...(discordDelivery ? { discordDelivery } : {}),
+    });
   }
   if (u.pathname === "/api/chat/read" && req.method === "POST") {
     const input = ChatReadSchema.parse(await deps.boundedJSON(req));

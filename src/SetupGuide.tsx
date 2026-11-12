@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, ChevronRight, Compass } from "lucide-react";
 import type { Access } from "./lib/access";
+import { hasSection } from "./lib/access";
 import type { Identity, RaidState } from "./lib/model";
 import { Modal } from "./components";
 import { discordCall } from "./lib/api";
@@ -54,7 +55,7 @@ export function SetupGuide({
     },
     {
       title: "Join the guild",
-      body: "Open Members & access and request membership. An admin approves your rank and the private sections and raid teams you can see. Approved members can always set their own availability and help with volunteer requests.",
+      body: "Open Your membership and request access. An admin approves your rank and the private sections and raid teams you can see. Approved members can always set their own availability and help with volunteer requests.",
       done: access.status === "active",
       action: "View my membership",
       run: () => go("access"),
@@ -63,15 +64,20 @@ export function SetupGuide({
       title: "Set up your character",
       body: "Import your SimC export from the game. The guided import asks for your specialization, raid role, and learned buffs. Already on the roster? Ask an admin to link that character to your account. Your own character is needed to respond to raids. If importing is locked, ask an admin for Gear & character notes access.",
       done: !!own.length,
-      action: "Import my character",
-      run: importCharacter,
+      action: hasSection(access, "gear")
+        ? "Import my character"
+        : "View my membership",
+      run: hasSection(access, "gear") ? importCharacter : () => go("access"),
     },
     {
       title: "Link Discord",
-      body: "Open Discord connection in Guild coordination and choose Link my Discord. Use the account in the guild server. You can optionally enable direct messages for requests assigned to you; channel notifications work without DM opt-in.",
+      body: "Open Discord connection in Guild coordination and choose Link my Discord. Use the account in the guild server. You can enable DMs for material requests there. To receive copies of private site messages, open Guild chat → notification settings and turn on Discord forwarding.",
       done: linked,
-      action: "Open Discord connection",
-      run: () => go("discord"),
+      action:
+        access.status === "active"
+          ? "Open Discord connection"
+          : "View my membership",
+      run: () => go(access.status === "active" ? "discord" : "access"),
     },
     {
       title: "Choose your raid nights",

@@ -49,5 +49,15 @@ export type ChatStatus = {
   people: ChatPerson[];
   unread: Record<string, number>;
   unreadMentions?: number;
+  latestNotification?: ChatNotification | null;
+  discord?: { linked: boolean; enabled: boolean };
 };
+export type ChatNotification = {
+  seq: number;
+  peer: string;
+  senderName: string;
+  kind: "dm" | "mention";
+};
+export type ChatDelivery =
+  "disabled" | "sending" | "sent" | "failed" | "uncertain";
 export type ChatPage = { messages: ChatMessage[]; hasMore: boolean };
