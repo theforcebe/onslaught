@@ -768,8 +768,25 @@ textarea::placeholder {
 .toast {
   border-radius: 4px;
   background: #282338;
+  color: #f7f0fa;
   border: 1px solid #ca96b0;
   bottom: 78px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.toast > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.toast > svg {
+  color: #8cdbb0;
+}
+.toast .icon-btn {
+  color: #e7dcea;
+}
+.toast .icon-btn:hover {
+  color: #fff;
+  background: #ffffff14;
 }
 @media (max-width: 1200px) {
   .brand strong {
