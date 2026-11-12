@@ -29,6 +29,7 @@ type Row = {
   recipient_id: string | null;
   body: string;
   sent_at: number;
+  mentions_json: string;
 };
 const message = (r: Row): ChatMessage => ({
   seq: r.seq,
@@ -36,6 +37,7 @@ const message = (r: Row): ChatMessage => ({
   senderName: r.sender_label,
   body: r.body,
   sentAt: r.sent_at,
+  mentions: JSON.parse(r.mentions_json || "[]"),
 });
 // Only membership is cached, in private D1, for at most 15 seconds. Failed refreshes fail closed.
 async function members(env: Env, deps: Dependencies): Promise<Member[]> {
@@ -71,6 +73,38 @@ export function conversation(
     throw new ChangeError("Choose another active guild member.", 403);
   return `dm:${[identity.id, peer].sort().join(":")}`;
 }
+async function notificationCounts(
+  env: Env,
+  identity: Identity,
+  active: Member[],
+) {
+  const rows = await env.DB.prepare(
+    `SELECT m.thread_key, COUNT(*) AS count FROM chat_messages m
+     LEFT JOIN chat_reads r ON r.member_id=? AND r.thread_key=m.thread_key
+     WHERE (m.recipient_id IS NULL OR m.recipient_id=?) AND m.sender_id<>? AND m.seq>COALESCE(r.last_seq,0)
+     AND NOT EXISTS (SELECT 1 FROM chat_mentions n WHERE n.message_seq=m.seq AND n.member_id=? AND n.read_at IS NOT NULL)
+     GROUP BY m.thread_key`,
+  )
+    .bind(identity.id, identity.id, identity.id, identity.id)
+    .all<{ thread_key: string; count: number }>();
+  const unread: Record<string, number> = {};
+  for (const row of rows.results) {
+    const peer =
+      row.thread_key === "general"
+        ? "general"
+        : row.thread_key
+            .split(":")
+            .find((v) => v !== "dm" && v !== identity.id);
+    if (peer && (peer === "general" || active.some((m) => m.id === peer)))
+      unread[peer] = row.count;
+  }
+  const mentions = await env.DB.prepare(
+    "SELECT COUNT(*) AS count FROM chat_mentions WHERE member_id=? AND read_at IS NULL",
+  )
+    .bind(identity.id)
+    .first<{ count: number }>();
+  return { unread, unreadMentions: mentions?.count || 0 };
+}
 export async function handleChat(
   req: Request,
   env: Env,
@@ -92,30 +126,11 @@ export async function handleChat(
     throw new ChangeError("Guild chat is available to approved members.", 403);
   const active = all.filter((m) => m.status === "active");
   if (u.pathname === "/api/chat/status" && req.method === "GET") {
-    const rows = await env.DB.prepare(
-      `SELECT m.thread_key, COUNT(*) AS count FROM chat_messages m
-      LEFT JOIN chat_reads r ON r.member_id=? AND r.thread_key=m.thread_key
-      WHERE (m.recipient_id IS NULL OR m.recipient_id=?) AND m.sender_id<>? AND m.seq>COALESCE(r.last_seq,0)
-      GROUP BY m.thread_key`,
-    )
-      .bind(identity.id, identity.id, identity.id)
-      .all<{ thread_key: string; count: number }>();
-    const unread: Record<string, number> = {};
-    for (const row of rows.results) {
-      const peer =
-        row.thread_key === "general"
-          ? "general"
-          : row.thread_key
-              .split(":")
-              .find((v) => v !== "dm" && v !== identity.id);
-      if (peer && (peer === "general" || active.some((m) => m.id === peer)))
-        unread[peer] = row.count;
-    }
     return deps.json({
       people: active
         .filter((m) => m.id !== identity.id)
         .map(({ id, label, role }) => ({ id, label, role })),
-      unread,
+      ...(await notificationCounts(env, identity, active)),
     });
   }
   if (u.pathname === "/api/chat/messages" && req.method === "GET") {
@@ -137,17 +152,24 @@ export async function handleChat(
           .positive()
           .max(Number.MAX_SAFE_INTEGER)
           .optional(),
+        mentions: z.literal("1").optional(),
       })
       .strict()
       .parse(Object.fromEntries(u.searchParams));
     if (query.after !== undefined && query.before !== undefined)
       throw new ChangeError("Choose one message cursor.");
     const thread = conversation(identity, all, query.peer);
+    if (query.mentions && query.peer)
+      throw new ChangeError("Mentions are available in guild general.");
     const forward = query.after !== undefined;
     const rows = await env.DB.prepare(
-      `SELECT * FROM chat_messages WHERE thread_key=? AND seq${forward ? ">" : "<"}? ORDER BY seq ${forward ? "ASC" : "DESC"} LIMIT 51`,
+      `SELECT * FROM chat_messages WHERE thread_key=? AND seq${forward ? ">" : "<"}? ${query.mentions ? "AND EXISTS (SELECT 1 FROM chat_mentions n WHERE n.message_seq=chat_messages.seq AND n.member_id=?)" : ""} ORDER BY seq ${forward ? "ASC" : "DESC"} LIMIT 51`,
     )
-      .bind(thread, query.after ?? query.before ?? Number.MAX_SAFE_INTEGER)
+      .bind(
+        thread,
+        query.after ?? query.before ?? Number.MAX_SAFE_INTEGER,
+        ...(query.mentions ? [identity.id] : []),
+      )
       .all<Row>();
     const slice = rows.results.slice(0, 50);
     return deps.json({
@@ -165,10 +187,31 @@ export async function handleChat(
       );
     }
     const thread = conversation(identity, all, input.peer);
-    await env.DB.prepare(
-      "INSERT INTO chat_messages(thread_key,sender_id,sender_label,recipient_id,body,sent_at,client_id) VALUES(?,?,?,?,?,?,?) ON CONFLICT(sender_id,client_id) DO NOTHING",
-    )
-      .bind(
+    if (input.peer && input.mentions.length)
+      throw new ChangeError("Mention guild members in general chat.");
+    const mentions = [...input.mentions].sort((a, b) => a.start - b.start);
+    let previousEnd = 0;
+    for (const m of mentions) {
+      const target = active.find((p) => p.id === m.id && p.id !== identity.id);
+      if (
+        !target ||
+        m.start < previousEnd ||
+        m.end <= m.start ||
+        m.end > input.body.length ||
+        input.body.slice(m.start, m.end) !== `@${target.label}`
+      )
+        throw new ChangeError(
+          "A mentioned member changed or is no longer active. Choose them again from the @ list.",
+        );
+      previousEnd = m.end;
+    }
+    const mentionJSON = JSON.stringify(mentions);
+    // Save the message and its recipient index atomically. Retried sends derive
+    // recipients from the original stored payload, never a new caller payload.
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO chat_messages(thread_key,sender_id,sender_label,recipient_id,body,sent_at,client_id,mentions_json) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(sender_id,client_id) DO NOTHING",
+      ).bind(
         thread,
         identity.id,
         identity.label,
@@ -176,14 +219,25 @@ export async function handleChat(
         input.body,
         Date.now(),
         input.clientId,
-      )
-      .run();
+        mentionJSON,
+      ),
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO chat_mentions(message_seq,member_id)
+         SELECT m.seq,json_extract(j.value,'$.id') FROM chat_messages m,json_each(m.mentions_json) j
+         WHERE m.sender_id=? AND m.client_id=? AND m.thread_key='general'`,
+      ).bind(identity.id, input.clientId),
+    ]);
     const saved = await env.DB.prepare(
       "SELECT * FROM chat_messages WHERE sender_id=? AND client_id=?",
     )
       .bind(identity.id, input.clientId)
       .first<Row>();
-    if (!saved || saved.thread_key !== thread || saved.body !== input.body)
+    if (
+      !saved ||
+      saved.thread_key !== thread ||
+      saved.body !== input.body ||
+      saved.mentions_json !== mentionJSON
+    )
       throw new ChangeError(
         "This send was already used for another message. Refresh before trying again.",
         409,
@@ -204,7 +258,19 @@ export async function handleChat(
     )
       .bind(identity.id, thread, last?.seq || 0)
       .run();
-    return deps.json({ ok: true });
+    // Mention receipts name only messages actually rendered to this member.
+    // Opening the latest 50 general messages cannot erase older unseen mentions.
+    if (!input.peer && input.mentionSeqs.length) {
+      await env.DB.prepare(
+        `UPDATE chat_mentions SET read_at=? WHERE member_id=? AND read_at IS NULL AND message_seq IN (${input.mentionSeqs.map(() => "?").join(",")})`,
+      )
+        .bind(Date.now(), identity.id, ...input.mentionSeqs)
+        .run();
+    }
+    return deps.json({
+      ok: true,
+      ...(await notificationCounts(env, identity, active)),
+    });
   }
   return deps.json({ error: "Chat route not found." }, 404);
 }

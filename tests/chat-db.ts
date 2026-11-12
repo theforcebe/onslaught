@@ -5,7 +5,20 @@ export function chatDatabase() {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec(readFileSync("server/schema.sql", "utf8"));
   sqlite.exec(readFileSync("server/chat-schema.sql", "utf8"));
+  sqlite.exec(readFileSync("server/chat-mentions.sql", "utf8"));
   const db = {
+    async batch(statements: { run: () => Promise<unknown> }[]) {
+      sqlite.exec("BEGIN");
+      try {
+        const results = [];
+        for (const statement of statements) results.push(await statement.run());
+        sqlite.exec("COMMIT");
+        return results;
+      } catch (error) {
+        sqlite.exec("ROLLBACK");
+        throw error;
+      }
+    },
     prepare(sql: string) {
       const statement = sqlite.prepare(sql);
       let args: (string | number | null)[] = [];

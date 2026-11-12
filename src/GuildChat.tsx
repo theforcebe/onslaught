@@ -10,11 +10,19 @@ import {
   Hash,
   Mail,
   LoaderCircle,
+  AtSign,
 } from "lucide-react";
 import { chatCall, ChatError } from "./lib/api";
 import { RANK_NAMES } from "./lib/access";
 import type { Identity } from "./lib/model";
-import type { ChatMessage, ChatStatus, ChatPage } from "./lib/chat";
+import type {
+  ChatMessage,
+  ChatStatus,
+  ChatPage,
+  ChatMention,
+  ChatPerson,
+} from "./lib/chat";
+import { mentionQuery, moveMentions, messageParts } from "./lib/chat-mentions";
 
 export function GuildChat({
   identity,
@@ -26,6 +34,11 @@ export function GuildChat({
   const [open, setOpen] = useState(false),
     [directory, setDirectory] = useState(false),
     [peer, setPeer] = useState("");
+  const [mentionsOnly, setMentionsOnly] = useState(false),
+    [draftMentions, setDraftMentions] = useState<ChatMention[]>([]),
+    [caret, setCaret] = useState(0),
+    [mentionIndex, setMentionIndex] = useState(0),
+    [mentionDismissed, setMentionDismissed] = useState(false);
   const [status, setStatus] = useState<ChatStatus>({ people: [], unread: {} }),
     [messages, setMessages] = useState<ChatMessage[]>([]);
   const [query, setQuery] = useState(""),
@@ -46,10 +59,16 @@ export function GuildChat({
     currentOpen = useRef(open),
     mounted = useRef(true),
     refreshRef = useRef(refresh);
+  const scope = `${peer}:${mentionsOnly}`,
+    currentScope = useRef(scope),
+    loadedScope = useRef(""),
+    acknowledgedMentions = useRef(new Set<number>());
+  currentScope.current = scope;
   const pending = useRef<{
     peer: string;
     body: string;
     clientId: string;
+    mentionKey: string;
   } | null>(null);
   currentPeer.current = peer;
   currentOpen.current = open;
@@ -69,6 +88,7 @@ export function GuildChat({
       setMessages([]);
       setStatus({ people: [], unread: {} });
       setDraft("");
+      setDraftMentions([]);
       setBlocked(true);
       refreshRef.current();
     }
@@ -106,6 +126,8 @@ export function GuildChat({
     setMessages([]);
     setLoading(true);
     setError("");
+    loadedScope.current = "";
+    acknowledgedMentions.current = new Set();
     last.current = 0;
     seen.current = 0;
     bottom.current = true;
@@ -118,9 +140,11 @@ export function GuildChat({
         while (more && pages++ < 10 && active) {
           const initial = !initialized;
           const p = new URLSearchParams(peer ? { peer } : {});
+          if (mentionsOnly) p.set("mentions", "1");
           if (initial === false) p.set("after", String(last.current));
           const data = await chatCall<ChatPage>(`messages?${p}`);
           if (!active) return;
+          loadedScope.current = scope;
           if (initial) setOlder(data.hasMore);
           if (data.messages.length) {
             last.current = data.messages.at(-1)!.seq;
@@ -154,30 +178,55 @@ export function GuildChat({
       clearInterval(timer);
       document.removeEventListener("visibilitychange", poll);
     };
-  }, [open, peer, blocked]);
+  }, [open, peer, mentionsOnly, blocked]);
   const markRead = () => {
-    const through = last.current;
+    const through = mentionsOnly ? 0 : last.current;
     if (
       !open ||
       directory ||
       blocked ||
       !bottom.current ||
       document.visibilityState !== "visible" ||
-      through <= seen.current
+      loadedScope.current !== scope
     )
       return;
-    const selected = peer;
+    const mentionSeqs = peer
+      ? []
+      : messages
+          .filter(
+            (m) =>
+              m.mentions?.some((n) => n.id === identity.id) &&
+              !acknowledgedMentions.current.has(m.seq),
+          )
+          .map((m) => m.seq)
+          .slice(0, 50);
+    if (through <= seen.current && !mentionSeqs.length) return;
+    const selectedScope = scope;
+    mentionSeqs.forEach((seq) => acknowledgedMentions.current.add(seq));
     seen.current = through;
-    void chatCall("read", { ...(peer ? { peer } : {}), through })
-      .then(() => {
-        if (mounted.current && currentPeer.current === selected)
+    void chatCall<{ unreadMentions: number; unread: Record<string, number> }>(
+      "read",
+      {
+        ...(peer ? { peer } : {}),
+        through,
+        mentionSeqs,
+      },
+    )
+      .then((result) => {
+        if (mounted.current && currentScope.current === selectedScope)
           setStatus((s) => ({
             ...s,
-            unread: { ...s.unread, [selected || "general"]: 0 },
+            unread: result.unread,
+            unreadMentions: result.unreadMentions,
           }));
       })
       .catch((e) => {
-        seen.current = 0;
+        if (currentScope.current === selectedScope) {
+          seen.current = 0;
+          mentionSeqs.forEach((seq) =>
+            acknowledgedMentions.current.delete(seq),
+          );
+        }
         fail(e);
       });
   };
@@ -188,15 +237,21 @@ export function GuildChat({
     }
     document.addEventListener("visibilitychange", markRead);
     return () => document.removeEventListener("visibilitychange", markRead);
-  }, [messages, open, directory]);
+  }, [messages, open, directory, scope]);
   useEffect(() => {
-    if (open && !directory && !sending) field.current?.focus();
-  }, [open, directory, peer, sending]);
-  const choose = (id: string) => {
+    if (open && !directory && !sending && !mentionsOnly) field.current?.focus();
+  }, [open, directory, peer, sending, mentionsOnly]);
+  const choose = (id: string, showMentions = false) => {
+    if (`${id}:${showMentions}` !== scope) loadedScope.current = "";
     setPeer(id);
+    setMentionsOnly(showMentions);
     setDirectory(false);
-    setDraft("");
-    pending.current = null;
+    if (id !== peer) {
+      setDraft("");
+      setDraftMentions([]);
+      pending.current = null;
+    }
+    setMentionDismissed(true);
     setError("");
   };
   const close = () => {
@@ -205,7 +260,7 @@ export function GuildChat({
   };
   const loadOlder = async () => {
     if (!messages.length || loadingOlder) return;
-    const selected = peer,
+    const selectedScope = scope,
       oldHeight = log.current?.scrollHeight || 0;
     setLoadingOlder(true);
     bottom.current = false;
@@ -214,8 +269,9 @@ export function GuildChat({
         before: String(messages[0].seq),
         ...(peer ? { peer } : {}),
       });
+      if (mentionsOnly) p.set("mentions", "1");
       const data = await chatCall<ChatPage>(`messages?${p}`);
-      if (currentPeer.current !== selected || !mounted.current) return;
+      if (currentScope.current !== selectedScope || !mounted.current) return;
       setMessages((old) => [
         ...data.messages.filter((m) => !old.some((x) => x.seq === m.seq)),
         ...old,
@@ -232,20 +288,28 @@ export function GuildChat({
     }
   };
   const send = async () => {
-    const body = draft.trim(),
+    const body = draft,
       selected = peer;
-    if (!body || sending || blocked) return;
+    if (!body.trim() || sending || blocked) return;
+    const mentionKey = JSON.stringify(draftMentions);
     if (
       !pending.current ||
       pending.current.peer !== peer ||
-      pending.current.body !== body
+      pending.current.body !== body ||
+      pending.current.mentionKey !== mentionKey
     )
-      pending.current = { peer, body, clientId: crypto.randomUUID() };
+      pending.current = {
+        peer,
+        body,
+        mentionKey,
+        clientId: crypto.randomUUID(),
+      };
     setSending(true);
     setError("");
     try {
       const result = await chatCall<{ message: ChatMessage }>("messages", {
         body,
+        mentions: draftMentions,
         clientId: pending.current.clientId,
         ...(peer ? { peer } : {}),
       });
@@ -259,6 +323,7 @@ export function GuildChat({
           ].sort((a, b) => a.seq - b.seq),
         );
         setDraft("");
+        setDraftMentions([]);
         pending.current = null;
         bottom.current = true;
         field.current?.focus();
@@ -270,18 +335,72 @@ export function GuildChat({
     }
   };
   const person = status.people.find((p) => p.id === peer),
-    unread = Object.values(status.unread).reduce((a, b) => a + b, 0);
+    unread = Object.values(status.unread).reduce((a, b) => a + b, 0),
+    unreadMentions = status.unreadMentions || 0;
+  const match =
+    !peer && !mentionDismissed && draftMentions.length < 10
+      ? mentionQuery(draft, caret, draftMentions)
+      : null;
+  const suggestions = match
+    ? status.people
+        .filter((p) =>
+          p.label.toLocaleLowerCase().includes(match.query.toLocaleLowerCase()),
+        )
+        .slice(0, 6)
+    : [];
+  const selectedSuggestion = Math.min(
+    mentionIndex,
+    Math.max(0, suggestions.length - 1),
+  );
+  const insertMention = (member: ChatPerson) => {
+    if (!match) return;
+    const label = `@${member.label}`,
+      next = draft.slice(0, match.start) + label + " " + draft.slice(match.end),
+      end = match.start + label.length;
+    if (next.length > 2000) {
+      setError(
+        "Make a little room in your message before adding this mention.",
+      );
+      return;
+    }
+    setDraftMentions(
+      [
+        ...moveMentions(draft, next, draftMentions),
+        { id: member.id, start: match.start, end },
+      ].sort((a, b) => a.start - b.start),
+    );
+    setDraft(next);
+    setCaret(end + 1);
+    setMentionDismissed(true);
+    setMentionIndex(0);
+    requestAnimationFrame(() => {
+      field.current?.focus();
+      field.current?.setSelectionRange(end + 1, end + 1);
+    });
+  };
   return (
     <>
       <button
         ref={launcher}
         className={`chat-launcher ${open ? "is-open" : ""}`}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          if (!open && unreadMentions > 0) choose("", true);
+          setOpen((v) => !v);
+        }}
         aria-expanded={open}
         aria-controls="guild-messenger"
       >
         <MessageCircle size={19} />
         <span>Guild chat</span>
+        {unreadMentions > 0 && (
+          <b
+            className="chat-mention-badge"
+            aria-label={`${unreadMentions} unread mentions`}
+            title="You were mentioned in general chat"
+          >
+            @{unreadMentions > 99 ? "99+" : unreadMentions}
+          </b>
+        )}
         {unread > 0 && (
           <b aria-label={`${unread} unread messages`}>
             {unread > 99 ? "99+" : unread}
@@ -319,6 +438,14 @@ export function GuildChat({
             >
               <Hash size={16} />
               General
+              {unreadMentions > 0 && (
+                <b
+                  className="chat-mention-badge"
+                  aria-label={`${unreadMentions} unread mentions`}
+                >
+                  @{unreadMentions}
+                </b>
+              )}
               {(status.unread.general || 0) > 0 && (
                 <b>{status.unread.general}</b>
               )}
@@ -410,6 +537,26 @@ export function GuildChat({
                     </>
                   )}
                 </div>
+                {!peer && (
+                  <div className="chat-filters" aria-label="General chat view">
+                    <button
+                      className={!mentionsOnly ? "active" : ""}
+                      aria-pressed={!mentionsOnly}
+                      onClick={() => choose("")}
+                    >
+                      All messages
+                    </button>
+                    <button
+                      className={mentionsOnly ? "active" : ""}
+                      aria-pressed={mentionsOnly}
+                      onClick={() => choose("", true)}
+                    >
+                      <AtSign size={14} />
+                      Your mentions
+                      {unreadMentions > 0 && <b>{unreadMentions}</b>}
+                    </button>
+                  </div>
+                )}
                 <div
                   className="chat-log"
                   ref={log}
@@ -446,21 +593,25 @@ export function GuildChat({
                     <div className="chat-empty">
                       <MessageCircle size={30} />
                       <strong>
-                        {peer
-                          ? "Start a conversation"
-                          : "Meet by the guild fire"}
+                        {mentionsOnly
+                          ? "No mentions yet"
+                          : peer
+                            ? "Start a conversation"
+                            : "Meet by the guild fire"}
                       </strong>
                       <p>
-                        {peer
-                          ? "Send a private message to this guild member."
-                          : "Ask a question, find a group, or catch up with the guild."}
+                        {mentionsOnly
+                          ? "When someone selects you in an @mention, their message will appear here."
+                          : peer
+                            ? "Send a private message to this guild member."
+                            : "Ask a question, find a group, or catch up with the guild."}
                       </p>
                     </div>
                   ) : (
                     messages.map((m, i) => (
                       <div
                         key={m.seq}
-                        className={`chat-message ${m.senderId === identity.id ? "own" : ""}`}
+                        className={`chat-message ${m.senderId === identity.id ? "own" : ""} ${m.mentions?.some((n) => n.id === identity.id) ? "mentioned" : ""}`}
                       >
                         {(i === 0 ||
                           new Date(messages[i - 1].sentAt).toDateString() !==
@@ -486,64 +637,187 @@ export function GuildChat({
                               minute: "2-digit",
                             })}
                           </time>
+                          {m.mentions?.some((n) => n.id === identity.id) && (
+                            <span className="chat-mentioned-label">
+                              <AtSign size={12} />
+                              Mentioned you
+                            </span>
+                          )}
                         </div>
-                        <p>{m.body}</p>
+                        <p>
+                          {messageParts(m.body, m.mentions || []).map(
+                            (part, index) =>
+                              part.id ? (
+                                <mark
+                                  key={index}
+                                  className={`chat-mention ${part.id === identity.id ? "is-you" : ""}`}
+                                >
+                                  {part.text}
+                                </mark>
+                              ) : (
+                                part.text
+                              ),
+                          )}
+                        </p>
                       </div>
                     ))
                   )}
                 </div>
-                <form
-                  className="chat-compose"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void send();
-                  }}
-                >
-                  <label className="sr-only" htmlFor="guild-chat-message">
-                    Message
-                  </label>
-                  <textarea
-                    ref={field}
-                    id="guild-chat-message"
-                    value={draft}
-                    maxLength={2000}
-                    rows={2}
-                    placeholder={
-                      peer
-                        ? `Message ${person?.label.split("#")[0] || "member"}…`
-                        : "Message the guild…"
-                    }
-                    onChange={(e) => setDraft(e.target.value)}
-                    disabled={sending}
-                    onKeyDown={(e) => {
-                      if (
-                        e.key === "Enter" &&
-                        !e.shiftKey &&
-                        !e.nativeEvent.isComposing
-                      ) {
-                        e.preventDefault();
-                        void send();
-                      }
-                    }}
-                  />
-                  <div>
-                    <small>
-                      {draft.length}/2000 · Shift + Enter for a new line
-                    </small>
+                {mentionsOnly ? (
+                  <div className="chat-mention-return">
                     <button
-                      className="btn primary"
-                      disabled={sending || !draft.trim()}
-                      type="submit"
+                      className="btn secondary"
+                      onClick={() => choose("")}
                     >
-                      {sending ? (
-                        <LoaderCircle size={15} />
-                      ) : (
-                        <Send size={15} />
-                      )}
-                      Send
+                      Reply in general chat
                     </button>
                   </div>
-                </form>
+                ) : (
+                  <form
+                    className="chat-compose"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void send();
+                    }}
+                  >
+                    {match && (
+                      <div className="chat-mention-picker">
+                        <div className="chat-mention-picker-title">
+                          <AtSign size={14} />
+                          Mention a guild member
+                        </div>
+                        <div
+                          id="chat-mention-options"
+                          role="listbox"
+                          aria-label="Guild members to mention"
+                        >
+                          {suggestions.map((member, index) => (
+                            <button
+                              key={member.id}
+                              id={`chat-mention-option-${index}`}
+                              type="button"
+                              role="option"
+                              aria-selected={index === selectedSuggestion}
+                              tabIndex={-1}
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => insertMention(member)}
+                            >
+                              <span className="chat-avatar">
+                                {member.label.slice(0, 1)}
+                              </span>
+                              <span>
+                                <strong>{member.label}</strong>
+                                <small>{RANK_NAMES[member.role]}</small>
+                              </span>
+                            </button>
+                          ))}
+                          {!suggestions.length && (
+                            <p>No matching guild members.</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    <label className="sr-only" htmlFor="guild-chat-message">
+                      Message
+                    </label>
+                    <textarea
+                      ref={field}
+                      id="guild-chat-message"
+                      value={draft}
+                      maxLength={2000}
+                      rows={2}
+                      placeholder={
+                        peer
+                          ? `Message ${person?.label.split("#")[0] || "member"}…`
+                          : "Message the guild… @ to mention"
+                      }
+                      aria-autocomplete="list"
+                      aria-controls={match ? "chat-mention-options" : undefined}
+                      aria-activedescendant={
+                        match && suggestions.length
+                          ? `chat-mention-option-${selectedSuggestion}`
+                          : undefined
+                      }
+                      onChange={(e) => {
+                        setDraftMentions(
+                          moveMentions(draft, e.target.value, draftMentions),
+                        );
+                        setDraft(e.target.value);
+                        setCaret(e.target.selectionStart);
+                        setMentionIndex(0);
+                        setMentionDismissed(false);
+                      }}
+                      onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
+                      onBlur={() => setMentionDismissed(true)}
+                      disabled={sending}
+                      onKeyDown={(e) => {
+                        if (e.nativeEvent.isComposing) return;
+                        if (match && e.key === "Escape") {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setMentionDismissed(true);
+                          return;
+                        }
+                        if (
+                          match &&
+                          suggestions.length &&
+                          ["ArrowDown", "ArrowUp", "Enter", "Tab"].includes(
+                            e.key,
+                          ) &&
+                          !e.shiftKey
+                        ) {
+                          e.preventDefault();
+                          if (e.key === "ArrowDown")
+                            setMentionIndex(
+                              (selectedSuggestion + 1) % suggestions.length,
+                            );
+                          else if (e.key === "ArrowUp")
+                            setMentionIndex(
+                              (selectedSuggestion + suggestions.length - 1) %
+                                suggestions.length,
+                            );
+                          else insertMention(suggestions[selectedSuggestion]);
+                          return;
+                        }
+                        if (
+                          e.key === "Enter" &&
+                          !e.shiftKey &&
+                          !e.nativeEvent.isComposing
+                        ) {
+                          e.preventDefault();
+                          void send();
+                        }
+                      }}
+                    />
+                    {draftMentions.length > 0 && (
+                      <p className="chat-notifying">
+                        <AtSign size={12} />
+                        {new Set(draftMentions.map((m) => m.id)).size} member
+                        {new Set(draftMentions.map((m) => m.id)).size > 1
+                          ? "s"
+                          : ""}{" "}
+                        will be notified
+                      </p>
+                    )}
+                    <div>
+                      <small>
+                        {draft.length}/2000 · Shift + Enter for a new line
+                      </small>
+                      <button
+                        className="btn primary"
+                        disabled={sending || !draft.trim()}
+                        type="submit"
+                      >
+                        {sending ? (
+                          <LoaderCircle size={15} />
+                        ) : (
+                          <Send size={15} />
+                        )}
+                        Send
+                      </button>
+                    </div>
+                  </form>
+                )}
               </>
             ))}
           <footer className="chat-footnote">

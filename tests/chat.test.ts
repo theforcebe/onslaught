@@ -98,6 +98,144 @@ async function setup() {
   return { db, env, doc, call, send, upstream };
 }
 describe("private guild messenger", () => {
+  it("notifies only selected members, keeps mentions through ordinary reads and clears only the recipient's viewed messages", async () => {
+    const { call, send } = await setup();
+    const first = await call("alice", "messages", {
+      body: "Hi @bob#1234 and @carol#1234",
+      clientId: crypto.randomUUID(),
+      mentions: [
+        { id: "bob", start: 3, end: 12 },
+        { id: "carol", start: 17, end: 29 },
+      ],
+    });
+    // Use actual offsets rather than matching a BattleTag loosely.
+    expect(first.status).toBe(400);
+    const sent = await call("alice", "messages", {
+      body: "Hi @bob#1234 and @carol#1234",
+      clientId: crypto.randomUUID(),
+      mentions: [
+        { id: "bob", start: 3, end: 12 },
+        { id: "carol", start: 17, end: 28 },
+      ],
+    });
+    expect(sent.status).toBe(200);
+    await send("alice", "@everyone @admin#1234 is ordinary unselected text");
+    expect((await call("bob", "status")).data.unreadMentions).toBe(1);
+    expect((await call("admin", "status")).data.unreadMentions).toBe(0);
+    expect((await call("alice", "messages?mentions=1")).data.messages).toEqual(
+      [],
+    );
+    expect(
+      (await call("bob", "messages?mentions=1")).data.messages[0].seq,
+    ).toBe(sent.data.message.seq);
+    await call("bob", "read", { through: 9999 });
+    expect((await call("bob", "status")).data.unreadMentions).toBe(1);
+    await call("bob", "read", {
+      through: 0,
+      mentionSeqs: [sent.data.message.seq],
+    });
+    expect((await call("bob", "status")).data.unreadMentions).toBe(0);
+    expect((await call("carol", "status")).data.unreadMentions).toBe(1);
+    expect(
+      (await call("bob", "messages?mentions=1")).data.messages,
+    ).toHaveLength(1);
+    expect((await call("bob", "messages?mentions=1&peer=alice")).status).toBe(
+      400,
+    );
+  });
+  it("rejects forged, overlapping, self, inactive and private-conversation mentions", async () => {
+    const { call, doc } = await setup();
+    doc.members.find((m) => m.id === "carol")!.status = "pending";
+    const data = {
+      body: "@bob#1234",
+      mentions: [{ id: "bob", start: 0, end: 9 }],
+    };
+    for (const change of [
+      { mentions: [{ id: "outsider", start: 0, end: 9 }] },
+      { mentions: [{ id: "alice", start: 0, end: 9 }] },
+      { body: "@carol#1234", mentions: [{ id: "carol", start: 0, end: 11 }] },
+      { body: "@admin#1234" },
+      { mentions: [...data.mentions, ...data.mentions] },
+      { peer: "bob" },
+    ])
+      expect(
+        (
+          await call("alice", "messages", {
+            ...data,
+            ...change,
+            clientId: crypto.randomUUID(),
+          })
+        ).status,
+      ).toBe(400);
+    expect((await call("bob", "status")).data.unreadMentions).toBe(0);
+  });
+  it("deduplicates recipients, preserves mention payloads on retries and prevents retries from adding notifications", async () => {
+    const { call } = await setup(),
+      clientId = crypto.randomUUID();
+    const data = {
+      body: "@bob#1234 @bob#1234 @carol#1234",
+      clientId,
+      mentions: [
+        { id: "bob", start: 0, end: 9 },
+        { id: "bob", start: 10, end: 19 },
+      ],
+    };
+    const first = await call("alice", "messages", data);
+    expect(first.status).toBe(200);
+    expect((await call("alice", "messages", data)).data.message.seq).toBe(
+      first.data.message.seq,
+    );
+    expect((await call("bob", "status")).data.unreadMentions).toBe(1);
+    expect(
+      (
+        await call("alice", "messages", {
+          ...data,
+          mentions: [...data.mentions, { id: "carol", start: 20, end: 31 }],
+        })
+      ).status,
+    ).toBe(409);
+    expect((await call("carol", "status")).data.unreadMentions).toBe(0);
+    await call("bob", "read", {
+      through: first.data.message.seq,
+      mentionSeqs: [first.data.message.seq],
+    });
+    await call("alice", "messages", data);
+    expect((await call("bob", "status")).data.unreadMentions).toBe(0);
+  });
+  it("rolls back the message if the notification index cannot be saved", async () => {
+    const { db, call } = await setup();
+    db.sqlite.exec(
+      "CREATE TRIGGER fail_mentions BEFORE INSERT ON chat_mentions BEGIN SELECT RAISE(ABORT,'fixture failure'); END;",
+    );
+    expect(
+      (
+        await call("alice", "messages", {
+          body: "@bob#1234",
+          clientId: crypto.randomUUID(),
+          mentions: [{ id: "bob", start: 0, end: 9 }],
+        })
+      ).status,
+    ).toBe(500);
+    expect((await call("alice", "messages")).data.messages).toEqual([]);
+  });
+  it("reading a mention clears that message's badge without reading unrelated general messages", async () => {
+    const { call, send } = await setup();
+    await send("alice", "Other guild discussion");
+    const mention = await call("alice", "messages", {
+      body: "@bob#1234",
+      clientId: crypto.randomUUID(),
+      mentions: [{ id: "bob", start: 0, end: 9 }],
+    });
+    const result = await call("bob", "read", {
+      through: 0,
+      mentionSeqs: [mention.data.message.seq],
+    });
+    expect(result.data).toMatchObject({
+      unread: { general: 1 },
+      unreadMentions: 0,
+    });
+    expect((await call("bob", "status")).data.unread).toEqual({ general: 1 });
+  });
   it("rejects anonymous, unapproved, suspended and cross-origin access", async () => {
     const { call, doc } = await setup();
     doc.members.find((m) => m.id === "bob")!.status = "pending";

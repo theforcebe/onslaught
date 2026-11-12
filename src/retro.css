@@ -789,6 +789,142 @@ textarea::placeholder {
   font-weight: 700;
   font-size: 14px;
 }
+.chat-launcher .chat-mention-badge,
+.messenger-tabs .chat-mention-badge {
+  color: #fff1d2;
+  background: #852f48;
+  border: 1px solid #ffbe85;
+  box-shadow: 0 0 12px #f07e4933;
+}
+.chat-filters {
+  display: flex;
+  gap: 7px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #66546b;
+  background: #171722;
+}
+.chat-filters button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #c0bdce;
+  font-size: 12px;
+  background: transparent;
+}
+.chat-filters button.active {
+  background: #432334;
+  color: #ffe3bd;
+  border-color: #b77183;
+}
+.chat-filters b {
+  color: #ffe3bd;
+}
+.chat-message.mentioned {
+  background: linear-gradient(90deg, #63304455, #38202d33);
+  border-left: 2px solid #ffc482;
+  padding: 8px 10px;
+  border-radius: 3px;
+}
+.chat-mention {
+  background: #534064;
+  color: #f2e8ff;
+  border-radius: 3px;
+  padding: 1px 3px;
+  font-weight: 600;
+}
+.chat-mention.is-you {
+  background: #653a36;
+  color: #ffdfaa;
+}
+.chat-mentioned-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #ffcf93;
+  font-size: 10px;
+}
+.chat-byline {
+  flex-wrap: wrap;
+}
+.chat-compose {
+  position: relative;
+}
+.chat-compose > .chat-mention-picker {
+  position: absolute;
+  display: block;
+  bottom: calc(100% - 2px);
+  left: 12px;
+  right: 12px;
+  z-index: 2;
+  border: 1px solid #bc849f;
+  border-radius: 5px;
+  background: #22202e;
+  box-shadow: 0 -5px 30px #0008;
+  overflow: hidden;
+}
+.chat-mention-picker-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 11px;
+  font-size: 12px;
+  color: #ffdbb2;
+  border-bottom: 1px solid #66546b;
+}
+.chat-mention-picker [role="listbox"] {
+  max-height: 230px;
+  overflow-y: auto;
+}
+.chat-mention-picker button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  text-align: left;
+  color: #eee6f6;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: transparent;
+}
+.chat-mention-picker button[aria-selected="true"],
+.chat-mention-picker button:hover {
+  background: #513047;
+  border-left-color: #ffcb99;
+}
+.chat-mention-picker strong {
+  display: block;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.chat-mention-picker small {
+  display: block;
+  font-size: 11px;
+  color: #d0bdce;
+}
+.chat-mention-picker p {
+  padding: 0 12px;
+  font-size: 13px;
+  color: #c0bdce;
+}
+.chat-compose .chat-notifying {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: #ffd8a8;
+}
+.chat-mention-return {
+  padding: 12px;
+  border-top: 1px solid #66546b;
+}
+.chat-mention-return .btn {
+  width: 100%;
+}
 .chat-launcher:hover {
   background: #bd2944;
   border-color: #ffb98c;
