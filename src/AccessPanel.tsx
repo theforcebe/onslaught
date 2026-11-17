@@ -235,6 +235,10 @@ function MemberEditor({
             </div>
           ) : (
             <>
+              <p className="muted">
+                Active membership includes general guild chat and private
+                messages. No section or raid team permission is needed for chat.
+              </p>
               <fieldset className="access-fieldset" disabled={saving}>
                 <legend>
                   Private sections{" "}
@@ -415,6 +419,10 @@ export function AccessPanel({
             <p className="muted">
               Roster and schedule are public. Private sections and raid teams
               are assigned to each person by an admin.
+            </p>
+            <p className="muted">
+              Once approved, every member can use Guild chat in the sidebar or
+              the chat button at the bottom-right, regardless of rank.
             </p>
             <p className="muted">
               Admins have full control. Officers, Raiders, and Guild Members get

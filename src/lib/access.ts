@@ -160,6 +160,10 @@ export function hasSection(access: Access, section: Section) {
       (section !== "activity" && access.sections.includes(section)))
   );
 }
+// Chat is included in approved membership, independently of rank, sections or teams.
+export function canUseGuildChat(access: Pick<Access, "status">) {
+  return access.status === "active";
+}
 export function hasTeam(access: Access, teamId?: string) {
   return (
     access.status === "active" &&

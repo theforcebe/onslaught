@@ -98,6 +98,49 @@ async function setup() {
   return { db, env, doc, call, send, upstream };
 }
 describe("private guild messenger", () => {
+  it.each(["officer", "raider", "guild_member"] as const)(
+    "unlocks general chat and DMs immediately after approving a new %s with no private grants",
+    async (role) => {
+      const { call, send } = await setup();
+      const joined = await call("outsider", "/api/join", {});
+      expect(joined.status).toBe(200);
+      expect(joined.data.access.status).toBe("pending");
+      expect((await call("outsider", "status")).status).toBe(403);
+      const approved = await call("admin", "/api/members", {
+        id: crypto.randomUUID(),
+        expectedRevision: joined.data.state.revision,
+        member: {
+          id: "outsider",
+          label: "outsider#1234",
+          status: "active",
+          role,
+          sections: [],
+          allTeams: false,
+          teamIds: [],
+        },
+      });
+      expect(approved.status).toBe(200);
+      const view = await call("outsider", "/api/state");
+      expect(view.data.identity).toMatchObject({
+        id: "outsider",
+        admin: false,
+      });
+      expect(view.data.access).toMatchObject({
+        status: "active",
+        role,
+        sections: [],
+      });
+      expect(view.data.members).toBeUndefined();
+      expect(view.data.state.audit).toEqual([]);
+      expect(view.data.state.loot).toEqual([]);
+      expect((await call("outsider", "status")).status).toBe(200);
+      expect((await send("outsider", "Hello guild")).status).toBe(200);
+      expect((await send("outsider", "Hello Bob", "bob")).status).toBe(200);
+      expect(
+        (await call("bob", "messages?peer=outsider")).data.messages[0].body,
+      ).toBe("Hello Bob");
+    },
+  );
   it("returns targeted alert metadata only to the DM recipient and clears it on read", async () => {
     const { call, send } = await setup();
     const sent = await send("alice", "Private content", "bob");

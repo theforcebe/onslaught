@@ -55,7 +55,7 @@ export function SetupGuide({
     },
     {
       title: "Join the guild",
-      body: "Open Your membership and request access. An admin approves your rank and the private sections and raid teams you can see. Approved members can always set their own availability and help with volunteer requests.",
+      body: "Open Your membership and request access. An admin approves your rank and the private sections and raid teams you can see. Every approved member can open Guild chat from the sidebar, set their own availability, and help with volunteer requests.",
       done: access.status === "active",
       action: "View my membership",
       run: () => go("access"),

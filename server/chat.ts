@@ -3,6 +3,7 @@ import type { Env } from "./worker";
 import type { Identity } from "../src/lib/model";
 import {
   MemberSchema,
+  canUseGuildChat,
   type GuildDocument,
   type Member,
 } from "../src/lib/access";
@@ -144,9 +145,11 @@ export async function handleChat(
     req.method === "POST" && u.pathname.endsWith("/messages") ? 20 : 90,
   );
   const all = await members(env, deps);
+  const membership = all.find((m) => m.id === identity.id);
   if (
-    !identity.admin &&
-    !all.some((m) => m.id === identity.id && m.status === "active")
+    !canUseGuildChat({
+      status: identity.admin ? "active" : membership?.status || "unregistered",
+    })
   )
     throw new ChangeError("Guild chat is available to approved members.", 403);
   const active = all.filter((m) => m.status === "active");

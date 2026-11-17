@@ -1,8 +1,27 @@
 import { describe, it, expect } from "vitest";
 import { canOpenPage } from "../src/lib/navigation";
-import { ADMIN_ACCESS, PUBLIC_ACCESS, type Access } from "../src/lib/access";
+import {
+  ADMIN_ACCESS,
+  PUBLIC_ACCESS,
+  canUseGuildChat,
+  type Access,
+} from "../src/lib/access";
 
 describe("permission-aware navigation", () => {
+  it.each(["admin", "officer", "raider", "guild_member"] as const)(
+    "%s gets chat with approved membership and no section or team grants",
+    (role) => {
+      const access: Access = { ...PUBLIC_ACCESS, status: "active", role };
+      expect(canUseGuildChat(access)).toBe(true);
+      for (const status of [
+        "visitor",
+        "unregistered",
+        "pending",
+        "suspended",
+      ] as const)
+        expect(canUseGuildChat({ ...access, status })).toBe(false);
+    },
+  );
   it.each(["visitor", "unregistered", "pending", "suspended"] as const)(
     "%s sees public pages and their membership screen, without private destinations",
     (status) => {

@@ -96,6 +96,8 @@ Use a character's **Admin: assign Battle.net ownership** control to attach an ex
 
 ## 6. Verify before onboarding the guild
 
+Guild chat (general and private messages) is included in every approved membership, regardless of rank, section grants, or raid team access. It opens from **Guild chat** in the sidebar or the floating button. Pending and suspended memberships cannot use chat. The **Guild board & discussions** grant controls announcements and their discussion threads, not guild chat.
+
 - Sign in as the owner, confirm Members & access works, and create a harmless test record.
 - Sign in as a raider with one section and one team; confirm other teams' private records are absent from API responses.
 - Confirm a raider cannot edit someone else's character, change groups, grant access, or award loot.

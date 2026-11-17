@@ -33,13 +33,16 @@ import { chatBell, newChatAlert } from "./lib/chat-alerts";
 
 export function GuildChat({
   identity,
+  open,
+  setOpen,
   refresh,
 }: {
   identity: Identity;
+  open: boolean;
+  setOpen: (open: boolean) => void;
   refresh: () => void;
 }) {
-  const [open, setOpen] = useState(false),
-    [directory, setDirectory] = useState(false),
+  const [directory, setDirectory] = useState(false),
     [peer, setPeer] = useState("");
   const [notice, setNotice] = useState<ChatNotification | null>(null),
     [preferences, setPreferences] = useState(false),
@@ -526,7 +529,7 @@ export function GuildChat({
             setDirectory(true);
             setPreferences(false);
           } else if (!open && unreadMentions > 0) choose("", true);
-          setOpen((v) => !v);
+          setOpen(!open);
         }}
         aria-expanded={open}
         aria-controls="guild-messenger"

@@ -64,6 +64,7 @@ import {
   hasSection,
   hasTeam,
   canSeeCharacter,
+  canUseGuildChat,
   project,
 } from "./lib/access";
 import type { Access, GuildView, Member, Section } from "./lib/access";
@@ -187,6 +188,7 @@ export default function App() {
     [error, setError] = useState(""),
     [refreshing, setRefreshing] = useState(false),
     [menu, setMenu] = useState(false),
+    [chatOpen, setChatOpen] = useState(false),
     [identity, setIdentity] = useState<Identity>(),
     [filter, setFilter] = useState(""),
     [classFilter, setClassFilter] = useState("all"),
@@ -198,6 +200,10 @@ export default function App() {
     [lootTab, setLootTab] = useState("active");
   const state = demo ? practice : live;
   const effectiveAccess = demo ? ADMIN_ACCESS : access;
+  const chatAvailable = !demo && !!identity && canUseGuildChat(effectiveAccess);
+  useEffect(() => {
+    setChatOpen(false);
+  }, [identity?.id, chatAvailable]);
   function acceptView(next: GuildView) {
     if (!sessionActive()) setIdentity(undefined);
     else if (next.identity) setIdentity(next.identity);
@@ -1382,6 +1388,20 @@ export default function App() {
                 )}
               </button>
             ))}
+          {chatAvailable && (
+            <button
+              className={chatOpen ? "active" : ""}
+              onClick={() => {
+                setChatOpen(true);
+                setMenu(false);
+              }}
+              aria-expanded={chatOpen}
+              aria-controls="guild-messenger"
+            >
+              <MessageSquare size={18} />
+              <span>Guild chat</span>
+            </button>
+          )}
         </nav>
         <div className="sidebar-bottom">
           <SetupGuide
@@ -1597,11 +1617,20 @@ export default function App() {
           </button>
         </div>
       )}
-      {!demo && identity && effectiveAccess.status === "active" && (
-        <Suspense fallback={null}>
+      {chatAvailable && identity && (
+        <Suspense
+          fallback={
+            <button className="chat-launcher" disabled aria-busy="true">
+              <LoaderCircle size={19} className="spin" />
+              <span>Loading guild chat…</span>
+            </button>
+          }
+        >
           <GuildChat
             key={identity.id}
             identity={identity}
+            open={chatOpen}
+            setOpen={setChatOpen}
             refresh={() => void refresh()}
           />
         </Suspense>
