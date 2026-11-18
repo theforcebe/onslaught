@@ -16,6 +16,11 @@ import { ZodError } from "zod";
 import { handleDiscord } from "./discord";
 import { handleRaidPublish } from "./discord-raids";
 import { handleRaidInteraction } from "./raid-interactions";
+import {
+  affectedRaidCharts,
+  flushRaidCharts,
+  queueSiteCharts,
+} from "./raid-chart-sync";
 import { handleChat, invalidateChatMembers } from "./chat";
 import { serveItem, serveItemSearch, publicItemCache } from "./items";
 export interface Env {
@@ -365,6 +370,10 @@ async function route(
     readRepository,
     writeRepository,
     limit,
+    refreshChart: (eventId) =>
+      ctx.waitUntil(
+        flushRaidCharts(env, readRepository, eventId).catch(() => {}),
+      ),
   });
   if (interaction) return interaction;
   if (req.method === "POST" && origin !== env.APP_ORIGIN)
@@ -376,6 +385,10 @@ async function route(
     boundedJSON,
     limit,
     json,
+    refreshChart: (eventId) =>
+      ctx.waitUntil(
+        flushRaidCharts(env, readRepository, eventId).catch(() => {}),
+      ),
   });
   if (raidSignup) return raidSignup;
   const chatResponse = await handleChat(req, env, {
@@ -583,6 +596,33 @@ async function route(
     if (next.state.revision !== current.document.state.revision) {
       await writeRepository(env, current.url, current.sha, next);
       await invalidateChatMembers(env);
+      const previous = new Set(
+        current.document.members
+          .filter((m) => m.status === "active")
+          .map((m) => m.id),
+      );
+      const changed = new Set(
+        next.members
+          .filter((m) => previous.has(m.id) !== (m.status === "active"))
+          .map((m) => m.id),
+      );
+      if (changed.size) {
+        const characters = next.state.characters.filter(
+          (c) => c.ownerBattleNet && changed.has(c.ownerBattleNet),
+        );
+        const nights = next.state.events.filter(
+          (e) =>
+            Date.parse(e.end) > Date.now() &&
+            characters.some((c) => e.signups[c.id]),
+        );
+        ctx.waitUntil(
+          queueSiteCharts(
+            env,
+            nights.map((e) => e.id),
+            readRepository,
+          ).catch(() => {}),
+        );
+      }
     }
     return guildViewResponse(req, next, identity);
   }
@@ -604,11 +644,24 @@ async function route(
       next.state.audit[0].scope = actionScope(next.state, input.action);
       await writeRepository(env, current.url, current.sha, next);
     }
+    // A repeated idempotent save can repair a missed refresh after a network interruption.
+    const affected = affectedRaidCharts(next.state.events, input.action);
+    if (affected.length)
+      ctx.waitUntil(
+        queueSiteCharts(env, affected, readRepository).catch(() => {}),
+      );
     return guildViewResponse(req, next, identity);
   }
   return json({ error: "Not found." }, 404);
 }
 export default {
+  async scheduled(
+    _event: ScheduledController,
+    env: Env,
+    ctx: ExecutionContext,
+  ) {
+    ctx.waitUntil(flushRaidCharts(env, readRepository));
+  },
   async fetch(req: Request, env: Env, ctx: ExecutionContext) {
     let response: Response;
     try {

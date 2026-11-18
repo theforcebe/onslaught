@@ -6,6 +6,9 @@ workers_dev = true
 [observability]
 enabled = false
 
+[triggers]
+crons = ["*/5 * * * *"]
+
 [vars]
 APP_ORIGIN = "https://theforcebe.github.io"
 PUBLIC_API_URL = "https://onslaught-gateway.onslaught-raid.workers.dev"

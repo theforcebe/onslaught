@@ -568,6 +568,16 @@ textarea::placeholder {
 .discord-raid-signup { padding: 10px 0; }
 .discord-raid-signup .button-row { flex-wrap: wrap; }
 .discord-raid-signup p { margin: 6px 0; }
+.discord-chart-sharing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  min-height: 40px;
+  color: var(--text);
+  cursor: pointer;
+}
+.discord-chart-sharing input { width: 17px; height: 17px; flex: 0 0 auto; }
 .dispatch-card {
   position: relative;
   background: linear-gradient(125deg, #302031, #201d2b);

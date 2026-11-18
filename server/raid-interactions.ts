@@ -5,8 +5,14 @@ import {
   type GuildDocument,
 } from "../src/lib/access";
 import { applyChange, ChangeError } from "../src/lib/reducer";
-import type { Identity, RaidAction } from "../src/lib/model";
-import { characterBuilds } from "../src/lib/raid";
+import {
+  label,
+  type Character,
+  type Identity,
+  type RaidAction,
+  type RaidEvent,
+} from "../src/lib/model";
+import { buildKey, characterBuilds, signupBuildKind } from "../src/lib/raid";
 import { config } from "./discord";
 import {
   attendanceLabels,
@@ -17,8 +23,10 @@ import {
   type Attendance,
 } from "./discord-raids";
 import type { Env } from "./worker";
+import { recordDiscordChartSignup } from "./raid-chart-sync";
 
 type Deps = {
+  refreshChart?: (eventId: string) => void;
   limit: (env: Env, key: string, max: number) => Promise<void>;
   readRepository: (
     env: Env,
@@ -46,7 +54,14 @@ const interaction = z.object({
 });
 type Click = z.infer<typeof interaction>;
 type Build = ReturnType<typeof characterBuilds>[number];
-type Choice = { characterId: string; build?: Build; label: string };
+type Choice = {
+  characterId: string;
+  build?: Build;
+  kind?: ReturnType<typeof signupBuildKind>;
+  label: string;
+  current?: Attendance;
+  keepRecorded?: boolean;
+};
 type Menu = {
   discordId: string;
   memberId: string;
@@ -54,8 +69,13 @@ type Menu = {
   status: Attendance;
   choices: Choice[];
   originalMessage: string;
+  showOnChart?: boolean;
+  page?: number;
+  pageCount?: number;
 };
 type Reply = { content: string; components?: unknown[] };
+const selectLimit = 25;
+const menuControl = /^raid:(pick|prev|next):([a-f0-9-]{36})$/;
 const hexBytes = (s: string) =>
   Uint8Array.from(s.match(/../g)!, (part) => parseInt(part, 16));
 
@@ -131,10 +151,7 @@ async function linkedMember(
     );
   return { provider: "battlenet", id: member.id, label: member.label };
 }
-async function loadMenu(env: Env, click: Click) {
-  const id = click.data.custom_id.slice("raid:pick:".length);
-  if (!/^[\da-f-]{36}$/.test(id))
-    throw new ChangeError("Open the latest raid signup.");
+async function loadMenu(env: Env, click: Click, id: string) {
   const row = await env.DB.prepare(
     "SELECT payload FROM auth_records WHERE key=? AND expires_at>?",
   )
@@ -147,25 +164,36 @@ async function loadMenu(env: Env, click: Click) {
     );
   return menu;
 }
-async function makeMenu(env: Env, menu: Menu): Promise<Reply> {
-  if (menu.choices.length > 25)
-    return {
-      content:
-        "Choose from your full roster and specializations in the [raid planner](" +
-        raidUrl(menu.eventId) +
-        ").",
-    };
+async function makeMenu(env: Env, menu: Menu, page = 0): Promise<Reply> {
+  const pageCount = Math.ceil(menu.choices.length / selectLimit);
+  if (page < 0 || page >= pageCount)
+    throw new ChangeError("Your roster changed. Open the raid signup again.");
+  const choices = menu.choices.slice(
+    page * selectLimit,
+    (page + 1) * selectLimit,
+  );
   const id = crypto.randomUUID();
   await env.DB.prepare(
     "INSERT INTO auth_records(key,payload,expires_at) VALUES(?,?,?)",
   )
-    .bind("raid-menu:" + id, JSON.stringify(menu), Date.now() + 10 * 60 * 1000)
+    .bind(
+      "raid-menu:" + id,
+      JSON.stringify({ ...menu, choices, page, pageCount }),
+      Date.now() + 10 * 60 * 1000,
+    )
     .run();
+  const choose = menu.choices.some((c) => c.build)
+    ? "Choose your character and build"
+    : "Choose your character";
   return {
     content:
-      "Choose the character and role for your **" +
-      attendanceLabels[menu.status] +
-      "** response.",
+      choose +
+      ` for **${attendanceLabels[menu.status]}**.` +
+      (menu.choices.some((c) => c.kind === "Alternate")
+        ? " Pick **Alternate** to play that role for this raid."
+        : "") +
+      " Your character name and response will appear on the signup chart in this channel." +
+      (pageCount > 1 ? `\nPage ${page + 1} of ${pageCount}` : ""),
     components: [
       {
         type: 1,
@@ -173,16 +201,80 @@ async function makeMenu(env: Env, menu: Menu): Promise<Reply> {
           {
             type: 3,
             custom_id: "raid:pick:" + id,
-            placeholder: "Choose your character and role",
-            options: menu.choices.map((choice, i) => ({
+            placeholder: choose,
+            options: choices.map((choice, i) => ({
               label: choice.label.slice(0, 100),
               value: String(i),
+              ...(choice.current
+                ? {
+                    description: `Current signup · ${attendanceLabels[choice.current]}`,
+                  }
+                : {}),
             })),
           },
         ],
       },
+      ...(pageCount > 1
+        ? [
+            {
+              type: 1,
+              components: [
+                ...(page > 0
+                  ? [
+                      {
+                        type: 2,
+                        style: 2,
+                        label: "Previous page",
+                        custom_id: "raid:prev:" + id,
+                      },
+                    ]
+                  : []),
+                ...(page + 1 < pageCount
+                  ? [
+                      {
+                        type: 2,
+                        style: 2,
+                        label: "Next page",
+                        custom_id: "raid:next:" + id,
+                      },
+                    ]
+                  : []),
+              ],
+            },
+          ]
+        : []),
     ],
   };
+}
+function choicesFor(
+  c: Character,
+  event: RaidEvent,
+  status: Attendance,
+): Choice[] {
+  const current = event.signups[c.id];
+  if (status === "absent")
+    return [{ characterId: c.id, label: c.name, current }];
+  const builds = characterBuilds(c);
+  const recorded = event.signupBuilds?.[c.id];
+  const selected = recorded ?? builds[0];
+  // An existing RSVP can retain its recorded build after a member edits their profile.
+  if (recorded && !builds.some((b) => buildKey(b) === buildKey(recorded)))
+    builds.push(recorded);
+  if (!builds.length) return [{ characterId: c.id, label: c.name, current }];
+  return builds.map((build) => {
+    const kind = signupBuildKind(c, build);
+    return {
+      characterId: c.id,
+      build,
+      kind,
+      label: `${kind} · ${build.spec} (${label(build.role)}) · ${c.name}`,
+      current:
+        selected && buildKey(build) === buildKey(selected)
+          ? current
+          : undefined,
+      keepRecorded: kind === "Raid build" || undefined,
+    };
+  });
 }
 export async function processRaidClick(
   env: Env,
@@ -190,9 +282,8 @@ export async function processRaidClick(
   d: Deps,
 ): Promise<Reply> {
   await d.limit(env, "discord-rsvp:" + click.member.user.id, 30);
-  const menu = click.data.custom_id.startsWith("raid:pick:")
-    ? await loadMenu(env, click)
-    : undefined;
+  const control = menuControl.exec(click.data.custom_id);
+  const menu = control ? await loadMenu(env, click, control[2]) : undefined;
   const cfg = await config(env);
   if (
     !cfg ||
@@ -214,8 +305,10 @@ export async function processRaidClick(
   if (!posted || (menu && posted.event_id !== menu.eventId))
     throw new ChangeError("This raid signup is no longer available.");
   const status =
-    menu?.status ||
-    (click.data.custom_id.slice("raid:rsvp:".length) as Attendance);
+    menu?.status || (click.data.custom_id.split(":")[2] as Attendance);
+  const showOnChart = menu
+    ? menu.showOnChart === true
+    : click.data.custom_id.startsWith("raid:chart:");
   if (!Object.hasOwn(attendanceLabels, status))
     throw new ChangeError("Choose a valid attendance response.");
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -238,27 +331,28 @@ export async function processRaidClick(
           raidUrl(event.id) +
           "), then sign up here.",
       };
-    const choices: Choice[] = own.flatMap((c) => {
-      const builds = characterBuilds(c);
-      return status !== "absent" && builds.length
-        ? builds.map((build) => ({
-            characterId: c.id,
-            build,
-            label: c.name + " · " + build.spec + " (" + build.role + ")",
-          }))
-        : [{ characterId: c.id, label: c.name }];
-    });
+    const choices = own.flatMap((c) => choicesFor(c, event, status));
     let choice = choices[0];
     if (menu) {
+      if (control && control[1] !== "pick") {
+        const page = (menu.page ?? 0) + (control[1] === "next" ? 1 : -1);
+        if (page < 0 || page >= (menu.pageCount ?? 1))
+          throw new ChangeError(
+            "Choose an available page from your signup menu.",
+          );
+        return makeMenu(env, { ...menu, choices }, page);
+      }
       const index = click.data.values?.[0];
       if (!index || !/^\d{1,2}$/.test(index))
         throw new ChangeError("Choose a character from the raid menu.");
       const selected = menu.choices[Number(index)];
+      if (!selected) throw new ChangeError("Choose an option from this page.");
       const valid = choices.find(
         (item) =>
           item.characterId === selected?.characterId &&
           item.build?.spec === selected?.build?.spec &&
-          item.build?.role === selected?.build?.role,
+          item.build?.role === selected?.build?.role &&
+          !!item.keepRecorded === !!selected?.keepRecorded,
       );
       if (!valid)
         throw new ChangeError(
@@ -273,13 +367,14 @@ export async function processRaidClick(
         eventId: event.id,
         status,
         originalMessage: click.message.id,
+        showOnChart: true,
       });
     const action: RaidAction = {
       type: "event.signup",
       eventId: event.id,
       characterId: choice.characterId,
       status,
-      ...(choice.build ? { build: choice.build } : {}),
+      ...(choice.build && !choice.keepRecorded ? { build: choice.build } : {}),
     };
     const identity = authorizeAction(document, actor, action);
     const request = {
@@ -299,6 +394,28 @@ export async function processRaidClick(
         throw err;
       }
     }
+    let queued = true;
+    try {
+      await recordDiscordChartSignup(
+        env,
+        event.id,
+        showOnChart
+          ? {
+              guildId: click.guild_id,
+              channelId: click.channel_id,
+              messageId: menu?.originalMessage || click.message.id,
+              memberId: actor.id,
+              characterId: choice.characterId,
+            }
+          : undefined,
+        click.id,
+      );
+      d.refreshChart?.(event.id);
+    } catch {
+      // The repository write is already committed. Retrying the RSVP safely
+      // records missing chart work without changing the saved attendance.
+      queued = false;
+    }
     return {
       content:
         choice.label +
@@ -308,7 +425,13 @@ export async function processRaidClick(
         event.title.replace(/[\[\]\\]/g, "") +
         "](" +
         raidUrl(event.id) +
-        ").",
+        ")." +
+        (choice.build && choices.length > 1
+          ? " Choose Going or Maybe again to change your raid build."
+          : "") +
+        (queued
+          ? ""
+          : " Your attendance is saved. Choose your response again to refresh the Discord chart."),
     };
   }
   throw new ChangeError(
@@ -339,7 +462,11 @@ async function finish(env: Env, click: Click, d: Deps) {
       method: "PATCH",
       redirect: "manual",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...reply, allowed_mentions: { parse: [] } }),
+      body: JSON.stringify({
+        components: [],
+        ...reply,
+        allowed_mentions: { parse: [] },
+      }),
       signal: AbortSignal.timeout(5000),
     });
     if (r.ok || (r.status !== 404 && r.status !== 429 && r.status < 500)) break;
@@ -371,14 +498,17 @@ export async function handleRaidInteraction(
   const parsed = interaction.safeParse(payload);
   if (
     !parsed.success ||
-    !/^raid:(rsvp:(going|tentative|absent)|pick:[a-f0-9-]{36})$/.test(
+    (!/^raid:(?:chart|rsvp):(?:going|tentative|absent)$/.test(
       parsed.data.data.custom_id,
-    )
+    ) &&
+      !menuControl.test(parsed.data.data.custom_id))
   )
     return Response.json({
       type: 4,
       data: { flags: 64, content: "This action is unavailable." },
     });
   ctx.waitUntil(finish(env, parsed.data, d).catch(() => {}));
+  if (/^raid:(?:prev|next):/.test(parsed.data.data.custom_id))
+    return Response.json({ type: 6 });
   return Response.json({ type: 5, data: { flags: 64 } });
 }

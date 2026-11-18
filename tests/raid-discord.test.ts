@@ -203,6 +203,17 @@ describe("Discord raid signups", () => {
       sent.components[0].components.map((b: any) => b.custom_id || b.url),
     ).toContain(raidUrl(event.id));
     expect(sent.allowed_mentions).toEqual({ parse: [] });
+    expect(
+      sent.components[0].components
+        .slice(0, 3)
+        .map((b: { custom_id: string }) => b.custom_id),
+    ).toEqual([
+      "raid:chart:going",
+      "raid:chart:tentative",
+      "raid:chart:absent",
+    ]);
+    expect(sent.content).toContain("this channel");
+    expect(sent.embeds).toHaveLength(1);
     expect(JSON.stringify(sent)).not.toContain("PRIVATE-FIRST");
     expect(
       api.mock.calls.filter(([, i]) => i?.method === "PATCH"),
@@ -224,6 +235,7 @@ describe("Discord raid signups", () => {
     });
     const card = updated("/messages/" + post);
     expect(card.content).toContain(event.title);
+    expect(card.embeds).toHaveLength(1);
     expect(card.content).toContain(
       "<t:" + Math.floor(Date.parse(event.start) / 1000) + ":F>",
     );
@@ -264,6 +276,7 @@ describe("Discord raid signups", () => {
     const result = await call();
     expect(result.signup.interactive).toBe(false);
     expect(result.signup.notice).toContain("Create Events");
+    expect(message.embeds).toHaveLength(1);
     expect(message.components[0].components).toEqual([
       {
         type: 2,
@@ -522,5 +535,188 @@ describe("Discord raid signups", () => {
       processRaidClick(env, { ...click, member: { user: { id: app } } }, deps),
     ).rejects.toThrow("Link your Discord");
     expect(deps.writeRepository).not.toHaveBeenCalled();
+  });
+  it("distinguishes two Feral roles and lets the member switch back to main for this night", async () => {
+    const { env, deps, click, store, event, register } = fixture();
+    register();
+    const c = store.doc.state.characters[0];
+    Object.assign(c, {
+      class: "druid",
+      spec: "Feral",
+      role: "tank",
+      alternateBuilds: [{ spec: "Feral", role: "melee" }],
+    });
+    const secondNight = {
+      ...event,
+      id: "second-night",
+      signups: { [c.id]: "going" as const },
+      signupBuilds: { [c.id]: { spec: "Feral", role: "melee" as const } },
+      lineup: {},
+    };
+    store.doc.state.events.push(secondNight);
+    const chartClick = { ...click, data: { custom_id: "raid:chart:going" } };
+    const prompt = await processRaidClick(env, chartClick, deps);
+    expect(prompt.content).toContain("character name and response will appear");
+    expect(prompt.content).toContain("Alternate");
+    const menu = (prompt.components as any)[0].components[0];
+    expect(menu.options.map((o: { label: string }) => o.label)).toEqual([
+      `Main · Feral (Tank) · ${c.name}`,
+      `Alternate · Feral (Melee) · ${c.name}`,
+    ]);
+    expect(deps.writeRepository).not.toHaveBeenCalled();
+    const choose = (custom_id: string, value: string, id: string) =>
+      processRaidClick(
+        env,
+        { ...click, id, data: { custom_id, values: [value] } },
+        deps,
+      );
+    expect(
+      (await choose(menu.custom_id, "1", "200000000000000021")).content,
+    ).toContain("Alternate · Feral (Melee)");
+    const again = await processRaidClick(
+      env,
+      { ...click, data: { custom_id: "raid:chart:tentative" } },
+      deps,
+    );
+    const updated = (again.components as any)[0].components[0];
+    expect(updated.options[1].description).toBe("Current signup · Going");
+    expect(updated.options[0].description).toBeUndefined();
+    expect(
+      (await choose(updated.custom_id, "0", "200000000000000022")).content,
+    ).toContain("Main · Feral (Tank)");
+    expect(store.doc.state.events[0].signups[c.id]).toBe("tentative");
+    expect(store.doc.state.events[0].signupBuilds?.[c.id]).toEqual({
+      spec: "Feral",
+      role: "tank",
+    });
+    expect(store.doc.state.characters[0]).toEqual(c);
+    expect(store.doc.state.events.find((e) => e.id === secondNight.id)).toEqual(
+      secondNight,
+    );
+  });
+  it("keeps a historical build for its existing RSVP only while that selection is still current", async () => {
+    const { env, deps, click, store, event, register } = fixture();
+    register();
+    const c = store.doc.state.characters[0];
+    Object.assign(c, {
+      class: "druid",
+      spec: "Restoration",
+      role: "healer",
+      alternateBuilds: [],
+    });
+    event.signups[c.id] = "going";
+    event.signupBuilds = { [c.id]: { spec: "Feral", role: "tank" } };
+    const prompt = await processRaidClick(
+      env,
+      { ...click, data: { custom_id: "raid:chart:tentative" } },
+      deps,
+    );
+    const menu = (prompt.components as any)[0].components[0];
+    expect(menu.options[1]).toMatchObject({
+      label: `Raid build · Feral (Tank) · ${c.name}`,
+      description: "Current signup · Going",
+    });
+    const selection = {
+      ...click,
+      data: { custom_id: menu.custom_id, values: ["1"] },
+    };
+    await processRaidClick(env, selection, deps);
+    expect(store.doc.state.events[0].signupBuilds?.[c.id]).toEqual({
+      spec: "Feral",
+      role: "tank",
+    });
+    expect(store.doc.state.events[0].signups[c.id]).toBe("tentative");
+    store.doc.state.events[0].signupBuilds![c.id] = {
+      spec: "Restoration",
+      role: "healer",
+    };
+    await expect(processRaidClick(env, selection, deps)).rejects.toThrow(
+      "options changed",
+    );
+  });
+  it("paginates large rosters inside Discord and only accepts the offered options from the linked member", async () => {
+    const { env, deps, click, store, event, register, sqlite } = fixture();
+    register();
+    const base = store.doc.state.characters[0];
+    store.doc.state.characters = Array.from({ length: 14 }, (_, i) => ({
+      ...base,
+      id: "raider-" + i,
+      name: "Raider " + i,
+      class: "druid",
+      role: "tank",
+      spec: "Feral",
+      alternateBuilds: [{ role: "melee", spec: "Feral" }],
+    }));
+    const clicked = (custom_id: string, values?: string[]) => ({
+      ...click,
+      data: { custom_id, values },
+      id: "200000000000000030",
+    });
+    const page = await processRaidClick(env, clicked("raid:chart:going"), deps);
+    const [first, nav] = page.components as any[];
+    expect(page.content).toContain("Page 1 of 2");
+    expect(first.components[0].options).toHaveLength(25);
+    expect(nav.components.map((b: { label: string }) => b.label)).toEqual([
+      "Next page",
+    ]);
+    const nextId = nav.components[0].custom_id;
+    await expect(
+      processRaidClick(
+        env,
+        { ...clicked(nextId), member: { user: { id: post } } },
+        deps,
+      ),
+    ).rejects.toThrow("menu expired");
+    await expect(
+      processRaidClick(
+        env,
+        clicked(first.components[0].custom_id, ["25"]),
+        deps,
+      ),
+    ).rejects.toThrow("from this page");
+    const secondPage = await processRaidClick(env, clicked(nextId), deps);
+    expect(secondPage.content).toContain("Page 2 of 2");
+    const [last, back] = secondPage.components as any[];
+    expect(back.components.map((b: { label: string }) => b.label)).toEqual([
+      "Previous page",
+    ]);
+    expect(last.components[0].options).toHaveLength(3);
+    expect(last.components[0].options[2].label).toContain(
+      "Alternate · Feral (Melee) · Raider 13",
+    );
+    expect(
+      (await processRaidClick(env, clicked(back.components[0].custom_id), deps))
+        .content,
+    ).toContain("Page 1 of 2");
+    await expect(
+      processRaidClick(
+        env,
+        clicked(back.components[0].custom_id.replace(":prev:", ":next:")),
+        deps,
+      ),
+    ).rejects.toThrow("available page");
+    await expect(
+      processRaidClick(env, clicked(last.components[0].custom_id, ["3"]), deps),
+    ).rejects.toThrow("from this page");
+    expect(deps.writeRepository).not.toHaveBeenCalled();
+    const reply = await processRaidClick(
+      env,
+      clicked(last.components[0].custom_id, ["2"]),
+      deps,
+    );
+    expect(reply.content).toContain("Alternate · Feral (Melee) · Raider 13");
+    expect(
+      store.doc.state.events.find((e) => e.id === event.id)?.signupBuilds?.[
+        "raider-13"
+      ],
+    ).toEqual({ spec: "Feral", role: "melee" });
+    sqlite
+      .prepare(
+        "UPDATE auth_records SET expires_at=0 WHERE key LIKE 'raid-menu:%'",
+      )
+      .run();
+    await expect(processRaidClick(env, clicked(nextId), deps)).rejects.toThrow(
+      "menu expired",
+    );
   });
 });

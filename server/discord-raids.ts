@@ -8,18 +8,22 @@ import {
 import type { Identity, RaidEvent } from "../src/lib/model";
 import { ChangeError } from "../src/lib/reducer";
 import { config, DiscordError, discordFetch } from "./discord";
+import {
+  attendanceLabels,
+  calendarUrl,
+  raidMessageBody,
+  raidUrl,
+} from "./raid-message";
+import {
+  chartVisibleIds,
+  queueRaidChart,
+  setChartName,
+} from "./raid-chart-sync";
 import type { Env } from "./worker";
 
 export const signupPath = "/api/discord/raid-signup";
 export const interactionPath = "/discord/interactions";
-export const raidUrl = (eventId: string) =>
-  "https://theforcebe.github.io/onslaught/#planner?raid=" +
-  encodeURIComponent(eventId);
-export const attendanceLabels = {
-  going: "Going",
-  tentative: "Maybe",
-  absent: "Can't make it",
-} as const;
+export { raidUrl, attendanceLabels };
 export type Attendance = keyof typeof attendanceLabels;
 export const snowflake = z.string().regex(/^\d{17,20}$/);
 export const publicKeyRecord = "raid-interaction-public-key";
@@ -43,16 +47,16 @@ type ReadDeps = {
   readRepository: (env: Env) => Promise<{ document: GuildDocument }>;
   boundedJSON: (req: Request) => Promise<unknown>;
   limit: (env: Env, key: string, max: number) => Promise<void>;
+  refreshChart?: (eventId: string) => void;
 };
 const rowFor = (env: Env, eventId: string) =>
   env.DB.prepare("SELECT * FROM discord_raid_signups WHERE event_id=?")
     .bind(eventId)
     .first<SignupRow>();
-const calendarUrl = (guild: string, id: string) =>
-  "https://discord.com/events/" + guild + "/" + id;
 function display(row: SignupRow | null) {
   return row?.message_id
     ? {
+        messageId: row.message_id,
         url:
           "https://discord.com/channels/" +
           row.guild_id +
@@ -117,52 +121,6 @@ export async function setupInteractions(env: Env, register: boolean) {
       " and refresh this signup.",
   };
 }
-function messageBody(
-  event: RaidEvent,
-  interactive: boolean,
-  scheduledId: string | null,
-  guildId: string,
-) {
-  const buttons: Array<Record<string, unknown>> = interactive
-    ? Object.entries(attendanceLabels).map(([status, label]) => ({
-        type: 2,
-        style: status === "going" ? 3 : status === "absent" ? 4 : 2,
-        label,
-        custom_id: "raid:rsvp:" + status,
-      }))
-    : [];
-  buttons.push({
-    type: 2,
-    style: 5,
-    label: interactive ? "Open raid planner" : "Sign up in Ønslaught",
-    url: raidUrl(event.id),
-  });
-  if (scheduledId)
-    buttons.push({
-      type: 2,
-      style: 5,
-      label: "Discord event",
-      url: calendarUrl(guildId, scheduledId),
-    });
-  return {
-    content:
-      "**" +
-      event.title +
-      "**\n" +
-      event.instance +
-      "\n<t:" +
-      Math.floor(Date.parse(event.start) / 1000) +
-      ":F> – <t:" +
-      Math.floor(Date.parse(event.end) / 1000) +
-      ":t>\n" +
-      (interactive
-        ? "Choose your availability below. Link Discord in Ønslaught to respond here."
-        : "Open the raid planner to set your character’s availability.") +
-      (scheduledId ? " Discord’s Interested button sets a reminder." : ""),
-    allowed_mentions: { parse: [] },
-    components: [{ type: 1, components: buttons }],
-  };
-}
 async function calendar(env: Env, event: RaidEvent, row: SignupRow) {
   const url = raidUrl(event.id);
   const resource = "/guilds/" + row.guild_id + "/scheduled-events";
@@ -214,7 +172,12 @@ async function calendar(env: Env, event: RaidEvent, row: SignupRow) {
     };
   }
 }
-async function publish(env: Env, event: RaidEvent, admin: boolean) {
+async function publish(
+  env: Env,
+  document: GuildDocument,
+  event: RaidEvent,
+  admin: boolean,
+) {
   const cfg = await config(env);
   if (!cfg)
     throw new ChangeError("Connect the Discord scheduling channel first.", 409);
@@ -252,8 +215,7 @@ async function publish(env: Env, event: RaidEvent, admin: boolean) {
       )
         .bind(scheduled.id, event.id, lock)
         .run();
-    const body = messageBody(event, setting.interactive, scheduled.id, guildId),
-      resource = "/channels/" + channelId + "/messages";
+    const resource = "/channels/" + channelId + "/messages";
     let messageId = row.message_id;
     if (!messageId && row.message_attempt) {
       const since = String(
@@ -288,6 +250,22 @@ async function publish(env: Env, event: RaidEvent, admin: boolean) {
       )
         .bind(Date.now(), event.id, lock)
         .run();
+    const visible = await chartVisibleIds(
+      env,
+      event.id,
+      guildId,
+      channelId,
+      messageId,
+      document,
+    );
+    const body = raidMessageBody(
+      event,
+      document.state.characters,
+      visible,
+      setting.interactive,
+      scheduled.id,
+      guildId,
+    );
     const sent = await discordFetch(
       env,
       messageId ? resource + "/" + messageId : resource,
@@ -306,6 +284,8 @@ async function publish(env: Env, event: RaidEvent, admin: boolean) {
         lock,
       )
       .run();
+    // Also pick up signups saved while this post was first being created.
+    await queueRaidChart(env, event.id, true).catch(() => {});
     return display(await rowFor(env, event.id));
   } finally {
     await env.DB.prepare(
@@ -317,7 +297,11 @@ async function publish(env: Env, event: RaidEvent, admin: boolean) {
 }
 export async function handleRaidPublish(req: Request, env: Env, d: ReadDeps) {
   const url = new URL(req.url);
-  if (![signupPath, signupPath + "/setup"].includes(url.pathname)) return;
+  const visibilityPath = signupPath + "/visibility";
+  if (
+    ![signupPath, signupPath + "/setup", visibilityPath].includes(url.pathname)
+  )
+    return;
   const identity = await d.authenticated(req, env);
   const { document } = await d.readRepository(env);
   const a = accessFor(document, identity);
@@ -353,6 +337,54 @@ export async function handleRaidPublish(req: Request, env: Env, d: ReadDeps) {
         [setup.notice, calendarNotice].filter(Boolean).join(" ") || undefined,
     });
   }
+  if (url.pathname === visibilityPath && req.method === "POST") {
+    await d.limit(env, "discord-raid-visibility:" + identity.id, 30);
+    const input = eventInput
+      .extend({
+        characterId: z.string().regex(/^[\w-]{1,100}$/),
+        messageId: snowflake,
+        listed: z.boolean(),
+      })
+      .parse(await d.boundedJSON(req));
+    const raid = document.state.events.find((e) => e.id === input.eventId);
+    if (!raid || Date.parse(raid.end) <= Date.now())
+      throw new ChangeError("This raid is closed.", 409);
+    if (
+      !document.state.characters.some(
+        (c) => c.id === input.characterId && c.ownerBattleNet === identity.id,
+      )
+    )
+      throw new ChangeError("Choose one of your own raid characters.", 403);
+    if (input.listed && !Object.hasOwn(raid.signups, input.characterId))
+      throw new ChangeError("Set your availability for this raid first.", 409);
+    const row = await rowFor(env, raid.id);
+    const cfg = await config(env);
+    if (
+      !cfg ||
+      !row ||
+      row.message_id !== input.messageId ||
+      row.guild_id !== cfg.guildId ||
+      row.channel_id !== cfg.pollsChannelId
+    )
+      throw new ChangeError(
+        "Refresh the raid to see the current Discord post.",
+        409,
+      );
+    await setChartName(
+      env,
+      raid.id,
+      {
+        guildId: row.guild_id,
+        channelId: row.channel_id,
+        messageId: input.messageId,
+        memberId: identity.id,
+        characterId: input.characterId,
+      },
+      input.listed,
+    );
+    d.refreshChart?.(raid.id);
+    return d.json({ listed: input.listed });
+  }
   if (url.pathname !== signupPath || !["GET", "POST"].includes(req.method))
     throw new ChangeError("Unsupported raid signup request.", 405);
   const { eventId } = eventInput.parse(
@@ -369,7 +401,21 @@ export async function handleRaidPublish(req: Request, env: Env, d: ReadDeps) {
       hasTeam(a, event.teamId));
   if (req.method === "GET") {
     await d.limit(env, "discord-raid-read:" + identity.id, 90);
-    return d.json({ signup: display(await rowFor(env, eventId)), canPublish });
+    const row = await rowFor(env, eventId);
+    const visibleIds = row
+      ? await chartVisibleIds(
+          env,
+          eventId,
+          row.guild_id,
+          row.channel_id,
+          row.message_id,
+          document,
+        )
+      : new Set<string>();
+    const myListedCharacters = document.state.characters
+      .filter((c) => c.ownerBattleNet === identity.id && visibleIds.has(c.id))
+      .map((c) => c.id);
+    return d.json({ signup: display(row), myListedCharacters, canPublish });
   }
   if (!canPublish)
     throw new ChangeError(
@@ -380,7 +426,7 @@ export async function handleRaidPublish(req: Request, env: Env, d: ReadDeps) {
     throw new ChangeError("This raid has ended.", 409);
   await d.limit(env, "discord-raid-publish:" + identity.id, 6);
   return d.json({
-    signup: await publish(env, event, a.admin),
+    signup: await publish(env, document, event, a.admin),
     canPublish: true,
   });
 }

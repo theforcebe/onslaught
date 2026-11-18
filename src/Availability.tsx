@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { CalendarCheck } from "lucide-react";
 import { label } from "./lib/model";
-import { buildKey, characterBuilds } from "./lib/raid";
+import { buildKey, characterBuilds, signupBuildKind } from "./lib/raid";
 import type { Character, RaidBuild } from "./lib/model";
 import type { Identity, RaidAction, RaidEvent, RaidState } from "./lib/model";
 import { hasSection, type Access } from "./lib/access";
@@ -24,6 +24,8 @@ export function SignupChoices({
   const selected =
     choices.find((b) => buildKey(b) === pendingBuild) ?? recorded ?? choices[0];
   const status = event.signups[character.id];
+  const describeBuild = (build: RaidBuild) =>
+    `${signupBuildKind(character, build)} · ${build.spec} · ${label(build.role)}`;
   if (Date.parse(event.end) <= Date.now()) {
     const response =
       status === "going"
@@ -36,9 +38,7 @@ export function SignupChoices({
     return (
       <span className="availability-build">
         Signups closed · {response}
-        {status && selected
-          ? ` · ${selected.spec} · ${label(selected.role)}`
-          : ""}
+        {status && selected ? ` · ${describeBuild(selected)}` : ""}
       </span>
     );
   }
@@ -78,7 +78,7 @@ export function SignupChoices({
               value={buildKey(selected)}
               options={options.map((b) => ({
                 value: buildKey(b),
-                label: `${b.spec} · ${label(b.role)}`,
+                label: describeBuild(b),
               }))}
               onChange={(key) => {
                 const picked = choices.find((b) => buildKey(b) === key);
@@ -89,9 +89,7 @@ export function SignupChoices({
             />
           </fieldset>
         ) : (
-          <span className="availability-build">
-            {selected.spec} · {label(selected.role)}
-          </span>
+          <span className="availability-build">{describeBuild(selected)}</span>
         ))}
       <div
         className="segmented rsvp-actions"

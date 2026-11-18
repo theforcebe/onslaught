@@ -236,6 +236,13 @@ function validateBuffs(cls: WowClass, buffs: string[], level: number) {
 }
 export const buildKey = (build: Pick<Character, "role" | "spec">) =>
   `${build.spec}|${build.role}`;
+export function signupBuildKind(c: Character, build: RaidBuild) {
+  if (build.role === c.role && build.spec === normalizeSpec(c.class, c.spec))
+    return "Main";
+  if (c.alternateBuilds?.some((b) => buildKey(b) === buildKey(build)))
+    return "Alternate";
+  return "Raid build";
+}
 export function characterBuilds(c: Character): RaidBuild[] {
   const primary = normalizeSpec(c.class, c.spec);
   return [

@@ -863,8 +863,14 @@ export function RaidPlanner({
         access.status === "active" &&
         Date.parse(event.end) > Date.now() && (
           <DiscordRaidSignup
-            key={event.id}
+            key={event.id + "/" + (identity?.id || "")}
             eventId={event.id}
+            ownSignups={state.characters.filter(
+              (c) =>
+                !!identity &&
+                c.ownerBattleNet === identity.id &&
+                event.signups[c.id],
+            )}
             lead={
               access.admin ||
               (access.role === "officer" &&

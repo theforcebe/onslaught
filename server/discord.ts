@@ -100,6 +100,8 @@ export class DiscordError extends ChangeError {
     message: string,
     public uncertain = false,
     status = 502,
+    public upstreamStatus = status,
+    public retryAfterMs = 0,
   ) {
     super(message, status);
   }
@@ -144,6 +146,11 @@ export async function discordFetch(
         "Discord is rate limiting requests. Wait a minute and try again.",
         false,
         429,
+        429,
+        Math.max(
+          0,
+          Math.ceil(Number(response.headers.get("Retry-After")) * 1000),
+        ) || 0,
       );
     if (response.status === 403)
       throw new DiscordError(
@@ -156,10 +163,13 @@ export async function discordFetch(
         "The Discord bot credential needs to be updated.",
         false,
         503,
+        401,
       );
     throw new DiscordError(
       "Discord could not complete this request.",
       body !== undefined && response.status >= 500,
+      502,
+      response.status,
     );
   }
   return response.status === 204 ? {} : ((await response.json()) as any);
