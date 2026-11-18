@@ -541,6 +541,33 @@ textarea::placeholder {
 .watchboard-grid {
   gap: 18px;
 }
+.board-next-raid .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.war-room-banner.board-next-raid > div { max-width: 42rem; padding-right: 0; }
+.board-next-raid h2 { overflow-wrap: anywhere; }
+.board-next-raid p + p { margin-top: 4px; }
+.board-raid-counts {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0;
+  max-width: 100%;
+  margin: 16px 0 6px;
+  padding: 8px 0;
+  background: #17131dec;
+  border: 1px solid #95736e;
+  border-radius: 4px;
+}
+.board-raid-counts > div { padding: 0 14px; display: flex; flex-direction: column-reverse; }
+.board-raid-counts > div + div { border-left: 1px solid #715b64; }
+.board-raid-counts dt { font-size: .8rem; color: #efdae1; }
+.board-raid-counts dd { margin: 0; font-size: 1.5rem; font-weight: 700; color: #fff4df; }
+.war-room-banner .board-own-signup { font-size: .875rem; margin-top: 6px; }
+.discord-raid-signup { padding: 10px 0; }
+.discord-raid-signup .button-row { flex-wrap: wrap; }
+.discord-raid-signup p { margin: 6px 0; }
 .dispatch-card {
   position: relative;
   background: linear-gradient(125deg, #302031, #201d2b);

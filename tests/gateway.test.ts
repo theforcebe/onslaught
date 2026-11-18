@@ -80,6 +80,29 @@ const post = (
     body: JSON.stringify(body),
   });
 describe("credential and OAuth boundaries", () => {
+  it("keeps older open guild tabs readable when characters have alternate builds", async () => {
+    const doc = privateFixture();
+    doc.state.characters[0].alternateBuilds = [{ spec: "Fury", role: "melee" }];
+    mockRepository(doc);
+    const { env } = environment();
+    const path = "https://gateway.example/api/public";
+    const old = await worker.fetch(new Request(path), env, ctx);
+    const current = await worker.fetch(
+      new Request(path, {
+        headers: { Accept: "application/vnd.onslaught.guild-v2+json" },
+      }),
+      env,
+      ctx,
+    );
+    expect(old.status).toBe(200);
+    expect(current.status).toBe(200);
+    expect(((await old.json()) as any).state.characters[0]).not.toHaveProperty(
+      "alternateBuilds",
+    );
+    expect(
+      ((await current.json()) as any).state.characters[0].alternateBuilds,
+    ).toEqual([{ spec: "Fury", role: "melee" }]);
+  });
   it.each(["officer", "raider", "guild_member"] as const)(
     "saves an admin's %s assignment with individual grants in the private repository",
     async (role) => {
@@ -268,6 +291,64 @@ describe("credential and OAuth boundaries", () => {
         await worker.fetch(post("/auth/exchange", { code, verifier }), env, ctx)
       ).text(),
     ).toContain("expired");
+  });
+  it("completes same-tab Battle.net sign-in at the fixed guild URL with only a proof-bound code", async () => {
+    const { env } = environment();
+    const verifier = "v".repeat(72);
+    const start = await worker.fetch(
+      new Request(
+        env.PUBLIC_API_URL +
+          "/auth/start?flow=redirect&challenge=" +
+          (await digest(verifier)) +
+          "&return=https://other.example",
+      ),
+      env,
+      ctx,
+    );
+    const state = new URL(start.headers.get("location")!).searchParams.get(
+      "state",
+    );
+    const cookie = start.headers.get("set-cookie")!.split(";")[0];
+    const callback = new Request(
+      env.PUBLIC_API_URL + "/auth/callback?code=provider-code&state=" + state,
+      { headers: { Cookie: cookie } },
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.endsWith("/token"))
+          return Response.json({ access_token: "provider-token" });
+        if (url.endsWith("/userinfo"))
+          return Response.json({ sub: "456", battletag: "Member" });
+        throw new Error("Unexpected upstream");
+      }),
+    );
+    const result = await worker.fetch(callback, env, ctx);
+    const location = new URL(result.headers.get("location")!);
+    expect(result.status).toBe(303);
+    expect(location.origin + location.pathname + location.search).toBe(
+      env.APP_ORIGIN + "/onslaught/",
+    );
+    expect(location.hash).toMatch(/^#bnet-return=[A-Za-z0-9_-]{43}$/);
+    const exchange = await worker.fetch(
+      post("/auth/exchange", { code: location.hash.split("=")[1], verifier }),
+      env,
+      ctx,
+    );
+    expect(exchange.status).toBe(200);
+    expect(((await exchange.json()) as any).identity.label).toBe("Member");
+    const replay = await worker.fetch(callback, env, ctx);
+    expect(replay.headers.get("location")).toBe(
+      env.APP_ORIGIN + "/onslaught/#bnet-return=error",
+    );
+    const withoutCookie = await worker.fetch(
+      new Request(callback.url),
+      env,
+      ctx,
+    );
+    expect(withoutCookie.headers.get("location")).toBe(
+      replay.headers.get("location"),
+    );
   });
   it("rejects incorrect proof keys", async () => {
     const { env, rows } = environment();

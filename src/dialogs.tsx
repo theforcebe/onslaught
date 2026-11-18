@@ -1,4 +1,5 @@
-import { Select } from "./Dropdown";
+import { Dropdown, Select } from "./Dropdown";
+import { SignupChoices } from "./Availability";
 import { useState } from "react";
 import {
   ExternalLink,
@@ -39,6 +40,8 @@ export type DialogState = {
 };
 type Props = {
   dialog: DialogState;
+  editableCharacters: Character[];
+  saveRaid: (event: RaidEvent, publish: boolean) => Promise<void>;
   state: RaidState;
   close: () => void;
   change: (action: RaidAction) => void | Promise<void>;
@@ -72,20 +75,23 @@ function Actions({
   );
 }
 function CharacterChoice({
-  state,
+  characters,
   value,
+  onChange,
 }: {
-  state: RaidState;
+  characters: Character[];
   value?: string;
+  onChange?: (id: string) => void;
 }) {
   return (
     <Field label="Character">
       <Select
         name="characterId"
-        defaultValue={value || state.characters[0]?.id}
+        defaultValue={value || characters[0]?.id}
+        onChange={(e) => onChange?.(e.target.value)}
         required
       >
-        {state.characters.map((c) => (
+        {characters.map((c) => (
           <option key={c.id} value={c.id}>
             {c.name} · {label(c.class)}
           </option>
@@ -96,6 +102,15 @@ function CharacterChoice({
 }
 export default function Dialogs(p: Props) {
   const { dialog: d, state, close, change, open, toast, demo } = p;
+  const [signupCharacterId, setSignupCharacterId] = useState("");
+  const [pledgeCharacterId, setPledgeCharacterId] = useState(
+    p.editableCharacters[0]?.id || "",
+  );
+  const lootCandidates = d.loot
+    ? p.editableCharacters.filter(
+        (c) => !d.loot!.eligible.length || d.loot!.eligible.includes(c.class),
+      )
+    : [];
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [lookedUp, setLookedUp] = useState<{ id: number; name: string }>(
@@ -113,7 +128,9 @@ export default function Dialogs(p: Props) {
   let title = "",
     content;
   if (d.type === "import") {
-    title = "Set up your raid character";
+    title = d.character
+      ? `Update ${d.character.name}’s gear & builds`
+      : "Set up your raid character";
     content = (
       <CharacterImport
         state={state}
@@ -127,6 +144,9 @@ export default function Dialogs(p: Props) {
     const c =
       state.characters.find((x) => x.id === d.character!.id) || d.character;
     title = c.name;
+    const editable = p.editableCharacters.some(
+      (character) => character.id === c.id,
+    );
     const stats = numericStats(c.snapshot?.stats.character_stats);
     content = (
       <>
@@ -139,14 +159,24 @@ export default function Dialogs(p: Props) {
             <p>
               {c.spec || "Specialization not selected"} · {label(c.role)}
             </p>
+            {!!c.alternateBuilds?.length && (
+              <p>
+                Also available:{" "}
+                {c.alternateBuilds
+                  .map((b) => `${b.spec} · ${label(b.role)}`)
+                  .join(", ")}
+              </p>
+            )}
             <small>{c.snapshot?.server || "No import yet"}</small>
           </div>
-          <button
-            className="btn secondary"
-            onClick={() => open({ type: "import", character: c })}
-          >
-            Update gear
-          </button>
+          {editable && (
+            <button
+              className="btn secondary"
+              onClick={() => open({ type: "import", character: c })}
+            >
+              Update gear
+            </button>
+          )}
         </div>
         {c.snapshot ? (
           <>
@@ -213,10 +243,12 @@ export default function Dialogs(p: Props) {
             No character snapshot yet. Import a SimC export to see equipment.
           </p>
         )}
-        <details className="details">
-          <summary>Edit raid profile</summary>
-          <CharacterProfileEditor key={c.id} character={c} change={change} />
-        </details>
+        {editable && (
+          <details className="details">
+            <summary>Edit raid profile</summary>
+            <CharacterProfileEditor key={c.id} character={c} change={change} />
+          </details>
+        )}
         {p.admin && (
           <details className="details">
             <summary>Admin: assign Battle.net ownership</summary>
@@ -340,7 +372,10 @@ export default function Dialogs(p: Props) {
           )
         }
       >
-        <CharacterChoice state={state} value={d.character?.id} />
+        <CharacterChoice
+          characters={state.characters}
+          value={d.character?.id}
+        />
         <Field label="Team">
           <Select name="teamId" defaultValue={d.team?.id || state.teams[0]?.id}>
             <option value="">Bench / no team</option>
@@ -381,20 +416,23 @@ export default function Dialogs(p: Props) {
       <Form
         onSubmit={(f) => {
           try {
-            submit({
-              type: "event.save",
-              event: {
-                id: d.event?.id || makeId(),
-                title: val(f, "title"),
-                instance: val(f, "instance"),
-                teamId: val(f, "teamId"),
-                start: new Date(val(f, "start")).toISOString(),
-                end: new Date(val(f, "end")).toISOString(),
-                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                notes: val(f, "notes"),
-                signups: d.event?.signups || {},
-              },
-            });
+            if (busy) return;
+            const event: RaidEvent = {
+              id: d.event?.id || makeId(),
+              title: val(f, "title"),
+              instance: val(f, "instance"),
+              teamId: val(f, "teamId"),
+              start: new Date(val(f, "start")).toISOString(),
+              end: new Date(val(f, "end")).toISOString(),
+              timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              notes: val(f, "notes"),
+              signups: d.event?.signups || {},
+            };
+            setBusy(true);
+            void p
+              .saveRaid(event, f.has("publishSignup"))
+              .catch(fail)
+              .finally(() => setBusy(false));
           } catch (e) {
             fail(e);
           }
@@ -462,36 +500,52 @@ export default function Dialogs(p: Props) {
             maxLength={2000}
           />
         </Field>
-        <Actions admin />
+        {!demo && (
+          <label className="discord-opt-in">
+            <input type="checkbox" name="publishSignup" />{" "}
+            {d.event
+              ? "Update signup in Discord’s scheduling channel"
+              : "Post signup to Discord’s scheduling channel"}
+          </label>
+        )}
+        <div className="form-actions">
+          <button type="submit" className="btn primary" disabled={busy}>
+            {busy ? "Saving…" : d.event ? "Save raid" : "Schedule raid"}
+          </button>
+        </div>
       </Form>
     );
   }
   if (d.type === "signup" && d.event) {
     title = `RSVP · ${d.event.title}`;
-    content = (
-      <Form
-        onSubmit={(f) =>
-          submit({
-            type: "event.signup",
-            eventId: d.event!.id,
-            characterId: val(f, "characterId"),
-            status: val(f, "status") as "going",
-          })
-        }
-      >
-        <CharacterChoice state={state} />
-        <Field label="Your availability">
-          <Select name="status">
-            <option value="going">Going</option>
-            <option value="tentative">Tentative</option>
-            <option value="absent">Absent</option>
-          </Select>
+    const event = state.events.find((e) => e.id === d.event!.id) || d.event;
+    const selected =
+      state.characters.find((c) => c.id === signupCharacterId) ||
+      state.characters.find((c) => c.teamId === event.teamId) ||
+      state.characters[0];
+    content = selected ? (
+      <div className="record-signup">
+        <Field label="Character">
+          <Dropdown
+            label="Character for this RSVP"
+            value={selected.id}
+            onChange={setSignupCharacterId}
+            options={state.characters.map((c) => ({
+              value: c.id,
+              label: c.name,
+              detail: label(c.class),
+            }))}
+          />
         </Field>
-        <p className="muted">
-          You can RSVP for characters you own. Admins can correct attendance.
-        </p>
-        <Actions />
-      </Form>
+        <SignupChoices
+          key={`${event.id}/${selected.id}`}
+          character={selected}
+          event={event}
+          change={change}
+        />
+      </div>
+    ) : (
+      <p>Add a roster character to record attendance.</p>
     );
   }
   if (d.type === "supply") {
@@ -575,17 +629,22 @@ export default function Dialogs(p: Props) {
           })
         }
       >
-        <CharacterChoice state={state} />
+        <CharacterChoice
+          characters={p.editableCharacters}
+          value={pledgeCharacterId}
+          onChange={setPledgeCharacterId}
+        />
         <Field
           label="Your total committed quantity"
           hint="This replaces your previous commitment. Enter 0 to withdraw."
         >
           <input
+            key={pledgeCharacterId}
             name="quantity"
             type="number"
             min={0}
             max={100000}
-            defaultValue={d.supply.pledges[state.characters[0]?.id] || 0}
+            defaultValue={d.supply.pledges[pledgeCharacterId] || 0}
             required
           />
         </Field>
@@ -743,7 +802,7 @@ export default function Dialogs(p: Props) {
                 <div className="priority-row" key={id}>
                   <span className="rank">{i + 1}</span>
                   <Player character={c} />
-                  {!l.awardedTo && (
+                  {p.admin && !l.awardedTo && (
                     <>
                       <button
                         className="icon-btn"
@@ -799,7 +858,7 @@ export default function Dialogs(p: Props) {
         ) : (
           <p className="muted">The council has not set an order.</p>
         )}
-        {!l.awardedTo && (
+        {p.admin && !l.awardedTo && (
           <Form
             onSubmit={(f) =>
               submit({
@@ -874,18 +933,22 @@ export default function Dialogs(p: Props) {
           </p>
         ) : (
           <div className="form-actions">
-            <button
-              className="btn secondary"
-              onClick={() => open({ type: "request", loot: l })}
-            >
-              Request this item
-            </button>
-            <button
-              className="btn primary"
-              onClick={() => open({ type: "award", loot: l })}
-            >
-              Record award
-            </button>
+            {lootCandidates.length > 0 && (
+              <button
+                className="btn secondary"
+                onClick={() => open({ type: "request", loot: l })}
+              >
+                Request this item
+              </button>
+            )}
+            {p.admin && (
+              <button
+                className="btn primary"
+                onClick={() => open({ type: "award", loot: l })}
+              >
+                Record award
+              </button>
+            )}
           </div>
         )}
       </>
@@ -905,7 +968,7 @@ export default function Dialogs(p: Props) {
           })
         }
       >
-        <CharacterChoice state={state} />
+        <CharacterChoice characters={lootCandidates} />
         <Field label="Your priority">
           <Select name="tier">
             <option value="bis">Best in slot (member assessment)</option>
@@ -937,7 +1000,12 @@ export default function Dialogs(p: Props) {
           })
         }
       >
-        <CharacterChoice state={state} value={d.loot.priority[0]} />
+        <CharacterChoice
+          characters={lootCandidates}
+          value={d.loot.priority.find((id) =>
+            lootCandidates.some((c) => c.id === id),
+          )}
+        />
         <Field label="Council rationale">
           <textarea
             name="reason"

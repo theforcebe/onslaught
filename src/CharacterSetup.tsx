@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, Upload } from "lucide-react";
 import { ClassIcon, Field, RoleIcon } from "./components";
+import { Dropdown } from "./Dropdown";
 import {
   CLASS_SPECS,
+  buildKey,
   RAID_BUFFS,
   profileFor,
   validateProfile,
@@ -11,6 +13,7 @@ import type { RaidProfile } from "./lib/raid";
 import { label, makeId } from "./lib/model";
 import type {
   Character,
+  RaidBuild,
   RaidAction,
   RaidState,
   Snapshot,
@@ -32,9 +35,46 @@ export function ProfileChoices({
   abilities?: boolean;
   level: number;
 }) {
+  const [newSpec, setNewSpec] = useState("");
+  const [newRole, setNewRole] = useState<RaidBuild["role"]>("melee");
+  const [buffBuild, setBuffBuild] = useState("");
+  const alternates = profile.alternateBuilds || [];
+  const selectedAlt = alternates.find((b) => buildKey(b) === buffBuild);
+  const buffs = selectedAlt ? selectedAlt.buffs || [] : profile.buffs;
+  const roles = ["tank", "healer", "melee", "ranged"] as const;
+  const added = { spec: newSpec || CLASS_SPECS[cls][0], role: newRole };
+  const duplicate = [profile, ...alternates].some(
+    (b) => buildKey(b) === buildKey(added),
+  );
+  const selectPrimary = (next: RaidProfile) => {
+    const promoted = alternates.find((b) => buildKey(b) === buildKey(next));
+    if (promoted && profile.spec && profile.role !== "unassigned") {
+      onChange({
+        ...next,
+        buffs: promoted.buffs || [],
+        alternateBuilds: [
+          ...alternates.filter((b) => b !== promoted),
+          { spec: profile.spec, role: profile.role, buffs: profile.buffs },
+        ],
+      });
+    } else onChange(next);
+  };
   if (abilities)
     return (
       <div className="profile-abilities">
+        {!!alternates.length && (
+          <Field label="Abilities for this build">
+            <Dropdown
+              label="Build for buff declarations"
+              value={buildKey(selectedAlt || profile)}
+              options={[profile, ...alternates].map((b) => ({
+                value: buildKey(b),
+                label: `${b.spec} · ${label(b.role)}`,
+              }))}
+              onChange={setBuffBuild}
+            />
+          </Field>
+        )}
         <p className="muted">
           Select the abilities you have learned and can bring with this build.
           Leave unavailable talents unchecked. Your export does not prove these
@@ -42,21 +82,28 @@ export function ProfileChoices({
         </p>
         {RAID_BUFFS.filter((b) => b.cls === cls).map((b) => (
           <label
-            className={`ability-choice ${profile.buffs.includes(b.id) ? "chosen" : ""}`}
+            className={`ability-choice ${buffs.includes(b.id) ? "chosen" : ""}`}
             key={b.id}
           >
             <input
               type="checkbox"
-              checked={profile.buffs.includes(b.id)}
+              checked={buffs.includes(b.id)}
               disabled={b.id === "spirit" && level < 30}
-              onChange={(e) =>
-                onChange({
-                  ...profile,
-                  buffs: e.target.checked
-                    ? [...profile.buffs, b.id]
-                    : profile.buffs.filter((id) => id !== b.id),
-                })
-              }
+              onChange={(e) => {
+                const updated = e.target.checked
+                  ? [...buffs, b.id]
+                  : buffs.filter((id) => id !== b.id);
+                onChange(
+                  selectedAlt
+                    ? {
+                        ...profile,
+                        alternateBuilds: alternates.map((a) =>
+                          a === selectedAlt ? { ...a, buffs: updated } : a,
+                        ),
+                      }
+                    : { ...profile, buffs: updated },
+                );
+              }}
             />
             <span>
               <strong>{b.name}</strong>
@@ -74,15 +121,15 @@ export function ProfileChoices({
   return (
     <>
       <fieldset className="choice-field">
-        <legend>What is your role in this raid?</legend>
+        <legend>Primary raid role</legend>
         <div className="role-choices">
-          {(["tank", "healer", "melee", "ranged"] as const).map((role) => (
+          {roles.map((role) => (
             <button
               type="button"
               key={role}
               aria-pressed={profile.role === role}
               className={`role-choice ${role} ${profile.role === role ? "selected" : ""}`}
-              onClick={() => onChange({ ...profile, role })}
+              onClick={() => selectPrimary({ ...profile, role })}
             >
               <RoleIcon role={role} size={25} />
               <strong>{label(role)}</strong>
@@ -101,7 +148,7 @@ export function ProfileChoices({
         </div>
       </fieldset>
       <fieldset className="choice-field">
-        <legend>{label(cls)} specialization</legend>
+        <legend>Primary {label(cls)} specialization</legend>
         <div className="spec-choices">
           {CLASS_SPECS[cls].map((spec) => (
             <button
@@ -109,7 +156,7 @@ export function ProfileChoices({
               className={profile.spec === spec ? "selected" : ""}
               aria-pressed={profile.spec === spec}
               key={spec}
-              onClick={() => onChange({ ...profile, spec })}
+              onClick={() => selectPrimary({ ...profile, spec })}
             >
               {spec}
               {profile.spec === spec && <Check size={16} />}
@@ -117,10 +164,67 @@ export function ProfileChoices({
           ))}
         </div>
       </fieldset>
-      <p className="muted">
-        Choose your main talent tree and the role you intend to play.
-        {cls === "druid" && " Feral covers both tanking and melee."}
-      </p>
+      <details className="details" open={alternates.length > 0 || undefined}>
+        <summary>
+          Alternate specs &amp; roles
+          {alternates.length ? ` (${alternates.length})` : ""}
+        </summary>
+        <p className="muted">
+          Add the other builds you can bring. Pick one when you sign up for a
+          raid.
+        </p>
+        <div className="spec-choices">
+          {alternates.map((b) => (
+            <button
+              type="button"
+              key={buildKey(b)}
+              aria-label={`Remove ${b.spec} ${label(b.role)}`}
+              onClick={() =>
+                onChange({
+                  ...profile,
+                  alternateBuilds: alternates.filter((a) => a !== b),
+                })
+              }
+            >
+              {b.spec} · {label(b.role)} <span aria-hidden="true">×</span>
+            </button>
+          ))}
+        </div>
+        <div className="form-grid">
+          <Field label="Alternate specialization">
+            <Dropdown
+              label="Alternate specialization"
+              value={added.spec}
+              options={CLASS_SPECS[cls].map((spec) => ({
+                value: spec,
+                label: spec,
+              }))}
+              onChange={setNewSpec}
+            />
+          </Field>
+          <Field label="Alternate role">
+            <Dropdown
+              label="Alternate raid role"
+              value={newRole}
+              options={roles.map((role) => ({
+                value: role,
+                label: label(role),
+              }))}
+              onChange={(v) => setNewRole(v as RaidBuild["role"])}
+            />
+          </Field>
+        </div>
+        <button
+          type="button"
+          className="btn secondary"
+          disabled={duplicate || !profile.spec || profile.role === "unassigned"}
+          onClick={() =>
+            onChange({ ...profile, alternateBuilds: [...alternates, added] })
+          }
+        >
+          {duplicate ? "Build already selected" : "Add alternate build"}
+        </button>
+      </details>
     </>
   );
 }
@@ -371,6 +475,14 @@ export function CharacterImport({
               <strong>{profile.buffs.length}</strong>
             </div>
           </div>
+          {!!profile.alternateBuilds?.length && (
+            <p>
+              <strong>Alternate builds</strong> ·{" "}
+              {profile.alternateBuilds
+                .map((b) => `${b.spec} (${label(b.role)})`)
+                .join(", ")}
+            </p>
+          )}
           <p>
             {profile.buffs.length
               ? RAID_BUFFS.filter((b) => profile.buffs.includes(b.id))

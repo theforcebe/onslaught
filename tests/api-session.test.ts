@@ -42,7 +42,10 @@ describe("restored sessions use current server authorization", () => {
     expect(fetcher.mock.calls[0]).toEqual([
       "https://gateway.example/api/state",
       expect.objectContaining({
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Accept: "application/vnd.onslaught.guild-v2+json",
+          Authorization: `Bearer ${token}`,
+        },
       }),
     ]);
     expect(view.identity).toMatchObject({

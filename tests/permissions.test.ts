@@ -277,6 +277,7 @@ describe("server-authoritative changes", () => {
         status: "going",
       }),
       member,
+      "2026-11-14T02:00:00Z",
     );
     const next = applyChange(
       n,

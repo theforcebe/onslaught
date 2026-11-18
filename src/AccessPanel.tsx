@@ -446,7 +446,13 @@ export function AccessPanel({
           <p className="muted">
             {access.status === "active"
               ? `Sections: ${access.sections.map((s) => SECTION_NAMES[s]).join(", ") || "No private sections yet"}. Team access: ${access.allTeams ? "All teams" : access.teamIds.map((id) => state.teams.find((t) => t.id === id)?.name || state.characters.find((c) => c.teamId === id)?.publicTeamName || state.events.find((e) => e.teamId === id)?.publicTeamName || "Assigned team").join(", ") || "No teams yet"}.`
-              : "Sign in with Battle.net, then request membership. An admin assigns your rank and access."}
+              : access.status === "pending"
+                ? "An admin will review your request. You can browse upcoming raids and the public roster while you wait."
+                : access.status === "suspended"
+                  ? "Contact a guild admin to review your membership."
+                  : identity
+                    ? "Request membership below. An admin will assign your rank and access."
+                    : "Sign in with Battle.net, then request membership. An admin assigns your rank and access."}
           </p>
           {identity && access.status === "unregistered" && (
             <button className="btn primary" onClick={() => void join()}>

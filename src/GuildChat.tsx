@@ -182,12 +182,18 @@ export function GuildChat({
       setDraft("");
       setDraftMentions([]);
       setBlocked(true);
+      setPeer("");
+      setDirectory(false);
+      setPreferences(false);
+      setMentionsOnly(false);
+      setDelivery(null);
+      pending.current = null;
+      loadedScope.current = "";
       setNotice(null);
       refreshRef.current();
     }
   };
   useEffect(() => {
-    if (blocked) return;
     let active = true,
       busy = false;
     const poll = async () => {
@@ -195,7 +201,10 @@ export function GuildChat({
       busy = true;
       try {
         const data = await chatCall<ChatStatus>("status");
-        if (active) receiveStatus(data);
+        if (active) {
+          receiveStatus(data);
+          setBlocked(false);
+        }
       } catch (e) {
         if (active) fail(e);
       } finally {
@@ -212,9 +221,9 @@ export function GuildChat({
       document.removeEventListener("visibilitychange", poll);
       window.removeEventListener("focus", poll);
     };
-  }, [open, blocked]);
+  }, []);
   useEffect(() => {
-    if (!open || blocked) return;
+    if (!open || blocked || directory || preferences) return;
     let active = true,
       busy = false,
       initialized = false;
@@ -273,7 +282,7 @@ export function GuildChat({
       clearInterval(timer);
       document.removeEventListener("visibilitychange", poll);
     };
-  }, [open, peer, mentionsOnly, blocked]);
+  }, [open, peer, mentionsOnly, blocked, directory, preferences]);
   const markRead = () => {
     const through = mentionsOnly ? 0 : last.current;
     if (

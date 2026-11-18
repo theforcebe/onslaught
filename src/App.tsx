@@ -46,23 +46,28 @@ import {
   Meter,
   Field,
   Form,
+  Modal,
 } from "./components";
-import Dialogs from "./dialogs";
 import { AccessPanel } from "./AccessPanel";
 import { Dropdown } from "./Dropdown";
-import { RaidPlanner } from "./RaidPlanner";
-import { canOpenPage } from "./lib/navigation";
+import { canOpenPage, guildRoute, raidRoute } from "./lib/navigation";
+import { upcomingRaid } from "./lib/upcoming-raid";
 const GuildHub = lazy(() =>
   import("./GuildHub").then((module) => ({ default: module.GuildHub })),
 );
 const GuildChat = lazy(() =>
   import("./GuildChat").then((m) => ({ default: m.GuildChat })),
 );
+const Dialogs = lazy(() => import("./dialogs"));
+const RaidPlanner = lazy(() =>
+  import("./RaidPlanner").then((m) => ({ default: m.RaidPlanner })),
+);
 import {
   PUBLIC_ACCESS,
   ADMIN_ACCESS,
   hasSection,
   hasTeam,
+  canActForCharacter,
   canSeeCharacter,
   canUseGuildChat,
   project,
@@ -84,6 +89,7 @@ import { demoState } from "./lib/demo";
 import {
   loadGuild,
   loginBattleNet,
+  discordCall,
   logout,
   saveShared,
   REPO_URL,
@@ -154,6 +160,8 @@ export default function App() {
   const [access, setAccess] = useState<Access>(PUBLIC_ACCESS);
   const [members, setMembers] = useState<Member[]>([]);
   const [people, setPeople] = useState<NonNullable<GuildView["people"]>>([]);
+  const [upcomingAttendance, setUpcomingAttendance] =
+    useState<GuildView["upcomingAttendance"]>();
   const [demoMembers, setDemoMembers] = useState<Member[]>([
     {
       id: "demo-member",
@@ -166,23 +174,11 @@ export default function App() {
     },
   ]);
   const accessSignature = useRef("");
+  const viewGeneration = useRef(0);
   const [live, setLive] = useState<RaidState>(),
     [practice, setPractice] = useState<RaidState>(),
     [demo, setDemo] = useState(false),
-    [page, setPage] = useState(
-      ["schedule", "materials", "discord"].includes(location.hash.slice(1))
-        ? location.hash === "#schedule"
-          ? "planner"
-          : "community"
-        : location.hash.slice(1) || "overview",
-    ),
-    [hubTab, setHubTab] = useState(
-      location.hash === "#discord"
-        ? "connection"
-        : location.hash === "#materials"
-          ? "requests"
-          : "",
-    ),
+    [route, setRoute] = useState(() => guildRoute(location.hash)),
     [dialog, setDialog] = useState<DialogState>(),
     [notification, setNotification] = useState(""),
     [error, setError] = useState(""),
@@ -199,12 +195,15 @@ export default function App() {
     ),
     [lootTab, setLootTab] = useState("active");
   const state = demo ? practice : live;
+  const { page, hubTab } = route;
   const effectiveAccess = demo ? ADMIN_ACCESS : access;
   const chatAvailable = !demo && !!identity && canUseGuildChat(effectiveAccess);
   useEffect(() => {
     setChatOpen(false);
   }, [identity?.id, chatAvailable]);
   function acceptView(next: GuildView) {
+    viewGeneration.current++;
+    setRefreshing(false);
     if (!sessionActive()) setIdentity(undefined);
     else if (next.identity) setIdentity(next.identity);
     const signature = JSON.stringify(next.access);
@@ -214,14 +213,17 @@ export default function App() {
     setAccess(next.access);
     setMembers(next.members || []);
     setPeople(next.people || []);
+    setUpcomingAttendance(next.upcomingAttendance);
   }
   function toast(s: string) {
     setNotification(s);
   }
   async function refresh() {
+    const generation = ++viewGeneration.current;
     setRefreshing(true);
     try {
       const next = await loadGuild();
+      if (generation !== viewGeneration.current) return;
       acceptView(next);
       setError(
         next.isCurrent
@@ -229,6 +231,7 @@ export default function App() {
           : "Showing the saved public roster. Connect to the guild gateway for current member information.",
       );
     } catch (e) {
+      if (generation !== viewGeneration.current) return;
       if (!sessionActive()) setIdentity(undefined);
       setLive((prev) =>
         prev ? project({ version: 1, state: prev, members: [] }).state : prev,
@@ -236,18 +239,26 @@ export default function App() {
       setAccess(PUBLIC_ACCESS);
       setMembers([]);
       setPeople([]);
+      setUpcomingAttendance(undefined);
       setDialog(undefined);
       setError((e as Error).message);
     } finally {
-      setRefreshing(false);
+      if (generation === viewGeneration.current) setRefreshing(false);
     }
   }
   useEffect(() => {
     void refresh();
+    const onReturn = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", onReturn);
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") void refresh();
     }, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      document.removeEventListener("visibilitychange", onReturn);
+      clearInterval(interval);
+    };
   }, []);
   useEffect(() => {
     if (!notification) return;
@@ -256,17 +267,7 @@ export default function App() {
   }, [notification]);
   useEffect(() => {
     const handle = () => {
-      const id = location.hash.slice(1) || "overview";
-      setPage(
-        id === "schedule"
-          ? "planner"
-          : ["materials", "discord"].includes(id)
-            ? "community"
-            : id,
-      );
-      setHubTab(
-        id === "materials" ? "requests" : id === "discord" ? "connection" : "",
-      );
+      setRoute(guildRoute(location.hash));
       setFilter("");
     };
     window.addEventListener("hashchange", handle);
@@ -274,16 +275,7 @@ export default function App() {
   }, []);
   function go(id: string) {
     location.hash = id;
-    setPage(
-      id === "schedule"
-        ? "planner"
-        : ["materials", "discord"].includes(id)
-          ? "community"
-          : id,
-    );
-    setHubTab(
-      id === "materials" ? "requests" : id === "discord" ? "connection" : "",
-    );
+    setRoute(guildRoute(id));
     setMenu(false);
     setFilter("");
   }
@@ -365,6 +357,7 @@ export default function App() {
       return;
     }
     setDialog({ type: "auth" });
+    if (rethrow) throw new Error("Sign in before saving to the guild.");
   }
   async function signIn() {
     if (!API_URL) {
@@ -372,9 +365,7 @@ export default function App() {
       return;
     }
     try {
-      setIdentity(await loginBattleNet());
-      await refresh();
-      toast("Signed in with Battle.net.");
+      await loginBattleNet();
     } catch (e) {
       toast((e as Error).message);
     }
@@ -395,10 +386,11 @@ export default function App() {
       </div>
     );
   const team = state.teams.find((t) => t.id === selectedTeam) || state.teams[0];
+  const editableCharacters = state.characters.filter((c) =>
+    canActForCharacter(effectiveAccess, c, identity),
+  );
   const teamMembers = state.characters.filter((c) => c.teamId === team?.id);
-  const nextRaid = [...state.events]
-    .filter((e) => Date.parse(e.end) > Date.now())
-    .sort((a, b) => Date.parse(a.start) - Date.parse(b.start))[0];
+  const nextRaid = upcomingRaid(state.events);
   const unassigned = state.characters.filter((c) => c.role === "unassigned");
   const imports = state.characters.filter((c) => c.snapshot);
   const pendingLoot = state.loot.filter((l) => !l.awardedTo);
@@ -468,25 +460,41 @@ export default function App() {
         {text}
       </button>
     );
+  const joinGuild = async () => {
+    acceptView(await requestMembership());
+    toast("Membership request sent to guild admins.");
+  };
   const planner = (
-    <RaidPlanner
-      state={state}
-      team={team}
-      selectTeam={setSelectedTeam}
-      access={effectiveAccess}
-      change={(a) => change(a, true)}
-      open={open}
-      identity={identity}
-      demo={demo}
-    />
+    <Suspense
+      fallback={
+        <p className="muted" role="status">
+          Opening raid planner…
+        </p>
+      }
+    >
+      <RaidPlanner
+        state={state}
+        team={team}
+        requestedEventId={route.raidId}
+        goToEvent={(id) => go(id ? raidRoute(id) : "planner")}
+        selectTeam={setSelectedTeam}
+        access={effectiveAccess}
+        change={(a) => change(a, true)}
+        open={open}
+        identity={identity}
+        demo={demo}
+      />
+    </Suspense>
   );
   const filtered = state.characters.filter(
     (c) =>
-      `${c.name} ${c.spec} ${c.class}`
+      `${c.name} ${c.spec} ${c.class} ${(c.alternateBuilds || []).map((b) => b.spec).join(" ")}`
         .toLowerCase()
         .includes(filter.toLowerCase()) &&
       (classFilter === "all" || c.class === classFilter) &&
-      (roleFilter === "all" || c.role === roleFilter),
+      (roleFilter === "all" ||
+        c.role === roleFilter ||
+        c.alternateBuilds?.some((b) => b.role === roleFilter)),
   );
   const roster = (
     <>
@@ -554,6 +562,8 @@ export default function App() {
                 </strong>
                 <small>
                   Level {c.level} · {c.spec || label(c.class)}
+                  {!!c.alternateBuilds?.length &&
+                    ` · Also ${c.alternateBuilds.map((b) => `${b.spec} (${label(b.role)})`).join(", ")}`}
                 </small>
               </span>
             </span>
@@ -693,7 +703,7 @@ export default function App() {
                   View priority
                   <ChevronRight size={14} />
                 </button>
-                {!l.awardedTo && (
+                {effectiveAccess.admin && !l.awardedTo && (
                   <button
                     className="btn text"
                     onClick={() => open({ type: "loot", loot: l })}
@@ -815,19 +825,23 @@ export default function App() {
                 )}
               </div>
               <div className="form-actions">
-                <button
-                  className="btn secondary"
-                  onClick={() => open({ type: "pledge", supply: s })}
-                >
-                  Commit supplies
-                </button>
-                <button
-                  className="icon-btn"
-                  aria-label={`Edit ${s.name} target`}
-                  onClick={() => open({ type: "supply", supply: s })}
-                >
-                  <Settings size={16} />
-                </button>
+                {editableCharacters.length > 0 && (
+                  <button
+                    className="btn secondary"
+                    onClick={() => open({ type: "pledge", supply: s })}
+                  >
+                    Commit supplies
+                  </button>
+                )}
+                {effectiveAccess.admin && (
+                  <button
+                    className="icon-btn"
+                    aria-label={`Edit ${s.name} target`}
+                    onClick={() => open({ type: "supply", supply: s })}
+                  >
+                    <Settings size={16} />
+                  </button>
+                )}
               </div>
             </article>
           );
@@ -888,13 +902,15 @@ export default function App() {
                 {b.notes ||
                   "Add encounter notes and assignments as you learn the fight."}
               </p>
-              <button
-                className="btn secondary"
-                onClick={() => open({ type: "boss", boss: b })}
-              >
-                Update progress
-                <ChevronRight size={15} />
-              </button>
+              {effectiveAccess.admin && (
+                <button
+                  className="btn secondary"
+                  onClick={() => open({ type: "boss", boss: b })}
+                >
+                  Update progress
+                  <ChevronRight size={15} />
+                </button>
+              )}
             </div>
           </article>
         ))}
@@ -1145,13 +1161,13 @@ export default function App() {
     ),
     overview: (
       <GuildBoard
+        attendance={demo ? undefined : upcomingAttendance}
         state={state}
         access={effectiveAccess}
         identity={identity}
         demo={demo}
         go={go}
         change={(a) => change(a, true)}
-        setup={() => open({ type: "import" })}
       />
     ),
     polls: (
@@ -1200,8 +1216,7 @@ export default function App() {
         }}
         join={async () => {
           try {
-            acceptView(await requestMembership());
-            toast("Membership request sent to guild admins.");
+            await joinGuild();
           } catch (e) {
             toast((e as Error).message);
           }
@@ -1234,7 +1249,7 @@ export default function App() {
             </button>
             <button
               className="btn hero-secondary"
-              onClick={() => go("schedule")}
+              onClick={() => go(nextRaid ? raidRoute(nextRaid.id) : "schedule")}
             >
               Raid schedule <CalendarDays size={16} />
             </button>
@@ -1405,13 +1420,23 @@ export default function App() {
         </nav>
         <div className="sidebar-bottom">
           <SetupGuide
+            key={demo ? "demo-guide" : identity?.id || "visitor-guide"}
+            linkedTopic={route.helpTopic}
             state={state}
             access={effectiveAccess}
             identity={identity}
             demo={demo}
             go={go}
             signIn={() => void signIn()}
-            importCharacter={() => open({ type: "import" })}
+            join={joinGuild}
+            importCharacter={(character) => {
+              setMenu(false);
+              open({ type: "import", character });
+            }}
+            openChat={() => {
+              setMenu(false);
+              setChatOpen(true);
+            }}
           />
           <div className="guild-note">
             <span className="small-crest">⚔</span>
@@ -1636,19 +1661,52 @@ export default function App() {
         </Suspense>
       )}
       {dialog && (
-        <Dialogs
-          key={`${dialog.type}-${dialog.character?.id || dialog.loot?.id || dialog.request?.id || ""}`}
-          dialog={dialog}
-          state={state}
-          close={() => setDialog(undefined)}
-          change={change}
-          open={open}
-          toast={toast}
-          demo={demo}
-          admin={effectiveAccess.admin}
-          members={demo ? demoMembers : members}
-          message={notification}
-        />
+        <Suspense
+          fallback={
+            <Modal title="Guild tools" onClose={() => setDialog(undefined)}>
+              <p className="muted" role="status">
+                Opening dialog…
+              </p>
+            </Modal>
+          }
+        >
+          <Dialogs
+            key={`${dialog.type}-${dialog.character?.id || dialog.loot?.id || dialog.request?.id || ""}`}
+            dialog={dialog}
+            editableCharacters={editableCharacters}
+            saveRaid={async (event, publish) => {
+              await change({ type: "event.save", event }, true);
+              if (publish && !demo) {
+                try {
+                  const result = await discordCall("raid-signup", {
+                    eventId: event.id,
+                  });
+                  toast(
+                    result.signup?.notice ||
+                      "Raid saved and signup posted to Discord.",
+                  );
+                } catch (e) {
+                  toast(
+                    "Raid saved. Discord signup still needs attention: " +
+                      (e instanceof Error
+                        ? e.message
+                        : "Retry from the raid planner."),
+                  );
+                }
+              }
+              go(raidRoute(event.id));
+            }}
+            state={state}
+            close={() => setDialog(undefined)}
+            change={change}
+            open={open}
+            toast={toast}
+            demo={demo}
+            admin={effectiveAccess.admin}
+            members={demo ? demoMembers : members}
+            message={notification}
+          />
+        </Suspense>
       )}
     </div>
   );

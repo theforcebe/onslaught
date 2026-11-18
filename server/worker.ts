@@ -14,6 +14,8 @@ import {
 import type { GuildDocument } from "../src/lib/access";
 import { ZodError } from "zod";
 import { handleDiscord } from "./discord";
+import { handleRaidPublish } from "./discord-raids";
+import { handleRaidInteraction } from "./raid-interactions";
 import { handleChat, invalidateChatMembers } from "./chat";
 import { serveItem, serveItemSearch, publicItemCache } from "./items";
 export interface Env {
@@ -95,6 +97,20 @@ function json(data: unknown, status = 200) {
     headers: { ...headers(), "Content-Type": "application/json" },
   });
 }
+function guildViewResponse(
+  req: Request,
+  doc: GuildDocument,
+  identity?: Identity,
+) {
+  const view = project(doc, identity);
+  // Already-open Pages tabs use strict schemas that predate per-raid builds.
+  if (req.headers.get("Accept") !== "application/vnd.onslaught.guild-v2+json") {
+    delete view.upcomingAttendance;
+    for (const c of view.state.characters) delete c.alternateBuilds;
+    for (const e of view.state.events) delete e.signupBuilds;
+  }
+  return json(view);
+}
 async function put(env: Env, key: string, payload: unknown, seconds: number) {
   await env.DB.prepare(
     "INSERT INTO auth_records (key,payload,expires_at) VALUES (?,?,?)",
@@ -157,7 +173,26 @@ async function boundedJSON(req: Request) {
     throw new ChangeError("Invalid JSON.");
   }
 }
-function callbackPage(env: Env, payload: { code?: string; error?: boolean }) {
+function callbackPage(
+  env: Env,
+  payload: { code?: string; error?: boolean },
+  sameTab: boolean,
+) {
+  const clearCookie =
+    "__Host-onslaught-oauth=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0";
+  if (sameTab) {
+    const destination = new URL("/onslaught/", env.APP_ORIGIN);
+    destination.hash = "bnet-return=" + (payload.code || "error");
+    return new Response(null, {
+      status: 303,
+      headers: {
+        ...headers(),
+        Location: destination.href,
+        "Set-Cookie": clearCookie,
+      },
+    });
+  }
+  // Retain the popup response for older tabs that began sign-in before the rollout.
   const nonce = random();
   const data = JSON.stringify({
     type: "onslaught-auth",
@@ -171,8 +206,7 @@ function callbackPage(env: Env, payload: { code?: string; error?: boolean }) {
         ...headers(),
         "Content-Type": "text/html;charset=utf-8",
         "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'`,
-        "Set-Cookie":
-          "__Host-onslaught-oauth=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0",
+        "Set-Cookie": clearCookie,
       },
     },
   );
@@ -281,7 +315,11 @@ async function writeRepository(
       502,
     );
 }
-async function route(req: Request, env: Env): Promise<Response> {
+async function route(
+  req: Request,
+  env: Env,
+  ctx: ExecutionContext,
+): Promise<Response> {
   const u = new URL(req.url),
     origin = req.headers.get("Origin");
   if (req.method === "OPTIONS") {
@@ -323,9 +361,23 @@ async function route(req: Request, env: Env): Promise<Response> {
     !env.PUBLIC_API_URL.startsWith("https://")
   )
     return json({ error: "Secure origin configuration required." }, 503);
+  const interaction = await handleRaidInteraction(req, env, ctx, {
+    readRepository,
+    writeRepository,
+    limit,
+  });
+  if (interaction) return interaction;
   if (req.method === "POST" && origin !== env.APP_ORIGIN)
     return json({ error: "Origin not allowed." }, 403);
   const ipHash = await digest(req.headers.get("CF-Connecting-IP") || "local");
+  const raidSignup = await handleRaidPublish(req, env, {
+    authenticated,
+    readRepository,
+    boundedJSON,
+    limit,
+    json,
+  });
+  if (raidSignup) return raidSignup;
   const chatResponse = await handleChat(req, env, {
     authenticated,
     readRepository,
@@ -348,8 +400,10 @@ async function route(req: Request, env: Env): Promise<Response> {
     const challenge = u.searchParams.get("challenge") || "";
     if (!/^[A-Za-z0-9_-]{43}$/.test(challenge))
       throw new ChangeError("Invalid sign-in challenge.");
-    const state = random();
-    await put(env, `oauth:${await digest(state)}`, { challenge }, 300);
+    const sameTab = u.searchParams.get("flow") === "redirect";
+    const state = (sameTab ? "r_" : "") + random();
+    const lifetime = sameTab ? 600 : 300;
+    await put(env, `oauth:${await digest(state)}`, { challenge }, lifetime);
     const auth = new URL("https://oauth.battle.net/authorize");
     auth.search = new URLSearchParams({
       response_type: "code",
@@ -363,22 +417,23 @@ async function route(req: Request, env: Env): Promise<Response> {
       headers: {
         ...headers(),
         Location: auth.href,
-        "Set-Cookie": `__Host-onslaught-oauth=${state}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=300`,
+        "Set-Cookie": `__Host-onslaught-oauth=${state}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${lifetime}`,
       },
     });
   }
   if (u.pathname === "/auth/callback" && req.method === "GET") {
+    const state = u.searchParams.get("state") || "";
+    const finish = (payload: { code?: string; error?: boolean }) =>
+      callbackPage(env, payload, /^r_[A-Za-z0-9_-]{43}$/.test(state));
     try {
-      const state = u.searchParams.get("state") || "";
       const cookie = req.headers
         .get("Cookie")
         ?.match(/(?:^|;\s*)__Host-onslaught-oauth=([A-Za-z0-9_-]+)/)?.[1];
       if (!cookie || state !== cookie || u.searchParams.has("error"))
-        return callbackPage(env, { error: true });
+        return finish({ error: true });
       const saved = await take(env, `oauth:${await digest(state)}`);
       const code = u.searchParams.get("code");
-      if (!saved || !code || code.length > 2000)
-        return callbackPage(env, { error: true });
+      if (!saved || !code || code.length > 2000) return finish({ error: true });
       const tokenResponse = await fetch("https://oauth.battle.net/token", {
         method: "POST",
         redirect: "manual",
@@ -392,21 +447,21 @@ async function route(req: Request, env: Env): Promise<Response> {
           redirect_uri: `${env.PUBLIC_API_URL}/auth/callback`,
         }),
       });
-      if (!tokenResponse.ok) return callbackPage(env, { error: true });
+      if (!tokenResponse.ok) return finish({ error: true });
       const token = (await tokenResponse.json()) as { access_token?: string };
-      if (!token.access_token) return callbackPage(env, { error: true });
+      if (!token.access_token) return finish({ error: true });
       const response = await fetch("https://oauth.battle.net/userinfo", {
         redirect: "manual",
         headers: { Authorization: `Bearer ${token.access_token}` },
       });
-      if (!response.ok) return callbackPage(env, { error: true });
+      if (!response.ok) return finish({ error: true });
       const account = (await response.json()) as {
         sub?: string;
         id?: number;
         battletag?: string;
       };
       const subject = String(account.sub || account.id || "");
-      if (!/^\d+$/.test(subject)) return callbackPage(env, { error: true });
+      if (!/^\d+$/.test(subject)) return finish({ error: true });
       // Neither the Blizzard access token nor an ID token is persisted or sent to the browser.
       const codeOut = random();
       const id = await pseudonym(subject, env.IDENTITY_KEY);
@@ -421,9 +476,9 @@ async function route(req: Request, env: Env): Promise<Response> {
         },
         60,
       );
-      return callbackPage(env, { code: codeOut });
+      return finish({ code: codeOut });
     } catch {
-      return callbackPage(env, { error: true });
+      return finish({ error: true });
     }
   }
   if (u.pathname === "/auth/exchange" && req.method === "POST") {
@@ -472,13 +527,13 @@ async function route(req: Request, env: Env): Promise<Response> {
   if (u.pathname === "/api/public" && req.method === "GET") {
     await limit(env, `read:${ipHash}`, 90);
     const current = await readRepository(env);
-    return json(project(current.document));
+    return guildViewResponse(req, current.document);
   }
   if (u.pathname === "/api/state" && req.method === "GET") {
     const identity = await authenticated(req, env);
     await limit(env, `read:${identity.id}`, 90);
     const current = await readRepository(env);
-    return json(project(current.document, identity));
+    return guildViewResponse(req, current.document, identity);
   }
   if (u.pathname === "/api/join" && req.method === "POST") {
     const identity = await authenticated(req, env);
@@ -512,9 +567,9 @@ async function route(req: Request, env: Env): Promise<Response> {
         DocumentSchema.parse(doc),
       );
       await invalidateChatMembers(env);
-      return json(project(doc, identity));
+      return guildViewResponse(req, doc, identity);
     }
-    return json(project(current.document, identity));
+    return guildViewResponse(req, current.document, identity);
   }
   if (u.pathname === "/api/members" && req.method === "POST") {
     const identity = await authenticated(req, env);
@@ -529,7 +584,7 @@ async function route(req: Request, env: Env): Promise<Response> {
       await writeRepository(env, current.url, current.sha, next);
       await invalidateChatMembers(env);
     }
-    return json(project(next, identity));
+    return guildViewResponse(req, next, identity);
   }
   if (u.pathname === "/api/change" && req.method === "POST") {
     const identity = await authenticated(req, env);
@@ -549,7 +604,7 @@ async function route(req: Request, env: Env): Promise<Response> {
       next.state.audit[0].scope = actionScope(next.state, input.action);
       await writeRepository(env, current.url, current.sha, next);
     }
-    return json(project(next, identity));
+    return guildViewResponse(req, next, identity);
   }
   return json({ error: "Not found." }, 404);
 }
@@ -557,7 +612,7 @@ export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext) {
     let response: Response;
     try {
-      response = await route(req, env);
+      response = await route(req, env, ctx);
     } catch (e) {
       response = json(
         {

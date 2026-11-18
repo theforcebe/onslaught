@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { canOpenPage } from "../src/lib/navigation";
+import { canOpenPage, guildRoute } from "../src/lib/navigation";
 import {
   ADMIN_ACCESS,
   PUBLIC_ACCESS,
@@ -8,6 +8,14 @@ import {
 } from "../src/lib/access";
 
 describe("permission-aware navigation", () => {
+  it("opens shareable help topics in the public overview without granting section access", () => {
+    expect(guildRoute("#help?topic=character")).toMatchObject({
+      page: "overview",
+      helpTopic: "character",
+    });
+    expect(guildRoute("#help?topic=unknown").helpTopic).toBe("");
+    expect(guildRoute("#discord").helpTopic).toBeUndefined();
+  });
   it.each(["admin", "officer", "raider", "guild_member"] as const)(
     "%s gets chat with approved membership and no section or team grants",
     (role) => {

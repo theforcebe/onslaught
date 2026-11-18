@@ -1,9 +1,129 @@
 import { useState } from "react";
 import { CalendarCheck } from "lucide-react";
+import { label } from "./lib/model";
+import { buildKey, characterBuilds } from "./lib/raid";
+import type { Character, RaidBuild } from "./lib/model";
 import type { Identity, RaidAction, RaidEvent, RaidState } from "./lib/model";
-import type { Access } from "./lib/access";
+import { hasSection, type Access } from "./lib/access";
 import { ClassIcon } from "./components";
 import { Dropdown } from "./Dropdown";
+export function SignupChoices({
+  character,
+  event,
+  change,
+}: {
+  character: Character;
+  event: RaidEvent;
+  change: (a: RaidAction) => void | Promise<void>;
+}) {
+  const [pendingBuild, setPendingBuild] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const choices = characterBuilds(character);
+  const recorded = event.signupBuilds?.[character.id];
+  const selected =
+    choices.find((b) => buildKey(b) === pendingBuild) ?? recorded ?? choices[0];
+  const status = event.signups[character.id];
+  if (Date.parse(event.end) <= Date.now()) {
+    const response =
+      status === "going"
+        ? "Going"
+        : status === "tentative"
+          ? "Maybe"
+          : status === "absent"
+            ? "Can’t make it"
+            : "No response";
+    return (
+      <span className="availability-build">
+        Signups closed · {response}
+        {status && selected
+          ? ` · ${selected.spec} · ${label(selected.role)}`
+          : ""}
+      </span>
+    );
+  }
+  const options =
+    recorded && !choices.some((b) => buildKey(b) === buildKey(recorded))
+      ? [...choices, recorded]
+      : choices;
+  const save = async (nextStatus: typeof status, build?: RaidBuild) => {
+    setBusy(true);
+    setError("");
+    try {
+      const validBuild = choices.find(
+        (b) => build && buildKey(build) === buildKey(b),
+      );
+      await change({
+        type: "event.signup",
+        eventId: event.id,
+        characterId: character.id,
+        status: nextStatus,
+        ...(validBuild ? { build: validBuild } : {}),
+      });
+      setPendingBuild("");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      {selected &&
+        (options.length > 1 ? (
+          <fieldset className="signup-build" disabled={busy}>
+            <legend>Build for this raid</legend>
+            <Dropdown
+              label={`Build for ${character.name} this raid`}
+              value={buildKey(selected)}
+              options={options.map((b) => ({
+                value: buildKey(b),
+                label: `${b.spec} · ${label(b.role)}`,
+              }))}
+              onChange={(key) => {
+                const picked = choices.find((b) => buildKey(b) === key);
+                if (!picked) return;
+                if (status) void save(status, picked);
+                else setPendingBuild(key);
+              }}
+            />
+          </fieldset>
+        ) : (
+          <span className="availability-build">
+            {selected.spec} · {label(selected.role)}
+          </span>
+        ))}
+      <div
+        className="segmented rsvp-actions"
+        aria-label={`Availability for ${character.name}`}
+      >
+        {(
+          [
+            ["going", "Going"],
+            ["tentative", "Maybe"],
+            ["absent", "Can’t make it"],
+          ] as const
+        ).map(([id, name]) => (
+          <button
+            type="button"
+            key={id}
+            aria-pressed={status === id}
+            className={status === id ? `active ${id}` : ""}
+            disabled={busy}
+            onClick={() => void save(id, selected)}
+          >
+            {name}
+          </button>
+        ))}
+      </div>
+      {error && (
+        <p role="alert" className="notice danger">
+          {error}
+        </p>
+      )}
+    </>
+  );
+}
 export function Availability({
   state,
   event,
@@ -24,8 +144,6 @@ export function Availability({
   const own = state.characters.filter(
       (c) => demo || (c.ownerBattleNet === identity?.id && !!identity),
     ),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
     [selected, setSelected] = useState("");
   const character =
     own.find((c) => c.id === selected) ||
@@ -49,7 +167,9 @@ export function Availability({
           </small>
         </span>
       </div>
-      {access.status !== "active" ? (
+      {Date.parse(event.end) <= Date.now() && !character ? (
+        <p className="muted">Signups closed when this raid ended.</p>
+      ) : access.status !== "active" ? (
         <p className="muted">
           Sign in and get your guild membership approved to respond.
         </p>
@@ -72,60 +192,26 @@ export function Availability({
               {character.name}
             </span>
           )}
-          <div
-            className="segmented rsvp-actions"
-            aria-label={`Availability for ${character.name}`}
-          >
-            {(
-              [
-                ["going", "Going"],
-                ["tentative", "Maybe"],
-                ["absent", "Can’t make it"],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                aria-pressed={event.signups[character.id] === id}
-                className={
-                  event.signups[character.id] === id ? `active ${id}` : ""
-                }
-                disabled={busy}
-                onClick={async () => {
-                  setBusy(true);
-                  setError("");
-                  try {
-                    await change({
-                      type: "event.signup",
-                      eventId: event.id,
-                      characterId: character.id,
-                      status: id,
-                    });
-                  } catch (e) {
-                    setError((e as Error).message);
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <SignupChoices
+            key={`${event.id}/${character.id}`}
+            character={character}
+            event={event}
+            change={change}
+          />
         </>
       ) : (
         <>
           <span className="muted">
-            Import your character or ask an admin to link your roster entry.
+            {hasSection(access, "gear")
+              ? "Import your character or ask an admin to link your roster entry."
+              : "Ask an admin to link your roster character or give you access to import one."}
           </span>
-          <button className="btn secondary" onClick={setup}>
-            Set up character
-          </button>
+          {hasSection(access, "gear") && (
+            <button className="btn secondary" onClick={setup}>
+              Set up character
+            </button>
+          )}
         </>
-      )}
-      {error && (
-        <p role="alert" className="notice danger">
-          {error}
-        </p>
       )}
     </section>
   );

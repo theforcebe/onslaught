@@ -7,6 +7,7 @@ import {
   SECTIONS,
   DocumentSchema,
   hasSection,
+  canActForCharacter,
   ASSIGNABLE_SECTIONS,
 } from "../src/lib/access";
 import { applyChange } from "../src/lib/reducer";
@@ -23,6 +24,25 @@ const owner = {
   admin: true,
 };
 describe("section and team privacy", () => {
+  it("offers personal gear, loot and pledge edits only for owned characters on authorized teams", () => {
+    const d = privateFixture(),
+      a = accessFor(d, member);
+    const own = { ...d.state.characters[0], ownerBattleNet: member.id };
+    expect(canActForCharacter(a, own, member)).toBe(true);
+    expect(canActForCharacter(a, { ...own, teamId: undefined }, member)).toBe(
+      true,
+    );
+    expect(canActForCharacter(a, { ...own, teamId: "second" }, member)).toBe(
+      false,
+    );
+    expect(
+      canActForCharacter(a, { ...own, ownerBattleNet: "someone-else" }, member),
+    ).toBe(false);
+    expect(canActForCharacter({ ...a, status: "pending" }, own, member)).toBe(
+      false,
+    );
+    expect(canActForCharacter(accessFor(d, owner), own, owner)).toBe(true);
+  });
   it.each(["officer", "raider", "guild_member"] as const)(
     "keeps Activity admin-only even when a %s has a legacy activity grant and every team",
     (role) => {

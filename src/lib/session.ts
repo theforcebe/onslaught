@@ -66,3 +66,5 @@ export function tabStorage(): Storage | undefined {
     return undefined;
   }
 }
+
+export const guildSession = createSessionStore(tabStorage());

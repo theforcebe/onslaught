@@ -1,0 +1,526 @@
+import { afterEach, describe, it, expect, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { privateFixture } from "./access-fixture";
+import { chatDatabase } from "./chat-db";
+import {
+  handleRaidPublish,
+  signupPath,
+  publicKeyRecord,
+  raidUrl,
+} from "../server/discord-raids";
+import {
+  handleRaidInteraction,
+  processRaidClick,
+} from "../server/raid-interactions";
+import type { Env } from "../server/worker";
+import { project, type GuildDocument } from "../src/lib/access";
+import { confirmedRaiders, raidNightCharacter } from "../src/lib/raid";
+import { guildRoute } from "../src/lib/navigation";
+import { ChangeError } from "../src/lib/reducer";
+
+const guild = "100000000000000001",
+  channel = "100000000000000002",
+  app = "100000000000000003",
+  post = "100000000000000004",
+  calendarId = "100000000000000005",
+  user = "100000000000000006";
+const databases: ReturnType<typeof chatDatabase>[] = [];
+afterEach(() => {
+  vi.unstubAllGlobals();
+  for (const db of databases.splice(0)) db.sqlite.close();
+});
+function fixture() {
+  const database = chatDatabase();
+  databases.push(database);
+  const sqlite = database.sqlite;
+  sqlite.exec(readFileSync("server/raid-signups.sql", "utf8"));
+  sqlite.prepare("INSERT INTO discord_config VALUES('guild',?)").run(
+    JSON.stringify({
+      guildId: guild,
+      pollsChannelId: channel,
+      requestsChannelId: channel,
+      announcementsChannelId: channel,
+    }),
+  );
+  sqlite
+    .prepare("INSERT INTO discord_links VALUES(?,?,?,0)")
+    .run("member-id", user, "Discord user");
+  const env = {
+    DB: database.db,
+    DISCORD_BOT_TOKEN: "fixture",
+    DISCORD_CLIENT_ID: app,
+    PUBLIC_API_URL: "https://hq.example",
+  } as Env;
+  const store = { doc: privateFixture() };
+  const event = store.doc.state.events[0];
+  event.start = new Date(Date.now() + 86400000).toISOString();
+  event.end = new Date(Date.now() + 92000000).toISOString();
+  event.signups = {};
+  const actor = {
+    provider: "battlenet" as const,
+    id: "member-id",
+    label: "Member",
+  };
+  const deps = {
+    authenticated: async () => actor,
+    readRepository: async () => ({
+      document: store.doc,
+      sha: "fixture",
+      url: "unused",
+    }),
+    writeRepository: vi.fn(
+      async (_env: Env, _url: string, _sha: string, next: GuildDocument) => {
+        store.doc = next;
+      },
+    ),
+    limit: async () => {},
+    boundedJSON: (r: Request) => r.json(),
+    json: (data: unknown) => Response.json(data),
+  };
+  const call = async (path = signupPath, method = "POST") =>
+    (await handleRaidPublish(
+      new Request(env.PUBLIC_API_URL + path, {
+        method,
+        body:
+          method === "POST" ? JSON.stringify({ eventId: event.id }) : undefined,
+      }),
+      env,
+      deps,
+    ))!.json();
+  const click = {
+    type: 3 as const,
+    id: "200000000000000001",
+    application_id: app,
+    guild_id: guild,
+    channel_id: channel,
+    token: "test",
+    member: { user: { id: user } },
+    message: { id: post },
+    data: { custom_id: "raid:rsvp:going" },
+  };
+  const register = () =>
+    sqlite
+      .prepare(
+        "INSERT INTO discord_raid_signups(event_id,guild_id,channel_id,message_id,interactive) VALUES(?,?,?,?,1)",
+      )
+      .run(event.id, guild, channel, post);
+  return { sqlite, env, store, event, deps, call, click, register };
+}
+describe("Discord raid signups", () => {
+  it("verifies the calendar grant and configures signup buttons without posting", async () => {
+    const { sqlite, store, call } = fixture();
+    store.doc.members[0].role = "admin";
+    let endpoint = "";
+    let grant = false;
+    const api = vi.fn(async (url: string, init?: RequestInit) => {
+      const path = new URL(url).pathname;
+      if (path.endsWith("/applications/@me")) {
+        if (init?.method === "PATCH") {
+          expect(
+            sqlite
+              .prepare("SELECT payload FROM discord_config WHERE key=?")
+              .get(publicKeyRecord),
+          ).toBeTruthy();
+          endpoint = JSON.parse(String(init.body)).interactions_endpoint_url;
+        }
+        return Response.json({
+          id: app,
+          verify_key: "aa".repeat(32),
+          interactions_endpoint_url: endpoint || null,
+        });
+      }
+      if (path.endsWith("/members/" + app))
+        return Response.json({ roles: ["bot-role"] });
+      if (path.endsWith("/roles"))
+        return Response.json([
+          { id: guild, permissions: "0" },
+          { id: "bot-role", permissions: grant ? String(1n << 44n) : "0" },
+        ]);
+      throw Error("Unexpected Discord API call");
+    });
+    vi.stubGlobal("fetch", api);
+    expect(await call(signupPath + "/setup")).toMatchObject({
+      interactive: true,
+      calendarReady: false,
+    });
+    grant = true;
+    expect(await call(signupPath + "/setup")).toMatchObject({
+      interactive: true,
+      calendarReady: true,
+    });
+    expect(
+      api.mock.calls.filter(([, init]) => init?.method === "PATCH"),
+    ).toHaveLength(1);
+    expect(
+      api.mock.calls.filter(([, init]) => init?.method === "POST"),
+    ).toHaveLength(0);
+  });
+  it("publishes and refreshes an event and signup without duplicating either or sharing notes", async () => {
+    const { env, store, event, call } = fixture();
+    store.doc.members[0].role = "officer";
+    const api = vi.fn(async (url: string, options?: RequestInit) => {
+      const path = new URL(url).pathname;
+      if (path.endsWith("/applications/@me"))
+        return Response.json({
+          id: app,
+          verify_key: "aa".repeat(32),
+          interactions_endpoint_url:
+            env.PUBLIC_API_URL + "/discord/interactions",
+        });
+      if (path.endsWith("/channels/" + channel))
+        return Response.json({ guild_id: guild });
+      if (path.endsWith("/scheduled-events") && options?.method === "GET")
+        return Response.json([]);
+      if (path.includes("/scheduled-events"))
+        return Response.json({ id: calendarId });
+      if (path.includes("/messages")) return Response.json({ id: post });
+      throw Error("Unexpected API");
+    });
+    vi.stubGlobal("fetch", api);
+    const first = await call();
+    event.start = new Date(Date.parse(event.start) + 86400000).toISOString();
+    event.end = new Date(Date.parse(event.end) + 86400000).toISOString();
+    event.title = "Rescheduled guild raid";
+    event.instance = "Updated meeting point";
+    const second = await call();
+    expect(first).toEqual(second);
+    expect(first.signup).toMatchObject({
+      interactive: true,
+      scheduledEventUrl:
+        "https://discord.com/events/" + guild + "/" + calendarId,
+    });
+    expect(
+      api.mock.calls.filter(([, init]) => init?.method === "POST"),
+    ).toHaveLength(2);
+    const sent = JSON.parse(
+      String(
+        api.mock.calls.find(
+          ([u, i]) => u.endsWith("/messages") && i?.method === "POST",
+        )![1]!.body,
+      ),
+    );
+    expect(
+      sent.components[0].components.map((b: any) => b.custom_id || b.url),
+    ).toContain(raidUrl(event.id));
+    expect(sent.allowed_mentions).toEqual({ parse: [] });
+    expect(JSON.stringify(sent)).not.toContain("PRIVATE-FIRST");
+    expect(
+      api.mock.calls.filter(([, i]) => i?.method === "PATCH"),
+    ).toHaveLength(2);
+    const updated = (resource: string) =>
+      JSON.parse(
+        String(
+          api.mock.calls.find(
+            ([url, opts]) => url.endsWith(resource) && opts?.method === "PATCH",
+          )![1]?.body,
+        ),
+      );
+    const calendar = updated("/scheduled-events/" + calendarId);
+    expect(calendar).toMatchObject({
+      name: event.title,
+      scheduled_start_time: event.start,
+      scheduled_end_time: event.end,
+      entity_metadata: { location: event.instance },
+    });
+    const card = updated("/messages/" + post);
+    expect(card.content).toContain(event.title);
+    expect(card.content).toContain(
+      "<t:" + Math.floor(Date.parse(event.start) / 1000) + ":F>",
+    );
+    expect(JSON.stringify([card, calendar])).not.toContain("PRIVATE-");
+    const link = card.components[0].components.find(
+      (b: { url?: string }) => b.url === raidUrl(event.id),
+    ).url;
+    const route = guildRoute(new URL(link).hash);
+    const publicNight = project(store.doc).state.events.find(
+      (e) => e.id === route.raidId,
+    );
+    expect(route.page).toBe("planner");
+    expect(publicNight).toMatchObject({
+      title: event.title,
+      start: event.start,
+      notes: "",
+      signups: {},
+    });
+  });
+  it("falls back to an exact-raid link when events or interaction setup are unavailable", async () => {
+    const { store, event, call } = fixture();
+    store.doc.members[0].role = "officer";
+    let message: any;
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      if (url.endsWith("/applications/@me"))
+        return Response.json({
+          id: app,
+          verify_key: "aa".repeat(32),
+          interactions_endpoint_url: "https://another.example/active",
+        });
+      if (url.endsWith("/channels/" + channel))
+        return Response.json({ guild_id: guild });
+      if (url.includes("scheduled-events"))
+        return Response.json({}, { status: 403 });
+      message = JSON.parse(String(init.body));
+      return Response.json({ id: post });
+    });
+    const result = await call();
+    expect(result.signup.interactive).toBe(false);
+    expect(result.signup.notice).toContain("Create Events");
+    expect(message.components[0].components).toEqual([
+      {
+        type: 2,
+        style: 5,
+        label: "Sign up in Ønslaught",
+        url: raidUrl(event.id),
+      },
+    ]);
+  });
+  it("protects publication and app setup with guild authorizations", async () => {
+    const { call, store } = fixture();
+    await expect(call()).rejects.toThrow("Officer");
+    store.doc.members[0].role = "officer";
+    store.doc.members[0].teamIds = [];
+    await expect(call()).rejects.toThrow("Officer");
+    await expect(call(signupPath + "/setup")).rejects.toThrow("Admin");
+  });
+  it("turns a signed fresh PING into PONG and rejects a signature over the wrong body", async () => {
+    const { env, deps, sqlite } = fixture();
+    const keys = (await crypto.subtle.generateKey({ name: "Ed25519" }, true, [
+      "sign",
+      "verify",
+    ])) as CryptoKeyPair;
+    const key = Buffer.from(
+      await crypto.subtle.exportKey("raw", keys.publicKey),
+    ).toString("hex");
+    sqlite
+      .prepare("INSERT INTO discord_config VALUES(?,?)")
+      .run(publicKeyRecord, JSON.stringify({ appId: app, key }));
+    const time = String(Math.floor(Date.now() / 1000)),
+      body = JSON.stringify({ type: 1 });
+    const sig = Buffer.from(
+      await crypto.subtle.sign(
+        "Ed25519",
+        keys.privateKey,
+        Buffer.from(time + body),
+      ),
+    ).toString("hex");
+    const ping = (data: string, stamp = time) =>
+      handleRaidInteraction(
+        new Request(env.PUBLIC_API_URL + "/discord/interactions", {
+          method: "POST",
+          headers: {
+            "X-Signature-Ed25519": sig,
+            "X-Signature-Timestamp": stamp,
+          },
+          body: data,
+        }),
+        env,
+        {} as ExecutionContext,
+        deps,
+      );
+    expect(await (await ping(body))!.json()).toEqual({ type: 1 });
+    await expect(ping(body + " ")).rejects.toThrow("signature");
+    await expect(ping(body, "1600000000")).rejects.toThrow("signature");
+  });
+  it("commits a linked member’s Discord RSVP to the canonical raid exactly once, retrying a conflicting update", async () => {
+    const { env, deps, click, store, register } = fixture();
+    register();
+    const character = store.doc.state.characters[0];
+    character.role = "tank";
+    character.class = "warrior";
+    character.spec = "Protection";
+    store.doc.members[0].sections = [];
+    deps.writeRepository.mockRejectedValueOnce(
+      new ChangeError("conflict", 409),
+    );
+    const response = await processRaidClick(env, click, deps);
+    expect(response.content).toContain("Going");
+    expect(store.doc.state.events[0].signups[character.id]).toBe("going");
+    expect(store.doc.state.events[0].signupBuilds?.[character.id]).toEqual({
+      spec: "Protection",
+      role: "tank",
+    });
+    await processRaidClick(env, click, deps);
+    expect(deps.writeRepository).toHaveBeenCalledTimes(2);
+  });
+  it("projects a signed Discord RSVP and role choice into the planner and guild board", async () => {
+    const { env, deps, click, store, sqlite, event, register } = fixture();
+    register();
+    store.doc.state.events = [event];
+    const main = store.doc.state.characters[0];
+    Object.assign(main, {
+      class: "warrior",
+      spec: "Protection",
+      role: "tank",
+      alternateBuilds: [{ spec: "Fury", role: "melee" }],
+    });
+    const guest = store.doc.state.characters[1];
+    event.signups[guest.id] = "going";
+    const member = store.doc.members[0];
+    member.sections = [];
+    const officer = {
+      ...member,
+      id: "officer",
+      label: "Raid lead",
+      role: "officer" as const,
+      sections: ["attendance", "planner"] as typeof member.sections,
+    };
+    store.doc.members.push(officer);
+
+    const keys = (await crypto.subtle.generateKey("Ed25519", true, [
+      "sign",
+      "verify",
+    ])) as CryptoKeyPair;
+    const key = Buffer.from(
+      await crypto.subtle.exportKey("raw", keys.publicKey),
+    ).toString("hex");
+    sqlite
+      .prepare("INSERT INTO discord_config VALUES(?,?)")
+      .run(publicKeyRecord, JSON.stringify({ appId: app, key }));
+    let reply: {
+      content: string;
+      components?: Array<{
+        components: Array<{
+          custom_id: string;
+          options: Array<{ label: string; value: string }>;
+        }>;
+      }>;
+    };
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      expect(url).toBe(
+        "https://discord.com/api/v10/webhooks/" +
+          app +
+          "/" +
+          click.token +
+          "/messages/@original",
+      );
+      expect(init.method).toBe("PATCH");
+      reply = JSON.parse(String(init.body));
+      return Response.json({});
+    });
+    const sendSigned = async (payload: object) => {
+      const body = JSON.stringify(payload),
+        time = String(Math.floor(Date.now() / 1000));
+      const signature = Buffer.from(
+        await crypto.subtle.sign(
+          "Ed25519",
+          keys.privateKey,
+          Buffer.from(time + body),
+        ),
+      ).toString("hex");
+      const background: Promise<unknown>[] = [];
+      const res = await handleRaidInteraction(
+        new Request(env.PUBLIC_API_URL + "/discord/interactions", {
+          method: "POST",
+          body,
+          headers: {
+            "X-Signature-Timestamp": time,
+            "X-Signature-Ed25519": signature,
+          },
+        }),
+        env,
+        {
+          waitUntil: (p: Promise<unknown>) => background.push(p),
+        } as unknown as ExecutionContext,
+        deps,
+      );
+      expect(await res!.json()).toEqual({ type: 5, data: { flags: 64 } });
+      await Promise.all(background);
+      return reply;
+    };
+    const prompt = await sendSigned(click);
+    const select = prompt.components![0].components[0];
+    const fury = select.options.find((o) => o.label.includes("Fury"))!;
+    const confirmation = await sendSigned({
+      ...click,
+      id: "200000000000000002",
+      message: { id: "200000000000000003" },
+      data: { custom_id: select.custom_id, values: [fury.value] },
+    });
+    expect(confirmation.content).toContain("Going");
+    const view = (person: typeof member) =>
+      project(store.doc, {
+        provider: "battlenet",
+        id: person.id,
+        label: person.label,
+      });
+    const mine = view(member);
+    expect(mine.state.events[0].signups).toEqual({ [main.id]: "going" });
+    expect(mine.upcomingAttendance).toMatchObject({
+      eventId: event.id,
+      going: 2,
+    });
+    expect(
+      raidNightCharacter(mine.state.characters[0], mine.state.events[0]),
+    ).toMatchObject({ spec: "Fury", role: "melee" });
+
+    const lead = view(officer);
+    expect(
+      confirmedRaiders(lead.state.characters, lead.state.events[0]).map(
+        (c) => c.id,
+      ),
+    ).toEqual([main.id]);
+    expect(lead.state.events[0].signups[guest.id]).toBeUndefined();
+    officer.allTeams = true;
+    const granted = view(officer);
+    expect(granted.state.events[0].signups[guest.id]).toBe("going");
+    expect(
+      granted.state.characters.find((c) => c.id === guest.id)?.teamId,
+    ).toBe("second");
+
+    const visitor = project(store.doc);
+    expect(visitor.state.events[0]).toMatchObject({
+      signups: {},
+      signupBuilds: {},
+    });
+    expect(visitor.upcomingAttendance).toBeUndefined();
+  });
+  it("rechecks character ownership and saved alternate builds when a private selection is submitted", async () => {
+    const { env, deps, click, store, register } = fixture();
+    register();
+    const other = store.doc.state.characters[1];
+    const char = store.doc.state.characters[0];
+    char.role = "tank";
+    char.class = "warrior";
+    char.spec = "Protection";
+    char.alternateBuilds = [{ spec: "Fury", role: "melee" }];
+    other.ownerBattleNet = char.ownerBattleNet;
+    const prompt = await processRaidClick(env, click, deps),
+      select = (prompt.components as any)[0].components[0];
+    expect(select.options).toHaveLength(3);
+    const pick = {
+      ...click,
+      id: "200000000000000002",
+      message: { id: "200000000000000003" },
+      data: { custom_id: select.custom_id, values: ["1"] },
+    };
+    await processRaidClick(env, pick, deps);
+    expect(store.doc.state.events[0].signupBuilds?.[char.id]).toEqual({
+      spec: "Fury",
+      role: "melee",
+    });
+    await expect(
+      processRaidClick(env, { ...pick, member: { user: { id: app } } }, deps),
+    ).rejects.toThrow("menu expired");
+    store.doc.state.characters[0].alternateBuilds = [];
+    await expect(processRaidClick(env, pick, deps)).rejects.toThrow(
+      "options changed",
+    );
+    store.doc.members[0].status = "suspended";
+    await expect(processRaidClick(env, click, deps)).rejects.toThrow(
+      "membership",
+    );
+  });
+  it("requires a recognized post, current guild/channel and a linked account", async () => {
+    const { env, deps, click, register } = fixture();
+    await expect(processRaidClick(env, click, deps)).rejects.toThrow(
+      "no longer available",
+    );
+    register();
+    await expect(
+      processRaidClick(env, { ...click, guild_id: app }, deps),
+    ).rejects.toThrow("scheduling channel");
+    await expect(
+      processRaidClick(env, { ...click, member: { user: { id: app } } }, deps),
+    ).rejects.toThrow("Link your Discord");
+    expect(deps.writeRepository).not.toHaveBeenCalled();
+  });
+});

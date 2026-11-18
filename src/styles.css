@@ -5791,6 +5791,16 @@ main {
   color: #c3a6ae;
   font-size: 11px;
 }
+.signup-build {
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+.signup-build legend { padding: 0; margin-bottom: 4px; font-size: 12px; }
+.availability-build { font-size: 13px; }
+.record-signup { display: grid; gap: 16px; }
 .availability-strip .dropdown {
   max-width: 220px;
 }

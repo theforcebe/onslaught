@@ -6,8 +6,10 @@ import {
   Package,
   Trophy,
 } from "lucide-react";
-import type { Access } from "./lib/access";
-import { hasSection, hasTeam } from "./lib/access";
+import type { Access, GuildView } from "./lib/access";
+import { hasSection } from "./lib/access";
+import { countAttendance, upcomingRaid } from "./lib/upcoming-raid";
+import { raidRoute } from "./lib/navigation";
 import type { Identity, RaidAction, RaidState } from "./lib/model";
 import { contributionBoard, emptyCommunity } from "./lib/community";
 import { ItemTooltip } from "./ItemTooltip";
@@ -16,19 +18,19 @@ import { PollCard } from "./PollCard";
 export function GuildBoard({
   state,
   access,
+  attendance,
   identity,
   demo,
   go,
   change,
-  setup,
 }: {
   state: RaidState;
   access: Access;
+  attendance?: GuildView["upcomingAttendance"];
   identity?: Identity;
   demo: boolean;
   go: (id: string) => void;
   change: (a: RaidAction) => Promise<void>;
-  setup: () => void;
 }) {
   const c = state.community || emptyCommunity(),
     announcement = c.announcements[0],
@@ -36,14 +38,30 @@ export function GuildBoard({
     poll = c.polls[0],
     contributors = contributionBoard(c.requests),
     [error, setError] = useState("");
-  const next = [...state.events]
-    .filter((e) => Date.parse(e.end) > Date.now())
-    .sort((a, b) => a.start.localeCompare(b.start))[0];
-  const fullAttendance =
-    next && hasSection(access, "attendance") && hasTeam(access, next.teamId);
+  const next = upcomingRaid(state.events);
+  const counts =
+    next &&
+    (demo
+      ? countAttendance(next)
+      : attendance?.eventId === next.id
+        ? attendance
+        : undefined);
+  const own = demo
+    ? state.characters.slice(0, 1)
+    : state.characters.filter(
+        (c) => identity && c.ownerBattleNet === identity.id,
+      );
+  const response = {
+    going: "Going",
+    tentative: "Maybe",
+    absent: "Can’t make it",
+  };
   return (
     <div className="guild-board">
-      <div className="war-room-banner">
+      <section
+        className="war-room-banner board-next-raid"
+        aria-label="Upcoming raid"
+      >
         <img
           className="guild-hall-art"
           src={`${import.meta.env.BASE_URL}art/onslaught-warhost.jpg`}
@@ -53,16 +71,75 @@ export function GuildBoard({
           fetchPriority="high"
         />
         <div>
-          <span className="eyebrow">Ønslaught on WoW Forever</span>
-          <h2>Welcome to the guild hall</h2>
-          <p>Our raids. Our people. One home for the Horde.</p>
+          <span className="eyebrow">
+            <CalendarDays size={15} />{" "}
+            {next && Date.parse(next.start) <= Date.now()
+              ? "Raid in progress"
+              : "Upcoming raid"}
+          </span>
+          <h2>{next?.title || "No upcoming raid"}</h2>
+          {next && (
+            <>
+              <p>
+                {[
+                  next.publicTeamName ||
+                    state.teams.find((t) => t.id === next.teamId)?.name,
+                  next.instance,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+              <p>
+                <time dateTime={next.start}>
+                  {new Date(next.start).toLocaleString(undefined, {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                    timeZoneName: "short",
+                  })}
+                </time>
+              </p>
+              {counts && (
+                <dl className="board-raid-counts">
+                  <div>
+                    <dt>Confirmed</dt>
+                    <dd>{counts.going}</dd>
+                  </div>
+                  <div>
+                    <dt>Maybe</dt>
+                    <dd>{counts.tentative}</dd>
+                  </div>
+                  <div>
+                    <dt>Unavailable</dt>
+                    <dd>{counts.absent}</dd>
+                  </div>
+                </dl>
+              )}
+              {own.length > 0 && (
+                <p className="board-own-signup">
+                  {own
+                    .map(
+                      (c) =>
+                        c.name +
+                        " · " +
+                        (response[next.signups[c.id]] || "No response"),
+                    )
+                    .join(" / ")}
+                </p>
+              )}
+            </>
+          )}
         </div>
-        <button className="btn hero-secondary" onClick={() => go("community")}>
-          <Megaphone size={16} />
-          Guild coordination
+        <button
+          className="btn hero-secondary"
+          onClick={() => go(next ? raidRoute(next.id) : "planner")}
+        >
+          {next ? "View raid & sign up" : "Open raid planner"}
           <ArrowUpRight size={16} />
         </button>
-      </div>
+      </section>
       {error && (
         <p className="notice danger" role="alert">
           {error}
@@ -105,89 +182,6 @@ export function GuildBoard({
               </>
             )}
           </section>
-        )}
-        <section className="panel next-raid-card">
-          <div className="panel-title">
-            <span className="eyebrow">
-              <CalendarDays size={16} />
-              NEXT RAID
-            </span>
-            <button className="btn text" onClick={() => go("planner")}>
-              Open planner
-              <ArrowUpRight size={14} />
-            </button>
-          </div>
-          {next ? (
-            <>
-              <h2>{next.title}</h2>
-              <p>
-                {next.instance} ·{" "}
-                {new Date(next.start).toLocaleString(undefined, {
-                  weekday: "long",
-                  hour: "numeric",
-                  minute: "2-digit",
-                  timeZoneName: "short",
-                })}
-              </p>
-              {fullAttendance ? (
-                <div className="attendance-totals">
-                  {[
-                    ["going", "Confirmed"],
-                    ["tentative", "Maybe"],
-                    ["absent", "Unavailable"],
-                  ].map(([status, label]) => (
-                    <div key={status}>
-                      <strong>
-                        {
-                          Object.values(next.signups).filter(
-                            (v) => v === status,
-                          ).length
-                        }
-                      </strong>
-                      <small>{label}</small>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="muted">
-                  Your response is shown below. Full attendance follows your
-                  assigned access.
-                </p>
-              )}
-            </>
-          ) : (
-            <p className="muted">Your next scheduled raid will appear here.</p>
-          )}
-        </section>
-        {next && (
-          <div className="board-availability">
-            <div className="board-rsvp">
-              <span>Your next raid</span>
-              <strong>
-                {(demo
-                  ? state.characters.slice(0, 1)
-                  : state.characters.filter(
-                      (c) => c.ownerBattleNet === identity?.id && !!identity,
-                    )
-                )
-                  .map(
-                    (c) =>
-                      c.name +
-                      ": " +
-                      ({
-                        going: "Going",
-                        tentative: "Maybe",
-                        absent: "Unavailable",
-                      }[next.signups[c.id]] || "No response"),
-                  )
-                  .join(" · ") || "Set up your character to respond"}
-              </strong>
-              <button className="btn secondary" onClick={() => go("planner")}>
-                Set availability in Raid planner
-                <ArrowUpRight size={14} />
-              </button>
-            </div>
-          </div>
         )}
         <section className="panel live-requests">
           <div className="panel-title">

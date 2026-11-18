@@ -1,4 +1,4 @@
-import type { Character, RaidEvent, WowClass } from "./model";
+import type { Character, RaidBuild, RaidEvent, WowClass } from "./model";
 
 // Forever has Classic talent trees, including Combat and a single Feral tree.
 export const CLASS_SPECS: Record<WowClass, readonly string[]> = {
@@ -16,6 +16,7 @@ export type RaidProfile = {
   role: Character["role"];
   spec: string;
   buffs: string[];
+  alternateBuilds?: Character["alternateBuilds"];
 };
 export type RaidBuff = {
   id: string;
@@ -192,12 +193,13 @@ export function normalizeSpec(cls: WowClass, spec = "") {
   );
 }
 export function profileFor(
-  c: Pick<Character, "class" | "role" | "spec" | "buffs">,
+  c: Pick<Character, "class" | "role" | "spec" | "buffs" | "alternateBuilds">,
 ): RaidProfile {
   return {
     role: c.role,
     spec: normalizeSpec(c.class, c.spec),
     buffs: c.buffs || [],
+    alternateBuilds: c.alternateBuilds || [],
   };
 }
 export function validateProfile(
@@ -209,16 +211,52 @@ export function validateProfile(
     return "Choose a specialization for your class.";
   if (profile.role === "unassigned")
     return "Choose Tank, Healer, Melee or Ranged before saving.";
+  const seen = new Set<string>();
+  for (const build of [profile, ...(profile.alternateBuilds || [])]) {
+    if (!CLASS_SPECS[cls].includes(build.spec))
+      return "Choose a specialization for your class.";
+    const key = buildKey(build);
+    if (seen.has(key))
+      return "Each specialization and role combination must be different.";
+    seen.add(key);
+    const problem = validateBuffs(cls, build.buffs || [], level);
+    if (problem) return problem;
+  }
+  return "";
+}
+function validateBuffs(cls: WowClass, buffs: string[], level: number) {
   if (
-    new Set(profile.buffs).size !== profile.buffs.length ||
-    profile.buffs.some(
-      (id) => !RAID_BUFFS.some((b) => b.id === id && b.cls === cls),
-    )
+    new Set(buffs).size !== buffs.length ||
+    buffs.some((id) => !RAID_BUFFS.some((b) => b.id === id && b.cls === cls))
   )
     return "Choose only abilities available to your class.";
-  if (profile.buffs.includes("spirit") && level < 30)
+  if (buffs.includes("spirit") && level < 30)
     return "Divine Spirit requires level 30.";
   return "";
+}
+export const buildKey = (build: Pick<Character, "role" | "spec">) =>
+  `${build.spec}|${build.role}`;
+export function characterBuilds(c: Character): RaidBuild[] {
+  const primary = normalizeSpec(c.class, c.spec);
+  return [
+    ...(c.role !== "unassigned" && primary
+      ? [{ spec: primary, role: c.role }]
+      : []),
+    ...(c.alternateBuilds || []).map(({ spec, role }) => ({ spec, role })),
+  ];
+}
+export function raidNightCharacter(c: Character, event: RaidEvent): Character {
+  const selected = event.signupBuilds?.[c.id];
+  if (
+    !selected ||
+    (selected.spec === normalizeSpec(c.class, c.spec) &&
+      selected.role === c.role)
+  )
+    return c;
+  const buffs = c.alternateBuilds?.find(
+    (b) => buildKey(b) === buildKey(selected),
+  )?.buffs;
+  return { ...c, ...selected, buffs };
 }
 export function confirmedRaiders(characters: Character[], event: RaidEvent) {
   return characters.filter(

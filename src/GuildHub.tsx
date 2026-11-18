@@ -118,6 +118,7 @@ export function GuildHub(p: Props) {
     [busy, setBusy] = useState(false),
     [compose, setCompose] = useState(""),
     [discord, setDiscord] = useState<DiscordState>(defaultDiscord),
+    [signupSetup, setSignupSetup] = useState(""),
     [sendRecord, setSendRecord] = useState<{
       kind: "poll" | "announcement" | "request";
       id: string;
@@ -497,32 +498,16 @@ export function GuildHub(p: Props) {
                     busy
                   }
                   onClick={() => {
-                    const popup = window.open(
-                      "about:blank",
-                      "onslaught-discord-link",
-                      "popup,width=540,height=740",
-                    );
-                    if (!popup) {
-                      setError(
-                        "Allow the Discord linking popup and try again.",
-                      );
-                      return;
-                    }
                     void perform(async () => {
-                      try {
-                        const result = await discordCall("link/start", {});
-                        const url = new URL(result.url);
-                        if (
-                          url.origin !==
-                            new URL(import.meta.env.VITE_API_URL).origin ||
-                          url.pathname !== "/discord/connect"
-                        )
-                          throw new Error("Invalid Discord connection URL.");
-                        popup.location.href = url.href;
-                      } catch (e) {
-                        popup.close();
-                        throw e;
-                      }
+                      const result = await discordCall("link/start", {});
+                      const url = new URL(result.url);
+                      if (
+                        url.origin !==
+                          new URL(import.meta.env.VITE_API_URL).origin ||
+                        url.pathname !== "/discord/connect"
+                      )
+                        throw new Error("Invalid Discord connection URL.");
+                      window.location.assign(url.href);
                     });
                   }}
                 >
@@ -666,6 +651,38 @@ export function GuildHub(p: Props) {
                   Validate & save channels
                 </button>
               </Form>
+              <div className="discord-raid-signup">
+                <button
+                  className="btn secondary"
+                  disabled={demo || busy || !discord.connected}
+                  onClick={() =>
+                    void perform(async () => {
+                      setSignupSetup("");
+                      const result = await discordCall("raid-signup/setup", {});
+                      setSignupSetup(
+                        [
+                          result.interactive
+                            ? "Discord signup buttons are ready."
+                            : "",
+                          result.calendarReady === true
+                            ? "The bot can create calendar events."
+                            : "",
+                          result.notice,
+                        ]
+                          .filter(Boolean)
+                          .join(" "),
+                      );
+                    })
+                  }
+                >
+                  Enable Discord raid signup buttons
+                </button>
+                <p className="muted">
+                  Give the bot Create Events in Discord to include a server
+                  calendar event when posting signups.
+                </p>
+                {signupSetup && <p role="status">{signupSetup}</p>}
+              </div>
             </section>
           )}
         </div>

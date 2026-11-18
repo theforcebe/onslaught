@@ -8,7 +8,9 @@ Lineups require **Raid planner + Attendance & raid notes + the specific team**. 
 
 ## Guided imports
 
-Import follows Export → Role & spec → Buffs → Review. Class and equipment come from the export; the user explicitly chooses Tank, Healer, Melee, or Ranged and one of that class's three Forever talent trees. Feral covers both Druid tank and melee roles, and Rogues use Combat. Existing selections are preserved when refreshing gear. The server validates class/spec and declared ability IDs and records all profile choices with the import in one revision. Legacy gear-only import requests retain their existing choices.
+Import follows Export → Role & spec → Buffs → Review. Choose a primary role and a Forever talent tree for your class. Under **Alternate specs & roles**, add any other builds you can play. A Druid can register Feral Tank, Feral Melee and Restoration Healer on the same character. Select each build under **Buffs** to declare its own abilities. Refreshing a gear export preserves saved builds.
+
+In **Raid planner → Your availability**, select a build for that night and choose Going, Maybe or Can’t make it. Changing the build after signing up updates the existing response. Your primary profile and other nights keep their own settings. The active lineup uses that night's role and buff declarations. The site and Discord close signups when the scheduled raid ends.
 
 Buff declarations are private, user-confirmed availability. A class, gear item, spec label or undecoded talent string does not prove an ability was learned. The current catalog covers 15 core buffs and four utility/debuff entries. It is deliberately not a simulation of every situational ability, aura uptime, target allocation, stacking or spell rank. No unverified numeric benefit is used to rank a lineup. Talent and form requirements appear beside the selection; Divine Spirit is gated at its documented level 30.
 

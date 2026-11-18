@@ -7,6 +7,8 @@ import type { Identity, RaidAction, RaidState } from "../src/lib/model";
 import {
   CLASS_SPECS,
   confirmedRaiders,
+  characterBuilds,
+  raidNightCharacter,
   normalizeSpec,
   providersFor,
 } from "../src/lib/raid";
@@ -64,6 +66,217 @@ const assign = (
   characterId: id,
   group,
   ...(swapWith ? { swapWith } : {}),
+});
+describe("alternate raid builds", () => {
+  it("preserves registered builds through old gear imports, single-build profile updates and explicit clears", () => {
+    const d = fixture(),
+      c = d.state.characters[0];
+    const alternate = { spec: "Survival", role: "melee" as const, buffs: [] };
+    c.alternateBuilds = [alternate];
+    const gear = {
+      type: "character.import" as const,
+      characterId: c.id,
+      raw: EXAMPLE_EXPORT,
+    };
+    const refresh = change(d.state, gear, member);
+    expect(refresh.characters[0].alternateBuilds).toEqual([alternate]);
+    const swap = change(
+      refresh,
+      {
+        type: "character.update",
+        characterId: c.id,
+        spec: alternate.spec,
+        role: alternate.role,
+        notes: "",
+      },
+      member,
+    );
+    expect(swap.characters[0]).toMatchObject({
+      ...alternate,
+      alternateBuilds: [{ spec: c.spec, role: c.role, buffs: c.buffs }],
+    });
+    const restored = change(
+      swap,
+      { ...gear, profile: { spec: c.spec, role: c.role, buffs: c.buffs! } },
+      member,
+    );
+    expect(restored.characters[0].alternateBuilds).toEqual([alternate]);
+    const cleared = change(
+      restored,
+      {
+        ...gear,
+        profile: {
+          spec: c.spec,
+          role: c.role,
+          buffs: c.buffs!,
+          alternateBuilds: [],
+        },
+      },
+      member,
+    );
+    expect(cleared.characters[0].alternateBuilds).toEqual([]);
+  });
+  it("closes site signups at raid end and permits a retry of the already-saved response", () => {
+    const d = fixture(),
+      c = d.state.characters[0],
+      e = d.state.events[0];
+    const request = {
+      version: 1 as const,
+      expectedRevision: d.state.revision,
+      id: "before-end",
+      action: {
+        type: "event.signup" as const,
+        eventId: e.id,
+        characterId: c.id,
+        status: "tentative" as const,
+      },
+    };
+    const saved = applyChange(
+      d.state,
+      request,
+      member,
+      new Date(Date.parse(e.end) - 1).toISOString(),
+    );
+    expect(applyChange(saved, request, member, e.end)).toEqual(saved);
+    expect(() =>
+      applyChange(
+        saved,
+        { ...request, id: "after-end", expectedRevision: saved.revision },
+        member,
+        e.end,
+      ),
+    ).toThrow("Signups have closed");
+  });
+  function druid() {
+    const d = fixture();
+    const c = d.state.characters[0];
+    Object.assign(c, {
+      class: "druid",
+      role: "healer",
+      spec: "Restoration",
+      buffs: ["mark"],
+      ownerBattleNet: member.id,
+    });
+    d.state = change(
+      d.state,
+      {
+        type: "character.update",
+        characterId: c.id,
+        role: "healer",
+        spec: "Restoration",
+        alternateBuilds: [
+          { spec: "Feral", role: "tank", buffs: ["pack"] },
+          { spec: "Feral", role: "melee" },
+        ],
+        notes: "",
+      },
+      member,
+    );
+    return d;
+  }
+  it("chooses a saved build per night and counts the selected build's declared abilities", () => {
+    const d = druid();
+    const c = d.state.characters[0];
+    const builds = characterBuilds(c);
+    expect(builds.map((b) => b.role)).toEqual(["healer", "tank", "melee"]);
+    d.state.events.push({ ...d.state.events[0], id: "tomorrow" });
+    const next = change(
+      d.state,
+      {
+        type: "event.signup",
+        characterId: c.id,
+        eventId: "demo-raid",
+        status: "going",
+        build: builds[1],
+      },
+      member,
+    );
+    expect(
+      raidNightCharacter(next.characters[0], next.events[0]),
+    ).toMatchObject({ spec: "Feral", role: "tank", buffs: ["pack"] });
+    expect(
+      raidNightCharacter(next.characters[0], next.events[1]),
+    ).toMatchObject({ spec: "Restoration", role: "healer", buffs: ["mark"] });
+    expect(next.characters[0].role).toBe("healer");
+    const legacy = change(
+      next,
+      {
+        type: "event.signup",
+        characterId: c.id,
+        eventId: "demo-raid",
+        status: "tentative",
+      },
+      member,
+    );
+    expect(legacy.events[0].signupBuilds?.[c.id]).toEqual(builds[1]);
+    const edited = change(legacy, {
+      type: "event.save",
+      event: { ...legacy.events[0], signupBuilds: { [c.id]: builds[2] } },
+    });
+    expect(edited.events[0].signupBuilds?.[c.id]).toEqual(builds[1]);
+    const oldSchedule = {
+      ...edited.events[0],
+      title: "New start time",
+      signups: {},
+    };
+    delete oldSchedule.signupBuilds;
+    const rescheduled = change(edited, {
+      type: "event.save",
+      event: oldSchedule,
+    });
+    expect(rescheduled.events[0]).toMatchObject({
+      signups: { [c.id]: "tentative" },
+      signupBuilds: { [c.id]: builds[1] },
+    });
+    d.state = edited;
+    d.members[0].sections = [];
+    expect(project(d, member).state.events[0].signupBuilds?.[c.id]).toEqual(
+      builds[1],
+    );
+    expect(project(d).state.events[0].signupBuilds?.[c.id]).toBeUndefined();
+    expect(
+      project(d).state.characters[0].alternateBuilds?.[0].buffs,
+    ).toBeUndefined();
+  });
+  it("rejects cross-class, duplicate, undeclared and unowned choices", () => {
+    const d = druid(),
+      c = d.state.characters[0];
+    const edit = {
+      type: "character.update" as const,
+      characterId: c.id,
+      role: c.role,
+      spec: c.spec,
+      notes: "",
+    };
+    expect(() =>
+      change(d.state, {
+        ...edit,
+        alternateBuilds: [{ spec: "Holy", role: "healer" }],
+      }),
+    ).toThrow("your class");
+    expect(() =>
+      change(d.state, {
+        ...edit,
+        alternateBuilds: [{ spec: "Restoration", role: "healer" }],
+      }),
+    ).toThrow("different");
+    const signup = {
+      type: "event.signup" as const,
+      characterId: c.id,
+      eventId: "demo-raid",
+      status: "going" as const,
+    };
+    expect(() =>
+      change(
+        d.state,
+        { ...signup, build: { spec: "Balance", role: "ranged" } },
+        member,
+      ),
+    ).toThrow("saved specialization");
+    expect(() => change(d.state, signup, { ...member, id: "other" })).toThrow(
+      "own character",
+    );
+  });
 });
 describe("confirmed raid lineups", () => {
   it("saves per-event positions without changing standing groups or another event", () => {

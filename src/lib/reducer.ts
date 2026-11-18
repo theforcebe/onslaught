@@ -1,7 +1,13 @@
 import { RequestSchema, StateSchema } from "./model";
-import type { RaidState, Identity, ChangeRequest } from "./model";
+import type { Character, RaidState, Identity, ChangeRequest } from "./model";
 import { parseSimc, rejectCredentials } from "./parser";
-import { confirmedRaiders, validateProfile } from "./raid";
+import {
+  buildKey,
+  characterBuilds,
+  confirmedRaiders,
+  normalizeSpec,
+  validateProfile,
+} from "./raid";
 import { applyCommunity, CommunityActionSchema } from "./community";
 export class ChangeError extends Error {
   constructor(
@@ -17,6 +23,36 @@ export function isAdmin(state: RaidState, actor: Identity) {
         (a) => a.toLowerCase() === actor.id.toLowerCase(),
       )
     : actor.admin === true;
+}
+function updatedProfile(
+  character: Character,
+  edit: Pick<Character, "spec" | "role" | "buffs" | "alternateBuilds">,
+  level: number,
+) {
+  const promoted = character.alternateBuilds?.find(
+    (b) => buildKey(b) === buildKey(edit),
+  );
+  let alternateBuilds = edit.alternateBuilds ?? character.alternateBuilds;
+  // Older editors only know the primary build. Promoting a saved alternate swaps their places.
+  if (edit.alternateBuilds === undefined && promoted) {
+    alternateBuilds = character.alternateBuilds!.filter((b) => b !== promoted);
+    const spec = normalizeSpec(character.class, character.spec);
+    if (spec && character.role !== "unassigned")
+      alternateBuilds.push({
+        spec,
+        role: character.role,
+        buffs: character.buffs,
+      });
+  }
+  const profile = {
+    role: edit.role,
+    spec: edit.spec,
+    alternateBuilds,
+    buffs: edit.buffs ?? (promoted ? promoted.buffs : character.buffs) ?? [],
+  };
+  const error = validateProfile(character.class, profile, level);
+  if (error) throw new ChangeError(error);
+  return profile;
 }
 export function applyChange(
   current: RaidState,
@@ -102,14 +138,6 @@ export function applyChange(
   switch (a.type) {
     case "character.import": {
       const snapshot = parseSimc(a.raw, at);
-      if (a.profile) {
-        const error = validateProfile(
-          snapshot.class,
-          a.profile,
-          snapshot.level,
-        );
-        if (error) throw new ChangeError(error);
-      }
       let c = s.characters.find((c) => c.id === a.characterId);
       if (c) {
         own(c.id);
@@ -155,25 +183,14 @@ export function applyChange(
         class: snapshot.class,
         level: snapshot.level,
         snapshot,
-        ...(a.profile || {}),
+        ...(a.profile ? updatedProfile(c, a.profile, snapshot.level) : {}),
       });
       summary = `Imported ${c.name}'s equipment`;
       break;
     }
     case "character.update": {
       const c = own(a.characterId);
-      const error = validateProfile(
-        c.class,
-        { role: a.role, spec: a.spec, buffs: a.buffs ?? c.buffs ?? [] },
-        c.level,
-      );
-      if (error) throw new ChangeError(error);
-      Object.assign(c, {
-        role: a.role,
-        spec: a.spec,
-        notes: a.notes,
-        ...(a.buffs ? { buffs: a.buffs } : {}),
-      });
+      Object.assign(c, updatedProfile(c, a, c.level), { notes: a.notes });
       summary = `Updated ${c.name}'s raid profile`;
       break;
     }
@@ -264,6 +281,7 @@ export function applyChange(
       update(s.events, {
         ...a.event,
         signups: prev?.signups || {},
+        signupBuilds: prev?.signupBuilds,
         lineup: prev?.teamId === a.event.teamId ? prev.lineup : {},
       });
       summary = `Scheduled ${a.event.title}`;
@@ -345,6 +363,15 @@ export function applyChange(
       const c = own(a.characterId),
         e = s.events.find((e) => e.id === a.eventId);
       if (!e) throw new ChangeError("Raid not found.");
+      if (Date.parse(e.end) <= Date.parse(at))
+        throw new ChangeError("Signups have closed for this raid.", 409);
+      const builds = characterBuilds(c);
+      if (a.build && !builds.some((b) => buildKey(b) === buildKey(a.build!)))
+        throw new ChangeError(
+          "Choose a saved specialization and role for this character.",
+        );
+      const build = a.build ?? e.signupBuilds?.[c.id] ?? builds[0];
+      if (build) (e.signupBuilds ||= {})[c.id] = build;
       e.signups[c.id] = a.status;
       summary = `${c.name} marked ${a.status} for ${e.title}`;
       break;

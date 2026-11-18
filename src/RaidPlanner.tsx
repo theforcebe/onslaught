@@ -1,5 +1,6 @@
 import { calendarFile, download } from "./lib/calendar";
 import { Availability } from "./Availability";
+import { DiscordRaidSignup } from "./DiscordRaidSignup";
 import type { Identity } from "./lib/model";
 import { useEffect, useRef, useState } from "react";
 import type { PointerEvent } from "react";
@@ -31,6 +32,7 @@ import type {
 import {
   activeLineup,
   confirmedRaiders,
+  raidNightCharacter,
   providersFor,
   RAID_BUFFS,
 } from "./lib/raid";
@@ -246,9 +248,11 @@ function EventBoard({
   const suppressClick = useRef(false);
   const [ghost, setGhost] = useState<{ x: number; y: number }>();
   const [message, setMessage] = useState("");
-  const confirmed = confirmedRaiders(state.characters, event);
+  const confirmed = confirmedRaiders(state.characters, event).map((c) =>
+    raidNightCharacter(c, event),
+  );
   const lineup = event.lineup || {};
-  const placed = activeLineup(state.characters, event, team.size);
+  const placed = activeLineup(confirmed, event, team.size);
   const bench = confirmed.filter((c) => !placed.some((p) => p.id === c.id));
   const selectedCharacter = confirmed.find((c) => c.id === selected);
   const highlighted = new Set(providersFor(buff, confirmed).map((c) => c.id));
@@ -402,7 +406,12 @@ function EventBoard({
         }
         onClick={() => {
           if (!admin) {
-            open({ type: "character", character: c });
+            open({
+              type: "character",
+              character: state.characters.find(
+                (original) => original.id === c.id,
+              ),
+            });
             return;
           }
           if (selected && selected !== c.id && lineup[c.id])
@@ -422,9 +431,6 @@ function EventBoard({
     </div>
   );
   const zones = (group: number | null) => ({ "data-raid-drop": group || 0 });
-  const outside = state.characters.filter(
-    (c) => event.signups[c.id] === "going" && c.teamId !== team.id,
-  ).length;
   return (
     <>
       {ghost && (
@@ -528,7 +534,12 @@ function EventBoard({
               <button
                 className="btn text"
                 onClick={() =>
-                  open({ type: "character", character: selectedCharacter })
+                  open({
+                    type: "character",
+                    character: state.characters.find(
+                      (c) => c.id === selectedCharacter.id,
+                    ),
+                  })
                 }
               >
                 Edit profile
@@ -628,14 +639,6 @@ function EventBoard({
           </p>
         )}
       </section>
-      {!!outside && (
-        <p className="notice">
-          {outside} confirmed{" "}
-          {outside === 1 ? "character belongs" : "characters belong"} outside
-          this team. Add them to {team.name} using “Manage raiders” before
-          placing them in its lineup.
-        </p>
-      )}
       <span className="sr-only" role="status" aria-live="polite">
         {message}
       </span>
@@ -645,6 +648,8 @@ function EventBoard({
 
 export function RaidPlanner({
   state,
+  requestedEventId,
+  goToEvent,
   team: selectedTeam,
   selectTeam,
   access,
@@ -654,6 +659,8 @@ export function RaidPlanner({
   demo,
 }: {
   state: RaidState;
+  requestedEventId: string;
+  goToEvent: (id: string) => void;
   team?: Team;
   selectTeam: (id: string) => void;
   access: Access;
@@ -662,8 +669,7 @@ export function RaidPlanner({
   identity?: Identity;
   demo?: boolean;
 }) {
-  const [selectedEvent, setSelectedEvent] = useState(""),
-    [rosterOpen, setRosterOpen] = useState(false),
+  const [rosterOpen, setRosterOpen] = useState(false),
     [search, setSearch] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -675,15 +681,22 @@ export function RaidPlanner({
       ]),
     ).values(),
   ];
-  const teams = state.teams.length ? state.teams : publicTeams;
+  const teams = [
+    ...state.teams,
+    ...publicTeams.filter((t) => !state.teams.some((full) => full.id === t.id)),
+  ];
+  const requested = state.events.find((e) => e.id === requestedEventId);
   const [publicTeamId, setPublicTeamId] = useState("");
   const team =
-    selectedTeam || teams.find((t) => t.id === publicTeamId) || teams[0];
+    teams.find((t) => t.id === requested?.teamId) ||
+    teams.find((t) => t.id === publicTeamId) ||
+    selectedTeam ||
+    teams[0];
   const events = state.events
     .filter((e) => e.teamId === team?.id)
     .sort((a, b) => a.start.localeCompare(b.start));
   const event =
-    events.find((e) => e.id === selectedEvent) ||
+    requested ||
     events.find((e) => Date.parse(e.end) > Date.now()) ||
     events.at(-1);
   const fullTeam = state.teams.find((t) => t.id === team?.id);
@@ -692,6 +705,22 @@ export function RaidPlanner({
     hasSection(access, "attendance") &&
     hasTeam(access, team?.id);
   const roster = state.characters.filter((c) => c.teamId === team?.id);
+  const guests =
+    event && hasSection(access, "attendance") && hasTeam(access, event.teamId)
+      ? state.characters.filter(
+          (c) => c.teamId !== event.teamId && event.signups[c.id] === "going",
+        )
+      : [];
+  if (requestedEventId && !requested)
+    return (
+      <div className="panel">
+        <h2>Raid night unavailable</h2>
+        <p>This signup link no longer matches a scheduled raid.</p>
+        <button className="btn secondary" onClick={() => goToEvent("")}>
+          View raid schedule
+        </button>
+      </div>
+    );
   return (
     <div className="raid-planner">
       <div className="toolbar">
@@ -703,7 +732,7 @@ export function RaidPlanner({
               onClick={() => {
                 selectTeam(t.id);
                 setPublicTeamId(t.id);
-                setSelectedEvent("");
+                goToEvent("");
               }}
             >
               {t.name}
@@ -746,7 +775,7 @@ export function RaidPlanner({
             <Dropdown
               label="Raid night"
               value={event.id}
-              onChange={setSelectedEvent}
+              onChange={goToEvent}
               options={events.map((e) => ({
                 value: e.id,
                 label: e.title,
@@ -764,12 +793,14 @@ export function RaidPlanner({
           <div className="button-row">
             {event && (
               <>
-                <button
-                  className="btn text"
-                  onClick={() => open({ type: "signup", event })}
-                >
-                  Record RSVP
-                </button>
+                {Date.parse(event.end) > Date.now() && (
+                  <button
+                    className="btn text"
+                    onClick={() => open({ type: "signup", event })}
+                  >
+                    Record RSVP
+                  </button>
+                )}
                 <button
                   className="btn text"
                   onClick={() => open({ type: "event", event, team: fullTeam })}
@@ -827,6 +858,21 @@ export function RaidPlanner({
           </button>
         </div>
       )}
+      {event &&
+        !demo &&
+        access.status === "active" &&
+        Date.parse(event.end) > Date.now() && (
+          <DiscordRaidSignup
+            key={event.id}
+            eventId={event.id}
+            lead={
+              access.admin ||
+              (access.role === "officer" &&
+                hasSection(access, "attendance") &&
+                hasTeam(access, event.teamId))
+            }
+          />
+        )}
       {event && (
         <Availability
           state={state}
@@ -866,6 +912,48 @@ export function RaidPlanner({
             </p>
           </div>
         </div>
+      )}
+      {event && guests.length > 0 && (
+        <section className="panel" aria-label="Confirmed guests">
+          <div className="panel-title">
+            <h3>
+              Confirmed guests <span className="badge">{guests.length}</span>
+            </h3>
+          </div>
+          <p className="muted">
+            These raiders signed up from outside {team?.name}. An admin can
+            change a guest’s standing team before placing them in this lineup.
+          </p>
+          <div className="roster-picker">
+            {guests.map((character) => {
+              const build = raidNightCharacter(character, event);
+              return (
+                <div key={character.id}>
+                  <Player
+                    character={build}
+                    detail={[
+                      build.spec,
+                      label(build.role),
+                      character.publicTeamName || "No standing team",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  />
+                  {access.admin && fullTeam && (
+                    <button
+                      className="btn secondary"
+                      onClick={() =>
+                        open({ type: "assign", character, team: fullTeam })
+                      }
+                    >
+                      Assign to team…
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
       {rosterOpen && fullTeam && (
         <Modal

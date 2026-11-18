@@ -57,6 +57,21 @@ const id = z
   .string()
   .regex(/^(?!__proto__$|constructor$|prototype$)[a-zA-Z0-9_-]{1,100}$/);
 const github = z.string().regex(/^[a-zA-Z0-9-]{1,39}$/);
+export const BuildSchema = z
+  .object({
+    spec: text.min(1),
+    role: z.enum(["tank", "healer", "melee", "ranged"]),
+  })
+  .strict();
+export type RaidBuild = z.infer<typeof BuildSchema>;
+const alternateBuilds = z
+  .array(
+    BuildSchema.extend({
+      buffs: z.array(id).max(40).optional(),
+    }),
+  )
+  .max(11)
+  .optional();
 export const GearSchema = z
   .object({
     slot: z.string(),
@@ -105,6 +120,7 @@ export const CharacterSchema = z
     level: z.number().int().min(1).max(100),
     role: z.enum(ROLES),
     spec: text,
+    alternateBuilds,
     ownerGithub: github.optional(),
     buffs: z.array(id).max(40).optional(),
     ownerBattleNet: id.optional(),
@@ -139,6 +155,7 @@ export const EventSchema = z
     timeZone: text,
     notes: z.string().max(2000),
     signups: z.record(z.string(), z.enum(["going", "tentative", "absent"])),
+    signupBuilds: z.record(id, BuildSchema).optional(),
     lineup: z.record(id, z.number().int().min(1).max(8)).optional(),
   })
   .strict();
@@ -249,7 +266,12 @@ export const ActionSchema = z.discriminatedUnion("type", [
       characterId: id,
       raw: z.string().min(1).max(100000),
       profile: z
-        .object({ role: z.enum(ROLES), spec: text, buffs: z.array(id).max(40) })
+        .object({
+          role: z.enum(ROLES),
+          spec: text,
+          buffs: z.array(id).max(40),
+          alternateBuilds,
+        })
         .strict()
         .optional(),
     })
@@ -260,6 +282,7 @@ export const ActionSchema = z.discriminatedUnion("type", [
       characterId: id,
       role: z.enum(ROLES),
       spec: text,
+      alternateBuilds,
       notes: z.string().max(2000),
       buffs: z.array(id).max(40).optional(),
     })
@@ -305,6 +328,7 @@ export const ActionSchema = z.discriminatedUnion("type", [
       eventId: id,
       characterId: id,
       status: z.enum(["going", "tentative", "absent"]),
+      build: BuildSchema.optional(),
     })
     .strict(),
   z.object({ type: z.literal("supply.save"), supply: SupplySchema }).strict(),
