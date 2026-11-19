@@ -1,0 +1,261 @@
+.community-phone-label {
+  display: none;
+}
+/* The desktop messenger is a non-modal dialog in its original fixed position. */
+#guild-messenger {
+  margin: 0;
+  top: auto;
+  left: auto;
+  padding: 0;
+  max-height: none;
+  max-width: none;
+}
+#guild-messenger:not([open]) {
+  display: none;
+}
+
+@media (max-width: 700px) {
+  .community-phone-label {
+    display: inline;
+  }
+  .community-wide-label {
+    display: none;
+  }
+
+  .guild-hub .hub-tabs {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 4px;
+    margin-bottom: 12px;
+    padding: 4px;
+  }
+  .guild-hub .hub-tabs button {
+    flex-direction: column;
+    gap: 4px;
+    min-height: 52px;
+    padding: 5px 1px;
+    font-size: 13px;
+  }
+  .guild-hub .hub-tabs:has(> button:nth-child(3)) {
+    grid-template-columns: minmax(0, 1.25fr) repeat(2, minmax(0, 1fr));
+  }
+  .guild-hub .hub-connection-strip {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 8px;
+    padding-block: 2px;
+    margin-bottom: 16px;
+  }
+  .guild-hub .hub-connection-strip > span:nth-child(2),
+  .guild-hub .discord-link-card > div,
+  .guild-hub .hub-poll header > div,
+  .guild-hub .material-card .panel-title h3,
+  .guild-hub .material-layout > section {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .guild-hub .section-heading {
+    margin-bottom: 14px;
+    gap: 10px;
+  }
+  .guild-hub .discord-link-card {
+    display: block;
+  }
+  .guild-hub .discord-link-card > svg {
+    float: left;
+    width: 22px;
+    height: 24px;
+    margin-right: 8px;
+  }
+  .guild-hub .discord-link-card h2 {
+    font-size: 24px;
+    line-height: 1.15;
+  }
+  .guild-hub .discord-opt-in,
+  .guild-hub .request-history summary,
+  .guild-hub .hub-discussion summary,
+  .guild-hub .material-card .item-trigger {
+    min-height: 44px;
+    align-content: center;
+  }
+  .guild-hub .material-card .panel-title {
+    flex-wrap: wrap;
+  }
+  .guild-hub .material-filters button {
+    min-height: 44px;
+    font-size: 13px;
+  }
+  .guild-hub .request-history {
+    padding-top: 0;
+    margin-top: 10px;
+  }
+  .guild-hub .request-history summary {
+    color: #e4c3d2;
+  }
+  .guild-hub .hub-poll .poll-option {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px 12px;
+    padding-block: 3px 7px;
+    min-height: 48px;
+  }
+  .guild-hub .poll-option > label,
+  .guild-hub .poll-option > span {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .guild-hub .poll-option > label {
+    min-height: 44px;
+  }
+  .guild-hub .poll-option > strong {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .guild-hub .poll-option > .poll-bar-track {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    height: 6px;
+  }
+  .modal .recipient-picker {
+    min-width: 0;
+  }
+  .modal .recipient-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .modal .recipient-option {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .access-page .member-directory-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr) 16px;
+    grid-template-areas: "person person edit" "access status status";
+    gap: 6px 10px;
+  }
+  .access-page .member-directory-person strong {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .member-editor-modal .member-heading {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 10px;
+    row-gap: 5px;
+  }
+  .member-editor-modal .member-heading > .member-emblem {
+    grid-row: 1 / 3;
+  }
+  .member-editor-modal .member-heading > .badge {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .member-editor-modal .access-fieldset {
+    min-width: 0;
+  }
+  .member-editor .segmented-control .segment > span {
+    min-height: 42px;
+    padding-inline: 5px;
+  }
+  .member-editor .member-save-row {
+    gap: 6px;
+  }
+  .member-editor .member-editor-actions {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .member-editor .member-editor-actions .btn {
+    padding-inline: 10px;
+    min-width: 0;
+  }
+
+  body:has(#guild-messenger[open]) {
+    overflow: hidden;
+  }
+  #guild-messenger[open] {
+    inset: var(--chat-visible-top, 0px) 0 auto;
+    width: 100%;
+    height: var(--chat-visible-height, 100dvh);
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+      env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  #guild-messenger .messenger-title,
+  #guild-messenger .messenger-tabs,
+  #guild-messenger .chat-compose {
+    flex: none;
+  }
+  #guild-messenger .messenger-title {
+    min-height: 52px;
+    padding-block: 4px;
+  }
+  #guild-messenger .messenger-title .icon-btn,
+  #guild-messenger .messenger-tabs button,
+  #guild-messenger .chat-filters button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  #guild-messenger .messenger-tabs {
+    padding: 6px 10px;
+  }
+  #guild-messenger .chat-filters {
+    padding: 2px 10px;
+  }
+  #guild-messenger .chat-compose {
+    display: grid;
+    align-items: center;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 3px 8px;
+  }
+  #guild-messenger .chat-compose-actions {
+    display: contents;
+  }
+  #guild-messenger .chat-compose textarea {
+    grid-row: 2;
+    grid-column: 1;
+    min-height: 44px;
+    height: 3.5em;
+  }
+  #guild-messenger .chat-compose-actions .btn {
+    grid-row: 2;
+    grid-column: 2;
+    min-height: 44px;
+  }
+  #guild-messenger .chat-compose-actions small,
+  #guild-messenger .chat-compose .chat-notifying,
+  #guild-messenger .chat-compose .chat-delivery {
+    grid-column: 1 / -1;
+  }
+  #guild-messenger .chat-compose-actions small {
+    grid-row: 3;
+  }
+  #guild-messenger .chat-footnote {
+    display: none;
+  }
+  #guild-messenger[data-short] .chat-conversation-heading {
+    padding-block: 5px;
+  }
+  #guild-messenger[data-short] .chat-conversation-heading small {
+    display: none;
+  }
+  #guild-messenger[data-short] .chat-mention-picker [role="listbox"] {
+    max-height: 100px;
+  }
+  #guild-messenger[data-short] .chat-compose textarea {
+    height: 44px;
+  }
+  #guild-messenger[data-short] .chat-empty {
+    min-height: 0;
+    padding: 4px 8px;
+    gap: 3px;
+  }
+  #guild-messenger[data-short] .chat-empty strong {
+    font-size: 17px;
+  }
+  #guild-messenger[data-short] .chat-empty > svg {
+    display: none;
+  }
+}

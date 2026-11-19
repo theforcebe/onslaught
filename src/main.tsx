@@ -4,6 +4,7 @@ import App from "./App";
 import { finishBattleNetRedirect } from "./lib/battlenet";
 import "./styles.css";
 import "./retro.css";
+import "./mobile-shell.css";
 class Boundary extends React.Component<
   { children: React.ReactNode },
   { error: boolean }

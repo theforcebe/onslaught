@@ -26,6 +26,7 @@ export function DiscordRaidSignup({
   const [retry, setRetry] = useState(0);
   const [listed, setListed] = useState<string[]>([]);
   const [changingName, setChangingName] = useState(false);
+  const ownSignupIds = ownSignups.map((c) => c.id).join("/");
   useEffect(() => {
     let current = true;
     setReady(false);
@@ -45,7 +46,7 @@ export function DiscordRaidSignup({
     return () => {
       current = false;
     };
-  }, [eventId, retry]);
+  }, [eventId, retry, ownSignupIds]);
   useEffect(() => {
     const onReturn = () => {
       if (document.visibilityState === "visible") setRetry((n) => n + 1);
@@ -53,7 +54,7 @@ export function DiscordRaidSignup({
     document.addEventListener("visibilitychange", onReturn);
     return () => document.removeEventListener("visibilitychange", onReturn);
   }, []);
-  if (!lead && !receipt) return null;
+  if (!lead && !receipt && !error) return null;
   return (
     <section className="discord-raid-signup" aria-label="Discord raid signup">
       <div className="button-row">
@@ -87,6 +88,7 @@ export function DiscordRaidSignup({
               try {
                 const result = await discordCall("raid-signup", { eventId });
                 setReceipt(result.signup);
+                setRetry((n) => n + 1);
               } catch (e) {
                 setError(
                   e instanceof Error
@@ -106,7 +108,7 @@ export function DiscordRaidSignup({
                 : "Post signup to Discord"}
           </button>
         )}
-        {lead && error && !ready && (
+        {error && !ready && (
           <button className="btn text" onClick={() => setRetry((v) => v + 1)}>
             Retry
           </button>

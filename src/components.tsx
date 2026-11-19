@@ -230,7 +230,9 @@ export function GearItem({ gear }: { gear: Gear }) {
             {gear.modifiers.bonus_id && " · Variant"}
           </small>
         </span>
-        <span className="item-level">{gear.level || "—"}</span>
+        <span className="item-level" title="Item level">
+          {gear.level ? `iLvl ${gear.level}` : "—"}
+        </span>
       </ItemTooltip>
     </div>
   );

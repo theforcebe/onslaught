@@ -1,4 +1,4 @@
-import { ROLES, type Character, type RaidEvent } from "../src/lib/model";
+import { ROLES, label, type Character, type RaidEvent } from "../src/lib/model";
 import { normalizeSpec, signupBuildKind } from "../src/lib/raid";
 
 /** Escape a single line of guild-authored text before placing it in Discord Markdown. */
@@ -45,28 +45,73 @@ function namedSignup(c: Character, event: RaidEvent, showRole: boolean) {
   const spec = normalizeSpec(c.class, selected?.spec ?? c.spec);
   const name =
     discordLine(c.name.replace(/#\d{3,}\b/gu, ""), 48) || "Unnamed character";
-  const details = [];
+  const compact = "**" + name + "** · " + label(c.class);
+  const details = [compact];
   if (spec && role !== "unassigned") {
     details.push(spec, signupBuildKind(c, { spec, role }));
   }
   if (showRole && role !== "unassigned") details.push(role);
-  return ["**" + name + "**", ...details].join(" · ");
+  return { compact, full: details.join(" · ") };
 }
 
-// A message can have 6,000 embed characters. Seven fields at 760 leave room
-// for names, headings and the summary, including when every group overflows.
-function fieldValue(firstLine: string, names: string[]) {
-  let value = firstLine;
-  for (const [index, name] of names.entries()) {
-    const separator = value ? "\n" : "";
-    const remaining = names.length - index - 1;
-    const suffix = remaining ? "\n+" + remaining + " more" : "";
-    if (value.length + separator.length + name.length + suffix.length > 760) {
-      return value + "\n+" + (remaining + 1) + " more";
+type SignupLine = ReturnType<typeof namedSignup>;
+type Group = {
+  heading: string;
+  count: number;
+  bar: string;
+  names: SignupLine[];
+};
+type ChartField = { name: string; value: string; inline: true };
+
+function renderFields(
+  groups: Group[],
+  detail: keyof SignupLine,
+  maxPerGroup: number,
+) {
+  const fields: ChartField[] = [];
+  for (const group of groups) {
+    let name = group.heading + " · " + group.count;
+    let value = group.bar;
+    const shown = group.names.slice(0, maxPerGroup);
+    const lines = shown.map((entry) => entry[detail]);
+    const omitted = group.names.length - shown.length;
+    if (omitted) lines.push("+" + omitted + " more");
+    for (const line of lines) {
+      if (value && value.length + 1 + line.length > 1024) {
+        fields.push({ name, value, inline: true });
+        name = group.heading + " (continued)";
+        value = "";
+      }
+      value += (value ? "\n" : "") + line;
     }
-    value += separator + name;
+    fields.push({ name, value, inline: true });
   }
-  return value;
+  return fields;
+}
+
+function fitFields(groups: Group[], availableLength: number) {
+  function fits(fields: ChartField[]) {
+    return (
+      fields.length <= 25 &&
+      fields.reduce(
+        (sum, field) => sum + field.name.length + field.value.length,
+        0,
+      ) <= availableLength
+    );
+  }
+  for (const detail of ["full", "compact"] as const) {
+    const fields = renderFields(groups, detail, Infinity);
+    if (fits(fields)) return fields;
+  }
+  // Share the remaining space across roles when even the name/class list is too long.
+  let low = 0;
+  let high = Math.max(...groups.map((group) => group.names.length));
+  while (low < high) {
+    const cap = Math.ceil((low + high) / 2);
+    if (fits(renderFields(groups, "compact", cap))) low = cap;
+    else high = cap - 1;
+  }
+  return renderFields(groups, "compact", low);
 }
 
 export function raidSignupEmbed(
@@ -75,7 +120,7 @@ export function raidSignupEmbed(
   visibleCharacterIds?: ReadonlySet<string>,
 ) {
   const people = new Map(characters.map((c) => [c.id, c]));
-  const buckets = new Map<Bucket, { count: number; names: string[] }>();
+  const buckets = new Map<Bucket, { count: number; names: SignupLine[] }>();
   let confirmed = 0;
   for (const [id, status] of Object.entries(event.signups)) {
     const c = people.get(id);
@@ -90,11 +135,14 @@ export function raidSignupEmbed(
       bucket.names.push(namedSignup(c, event, status !== "going"));
     buckets.set(key, bucket);
   }
-  const fields = [];
+  const groups: Group[] = [];
   for (const key of [...ROLES, "tentative", "absent"] as const) {
     const item = buckets.get(key);
     const count = item?.count ?? 0;
-    const names = item?.names.sort() ?? [];
+    const names =
+      item?.names.sort((a, b) =>
+        a.full < b.full ? -1 : a.full > b.full ? 1 : 0,
+      ) ?? [];
     const statusOnly = key === "tentative" || key === "absent";
     if ((key === "unassigned" && !count) || (statusOnly && !names.length))
       continue;
@@ -102,24 +150,26 @@ export function raidSignupEmbed(
     const bar = statusOnly
       ? ""
       : "`" + "█".repeat(filled) + "░".repeat(8 - filled) + "`";
-    fields.push({
-      name: headings[key] + " · " + count,
-      value: fieldValue(bar, names),
-      inline: true,
-    });
+    groups.push({ heading: headings[key], count, bar, names });
   }
+  const title = "Raid composition";
+  const footer = { text: "Bars show each role’s share of confirmed signups." };
+  const description =
+    "**" +
+    confirmed +
+    " going** · " +
+    (buckets.get("tentative")?.count ?? 0) +
+    " maybe · " +
+    (buckets.get("absent")?.count ?? 0) +
+    " unavailable";
   return {
-    title: "Raid composition",
+    title,
     color: 0xa73142,
-    description:
-      "**" +
-      confirmed +
-      " going** · " +
-      (buckets.get("tentative")?.count ?? 0) +
-      " maybe · " +
-      (buckets.get("absent")?.count ?? 0) +
-      " unavailable",
-    fields,
-    footer: { text: "Bars show each role’s share of confirmed signups." },
+    description,
+    fields: fitFields(
+      groups,
+      6000 - title.length - description.length - footer.text.length,
+    ),
+    footer,
   };
 }

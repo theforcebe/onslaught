@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   MessageCircle,
   X,
@@ -76,6 +76,7 @@ export function GuildChat({
     [loadingOlder, setLoadingOlder] = useState(false),
     [blocked, setBlocked] = useState(false);
   const log = useRef<HTMLDivElement>(null),
+    messenger = useRef<HTMLDialogElement>(null),
     launcher = useRef<HTMLButtonElement>(null),
     field = useRef<HTMLTextAreaElement>(null);
   const bottom = useRef(true),
@@ -103,6 +104,39 @@ export function GuildChat({
     visible: open && !directory && !preferences && bottom.current,
   };
   refreshRef.current = refresh;
+  useLayoutEffect(() => {
+    const dialog = messenger.current;
+    if (!open || !dialog) return;
+    const phone = window.matchMedia("(max-width: 700px)");
+    const viewport = window.visualViewport;
+    const measure = () => {
+      if (!phone.matches) return;
+      // Mobile browsers can resize only the visual viewport for the keyboard.
+      const height = viewport?.height ?? window.innerHeight;
+      dialog.style.setProperty("--chat-visible-height", height + "px");
+      dialog.style.setProperty(
+        "--chat-visible-top",
+        (viewport?.offsetTop ?? 0) + "px",
+      );
+      dialog.toggleAttribute("data-short", height < 500);
+    };
+    const present = () => {
+      if (dialog.open) dialog.close();
+      if (phone.matches) dialog.showModal();
+      else dialog.show();
+      measure();
+    };
+    present();
+    phone.addEventListener("change", present);
+    viewport?.addEventListener("resize", measure);
+    viewport?.addEventListener("scroll", measure);
+    return () => {
+      phone.removeEventListener("change", present);
+      viewport?.removeEventListener("resize", measure);
+      viewport?.removeEventListener("scroll", measure);
+      dialog.close();
+    };
+  }, [open]);
   useEffect(() => {
     mounted.current = true;
     bell.current = chatBell();
@@ -350,7 +384,14 @@ export function GuildChat({
     };
   }, [messages, open, directory, preferences, scope]);
   useEffect(() => {
-    if (open && !directory && !sending && !mentionsOnly) field.current?.focus();
+    if (
+      open &&
+      !directory &&
+      !sending &&
+      !mentionsOnly &&
+      !window.matchMedia("(max-width: 700px)").matches
+    )
+      field.current?.focus();
   }, [open, directory, peer, sending, mentionsOnly]);
   const choose = (id: string, showMentions = false) => {
     if (`${id}:${showMentions}` !== scope) loadedScope.current = "";
@@ -505,31 +546,32 @@ export function GuildChat({
       field.current?.setSelectionRange(end + 1, end + 1);
     });
   };
+  const alert = notice && !blocked && (
+    <aside className="chat-notification" role="status" aria-live="polite">
+      <Bell size={20} />
+      <button
+        onClick={() => {
+          choose(notice.peer, notice.kind === "mention");
+          setOpen(true);
+        }}
+      >
+        <strong>
+          {notice.kind === "dm" ? "Private message" : "You were mentioned"}
+        </strong>
+        <span>{notice.senderName} · Open conversation</span>
+      </button>
+      <button
+        className="icon-btn"
+        aria-label="Dismiss chat notification"
+        onClick={() => setNotice(null)}
+      >
+        <X size={16} />
+      </button>
+    </aside>
+  );
   return (
     <>
-      {notice && !blocked && (
-        <aside className="chat-notification" role="status" aria-live="polite">
-          <Bell size={20} />
-          <button
-            onClick={() => {
-              choose(notice.peer, notice.kind === "mention");
-              setOpen(true);
-            }}
-          >
-            <strong>
-              {notice.kind === "dm" ? "Private message" : "You were mentioned"}
-            </strong>
-            <span>{notice.senderName} · Open conversation</span>
-          </button>
-          <button
-            className="icon-btn"
-            aria-label="Dismiss chat notification"
-            onClick={() => setNotice(null)}
-          >
-            <X size={16} />
-          </button>
-        </aside>
-      )}
+      {!open && alert}
       <button
         ref={launcher}
         className={`chat-launcher ${open ? "is-open" : ""}`}
@@ -561,13 +603,18 @@ export function GuildChat({
         )}
       </button>
       {open && (
-        <section
+        <dialog
+          ref={messenger}
           id="guild-messenger"
           className="guild-messenger"
-          role="dialog"
           aria-label="Guild messenger"
+          onCancel={(e) => {
+            e.preventDefault();
+            close();
+          }}
           onKeyDown={(e) => {
             if (e.key === "Escape") {
+              e.preventDefault();
               e.stopPropagation();
               close();
             }
@@ -575,7 +622,10 @@ export function GuildChat({
         >
           <header className="messenger-title">
             <MessageCircle size={17} />
-            <strong>Ønslaught messenger</strong>
+            <strong>
+              <span className="community-wide-label">Ønslaught messenger</span>
+              <span className="community-phone-label">Guild chat</span>
+            </strong>
             <button
               className="icon-btn"
               aria-label="Chat notification settings"
@@ -592,6 +642,7 @@ export function GuildChat({
               <X size={17} />
             </button>
           </header>
+          {alert}
           {error && (
             <p className="chat-error" role="alert">
               {error}
@@ -688,7 +739,9 @@ export function GuildChat({
                     <label className="chat-search">
                       <Search size={16} />
                       <input
-                        autoFocus
+                        autoFocus={
+                          !window.matchMedia("(max-width: 700px)").matches
+                        }
                         placeholder="Find a guild member…"
                         aria-label="Find a guild member"
                         value={query}
@@ -1058,9 +1111,13 @@ export function GuildChat({
                             will be notified
                           </p>
                         )}
-                        <div>
+                        <div className="chat-compose-actions">
                           <small>
-                            {draft.length}/2000 · Shift + Enter for a new line
+                            {draft.length}/2000
+                            <span className="community-wide-label">
+                              {" "}
+                              · Shift + Enter for a new line
+                            </span>
                           </small>
                           <button
                             className="btn primary"
@@ -1084,7 +1141,7 @@ export function GuildChat({
               </footer>
             </>
           )}
-        </section>
+        </dialog>
       )}
     </>
   );

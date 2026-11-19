@@ -23,7 +23,8 @@ import {
   type Attendance,
 } from "./discord-raids";
 import type { Env } from "./worker";
-import { recordDiscordChartSignup } from "./raid-chart-sync";
+import { queueRaidChart } from "./raid-chart-sync";
+import { bootstrapAdminMemberIds } from "./battlenet-identity";
 
 type Deps = {
   refreshChart?: (eventId: string) => void;
@@ -69,7 +70,6 @@ type Menu = {
   status: Attendance;
   choices: Choice[];
   originalMessage: string;
-  showOnChart?: boolean;
   page?: number;
   pageCount?: number;
 };
@@ -145,11 +145,18 @@ async function linkedMember(
     .bind(click.member.user.id)
     .first<{ member_id: string }>();
   const member = document.members.find((m) => m.id === link?.member_id);
-  if (!member || member.status !== "active")
+  const admin =
+    !!link && (await bootstrapAdminMemberIds(env)).includes(link.member_id);
+  if (!link || (!admin && member?.status !== "active"))
     throw new ChangeError(
       "Link your Discord account in Ønslaught under Guild coordination → Discord connection. Approved guild membership is required.",
     );
-  return { provider: "battlenet", id: member.id, label: member.label };
+  return {
+    provider: "battlenet",
+    id: link.member_id,
+    label: member?.label ?? "Guild admin",
+    admin,
+  };
 }
 async function loadMenu(env: Env, click: Click, id: string) {
   const row = await env.DB.prepare(
@@ -192,7 +199,7 @@ async function makeMenu(env: Env, menu: Menu, page = 0): Promise<Reply> {
       (menu.choices.some((c) => c.kind === "Alternate")
         ? " Pick **Alternate** to play that role for this raid."
         : "") +
-      " Your character name and response will appear on the signup chart in this channel." +
+      " Your character and class appear in this channel unless you hide your name in the raid planner." +
       (pageCount > 1 ? `\nPage ${page + 1} of ${pageCount}` : ""),
     components: [
       {
@@ -306,9 +313,6 @@ export async function processRaidClick(
     throw new ChangeError("This raid signup is no longer available.");
   const status =
     menu?.status || (click.data.custom_id.split(":")[2] as Attendance);
-  const showOnChart = menu
-    ? menu.showOnChart === true
-    : click.data.custom_id.startsWith("raid:chart:");
   if (!Object.hasOwn(attendanceLabels, status))
     throw new ChangeError("Choose a valid attendance response.");
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -367,7 +371,6 @@ export async function processRaidClick(
         eventId: event.id,
         status,
         originalMessage: click.message.id,
-        showOnChart: true,
       });
     const action: RaidAction = {
       type: "event.signup",
@@ -396,20 +399,7 @@ export async function processRaidClick(
     }
     let queued = true;
     try {
-      await recordDiscordChartSignup(
-        env,
-        event.id,
-        showOnChart
-          ? {
-              guildId: click.guild_id,
-              channelId: click.channel_id,
-              messageId: menu?.originalMessage || click.message.id,
-              memberId: actor.id,
-              characterId: choice.characterId,
-            }
-          : undefined,
-        click.id,
-      );
+      await queueRaidChart(env, event.id);
       d.refreshChart?.(event.id);
     } catch {
       // The repository write is already committed. Retrying the RSVP safely

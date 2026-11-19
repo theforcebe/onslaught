@@ -2,10 +2,13 @@ import { calendarFile, download } from "./lib/calendar";
 import { Availability } from "./Availability";
 import { DiscordRaidSignup } from "./DiscordRaidSignup";
 import type { Identity } from "./lib/model";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import "./raid-mobile.css";
 import type { PointerEvent } from "react";
 import {
+  CalendarPlus,
   Check,
+  ChevronDown,
   CircleDashed,
   GripVertical,
   LockKeyhole,
@@ -53,6 +56,8 @@ function BuffMap({
   onReveal: (id: string) => void;
 }) {
   const [utility, setUtility] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const detailId = useId();
   const slotted = activeLineup(confirmed, event, size);
   const buffs = RAID_BUFFS.filter((b) => utility || b.kind === "buff");
   const available = buffs.filter(
@@ -78,142 +83,156 @@ function BuffMap({
           <small>covered in active groups</small>
         </div>
       </div>
-      <div className="buff-map-toolbar">
-        <span>
-          <i className="coverage-dot available" /> In lineup{" "}
-          <i className="coverage-dot bench" /> Not covered · bench{" "}
-          <i className="coverage-dot" /> Missing
-        </span>
-        <label>
-          <input
-            type="checkbox"
-            checked={utility}
-            onChange={(e) => setUtility(e.target.checked)}
-          />{" "}
-          Include utility & debuffs
-        </label>
-      </div>
-      <div className="buff-matrix">
-        {buffs.map((b) => {
-          const present = providersFor(b.id, slotted),
-            waiting = providersFor(b.id, confirmed).filter(
-              (c) => !slotted.some((p) => p.id === c.id),
-            );
-          const status = present.length
-            ? "available"
-            : waiting.length
-              ? "bench"
-              : "missing";
-          return (
-            <button
-              type="button"
-              key={b.id}
-              aria-pressed={selected === b.id}
-              className={`buff-cell ${status} ${selected === b.id ? "selected" : ""}`}
-              onClick={() => onSelect(selected === b.id ? "" : b.id)}
-            >
-              <ClassIcon cls={b.cls} size={27} />
-              <span>
-                <strong>{b.benefit}</strong>
-                <small>{b.name}</small>
-              </span>
-              <span
-                className="buff-count"
-                aria-label={
-                  present.length
-                    ? `${present.length} providers in lineup`
-                    : waiting.length
-                      ? `${waiting.length} providers on bench`
-                      : "No declared provider"
-                }
-              >
-                {present.length ? (
-                  <>
-                    <Check size={13} />
-                    {present.length}
-                  </>
-                ) : waiting.length ? (
-                  <>
-                    <Users size={13} />
-                    {waiting.length}
-                  </>
-                ) : (
-                  <CircleDashed size={17} />
-                )}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      {buff ? (
-        <div
-          className="buff-detail"
-          role="region"
-          aria-label={`${buff.name} providers`}
-        >
-          <div>
-            <h4>{buff.name}</h4>
-            <p>{buff.note}</p>
-          </div>
-          <div className="provider-paths">
-            {providers.length ? (
-              providers.map((c) => (
-                <div key={c.id} className="provider-path">
-                  <button
-                    className="provider-name"
-                    style={{ color: CLASS_COLORS[c.class] }}
-                    onClick={() => onReveal(c.id)}
-                    aria-label={`Find ${c.name} in the lineup`}
-                  >
-                    {c.name}
-                  </button>
-                  <span className="path-line" />
-                  <strong>
-                    {slotted.some((p) => p.id === c.id)
-                      ? `Group ${event.lineup?.[c.id]}`
-                      : "Not covered · on bench"}
-                  </strong>
-                </div>
-              ))
-            ) : (
-              <p>
-                No confirmed raider has declared this ability. Update their raid
-                profile if they can provide it.
-              </p>
-            )}
-          </div>
-          <button
-            className="icon-btn"
-            aria-label="Clear buff highlight"
-            onClick={() => onSelect("")}
-          >
-            <X size={17} />
-          </button>
+      <button
+        className="btn text mobile-coverage-toggle"
+        aria-expanded={expanded}
+        aria-controls={detailId}
+        onClick={() => setExpanded(!expanded)}
+      >
+        {expanded ? "Hide buff coverage" : "Show buff coverage"}{" "}
+        <ChevronDown size={16} />
+      </button>
+      <div
+        id={detailId}
+        className={expanded ? "buff-map-body expanded" : "buff-map-body"}
+      >
+        <div className="buff-map-toolbar">
+          <span>
+            <i className="coverage-dot available" /> In lineup{" "}
+            <i className="coverage-dot bench" /> Not covered · bench{" "}
+            <i className="coverage-dot" /> Missing
+          </span>
+          <label>
+            <input
+              type="checkbox"
+              checked={utility}
+              onChange={(e) => setUtility(e.target.checked)}
+            />{" "}
+            Include utility & debuffs
+          </label>
         </div>
-      ) : (
-        <p className="buff-map-hint">
-          Select an ability to trace its providers into the groups below.
-        </p>
-      )}
-      <details className="coverage-notes">
-        <summary>How coverage is counted</summary>
-        <p>
-          This is planned availability, not live aura uptime or a stacking
-          score. A class or specialization alone never marks a buff available.
-          Talents, learned spells, forms, totem range and recipient assignments
-          still matter. Windfury and Flametongue Totem benefits are
-          alternatives; Paladin blessings need recipient coordination. The
-          catalog tracks core buffs and selected utility, not every situational
-          ability.
-        </p>
-        <a
-          href="https://us.forums.blizzard.com/en/wow/t/wow-forever-beta-development-notes-%E2%80%93-updated-november-2/2360696"
-          target="_blank"
-          rel="noreferrer"
-        >
-          Forever class rules · reviewed November 11, 2026
-        </a>
-      </details>
+        <div className="buff-matrix">
+          {buffs.map((b) => {
+            const present = providersFor(b.id, slotted),
+              waiting = providersFor(b.id, confirmed).filter(
+                (c) => !slotted.some((p) => p.id === c.id),
+              );
+            const status = present.length
+              ? "available"
+              : waiting.length
+                ? "bench"
+                : "missing";
+            return (
+              <button
+                type="button"
+                key={b.id}
+                aria-pressed={selected === b.id}
+                className={`buff-cell ${status} ${selected === b.id ? "selected" : ""}`}
+                onClick={() => onSelect(selected === b.id ? "" : b.id)}
+              >
+                <ClassIcon cls={b.cls} size={27} />
+                <span>
+                  <strong>{b.benefit}</strong>
+                  <small>{b.name}</small>
+                </span>
+                <span
+                  className="buff-count"
+                  aria-label={
+                    present.length
+                      ? `${present.length} providers in lineup`
+                      : waiting.length
+                        ? `${waiting.length} providers on bench`
+                        : "No declared provider"
+                  }
+                >
+                  {present.length ? (
+                    <>
+                      <Check size={13} />
+                      {present.length}
+                    </>
+                  ) : waiting.length ? (
+                    <>
+                      <Users size={13} />
+                      {waiting.length}
+                    </>
+                  ) : (
+                    <CircleDashed size={17} />
+                  )}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        {buff ? (
+          <div
+            className="buff-detail"
+            role="region"
+            aria-label={`${buff.name} providers`}
+          >
+            <div>
+              <h4>{buff.name}</h4>
+              <p>{buff.note}</p>
+            </div>
+            <div className="provider-paths">
+              {providers.length ? (
+                providers.map((c) => (
+                  <div key={c.id} className="provider-path">
+                    <button
+                      className="provider-name"
+                      style={{ color: CLASS_COLORS[c.class] }}
+                      onClick={() => onReveal(c.id)}
+                      aria-label={`Find ${c.name} in the lineup`}
+                    >
+                      {c.name}
+                    </button>
+                    <span className="path-line" />
+                    <strong>
+                      {slotted.some((p) => p.id === c.id)
+                        ? `Group ${event.lineup?.[c.id]}`
+                        : "Not covered · on bench"}
+                    </strong>
+                  </div>
+                ))
+              ) : (
+                <p>
+                  No confirmed raider has declared this ability. Update their
+                  raid profile if they can provide it.
+                </p>
+              )}
+            </div>
+            <button
+              className="icon-btn"
+              aria-label="Clear buff highlight"
+              onClick={() => onSelect("")}
+            >
+              <X size={17} />
+            </button>
+          </div>
+        ) : (
+          <p className="buff-map-hint">
+            Select an ability to trace its providers into the groups below.
+          </p>
+        )}
+        <details className="coverage-notes">
+          <summary>How coverage is counted</summary>
+          <p>
+            This is planned availability, not live aura uptime or a stacking
+            score. A class or specialization alone never marks a buff available.
+            Talents, learned spells, forms, totem range and recipient
+            assignments still matter. Windfury and Flametongue Totem benefits
+            are alternatives; Paladin blessings need recipient coordination. The
+            catalog tracks core buffs and selected utility, not every
+            situational ability.
+          </p>
+          <a
+            href="https://us.forums.blizzard.com/en/wow/t/wow-forever-beta-development-notes-%E2%80%93-updated-november-2/2360696"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Forever class rules · reviewed November 11, 2026
+          </a>
+        </details>
+      </div>
     </section>
   );
 }
@@ -237,6 +256,12 @@ function EventBoard({
   const [dragging, setDragging] = useState("");
   const [over, setOver] = useState<number | null | undefined>();
   const [buff, setBuff] = useState("");
+  const [viewGroup, setViewGroup] = useState(1);
+  const groups = Array.from(
+    { length: Math.ceil(team.size / 5) },
+    (_, i) => i + 1,
+  );
+  const currentGroup = Math.min(viewGroup, groups.length);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const pointer = useRef<{
@@ -339,12 +364,15 @@ function EventBoard({
       suppressClick.current = true;
       e.preventDefault();
       const target = destination(e.clientX, e.clientY);
-      if (target)
+      if (target) {
+        const group = Number(target.dataset.raidDrop) || null;
+        if (group) setViewGroup(group);
         move(
           p.id,
-          Number(target.dataset.raidDrop) || null,
+          group,
           target.dataset.swapId,
         );
+      }
     }
     setDragging("");
     setGhost(undefined);
@@ -449,16 +477,19 @@ function EventBoard({
         selected={buff}
         onSelect={setBuff}
         onReveal={(id) => {
-          const el = document.getElementById(`raid-person-${id}`);
-          el?.scrollIntoView({
-            behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
-              .matches
-              ? "auto"
-              : "smooth",
-            block: "center",
-          });
-          el?.querySelector<HTMLButtonElement>(".raid-person-main")?.focus({
-            preventScroll: true,
+          if (lineup[id]) setViewGroup(lineup[id]);
+          requestAnimationFrame(() => {
+            const el = document.getElementById(`raid-person-${id}`);
+            el?.scrollIntoView({
+              behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
+                .matches
+                ? "auto"
+                : "smooth",
+              block: "center",
+            });
+            el?.querySelector<HTMLButtonElement>(".raid-person-main")?.focus({
+              preventScroll: true,
+            });
           });
         }}
       />
@@ -526,7 +557,17 @@ function EventBoard({
                 group, or select a raider to swap.
               </>
             ) : (
-              "Drag the grip beside a raider into a group. Drop onto a raider to swap. You can also click a raider, then choose a destination."
+              <>
+                <span className="desktop-move-copy">
+                  Drag the grip beside a raider into a group. Drop onto a raider
+                  to swap. You can also click a raider, then choose a
+                  destination.
+                </span>
+                <span className="mobile-move-copy">
+                  Tap a raider, choose a group, then tap Move here. Tap another
+                  raider to swap.
+                </span>
+              </>
             )}
           </span>
           {selectedCharacter && (
@@ -560,53 +601,74 @@ function EventBoard({
           coverage.
         </p>
       )}
+      {groups.length > 1 && (
+        <div
+          className="mobile-group-switch"
+          role="group"
+          aria-label="View raid group"
+        >
+          <span>Groups</span>
+          {groups.map((group) => (
+            <button
+              type="button"
+              key={group}
+              aria-label={`View group ${group}`}
+              aria-pressed={currentGroup === group}
+              className={over === group && dragging ? "drop-target" : ""}
+              {...zones(group)}
+              onClick={() => setViewGroup(group)}
+            >
+              {group}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="raid-group-grid" aria-busy={busy}>
-        {Array.from({ length: Math.ceil(team.size / 5) }, (_, i) => i + 1).map(
-          (group) => {
-            const people = placed.filter((c) => lineup[c.id] === group),
-              cap = Math.min(5, team.size - (group - 1) * 5);
-            return (
-              <section
-                className={`raid-group ${over === group && dragging ? "drop-target" : ""}`}
-                key={group}
-                aria-label={`Group ${group}`}
-                {...zones(group)}
-              >
-                <header>
-                  <h3>
-                    <span>{String(group).padStart(2, "0")}</span> Group {group}
-                  </h3>
-                  <small>
-                    {people.length}/{cap}
-                  </small>
-                </header>
-                {people.map(card)}
-                {people.length < cap && (
-                  <div className="raid-empty-slot">
-                    <Plus size={13} />
-                    <span>{cap - people.length} open positions</span>
-                  </div>
-                )}
-                {admin && (
-                  <button
-                    className="group-destination"
-                    disabled={
-                      !active ||
-                      busy ||
-                      people.length >= cap ||
-                      lineup[active] === group
-                    }
-                    onClick={() => move(active, group)}
-                  >
-                    {active
-                      ? `Move here · Group ${group}`
-                      : `Select a raider to place`}
-                  </button>
-                )}
-              </section>
-            );
-          },
-        )}
+        {groups.map((group) => {
+          const people = placed.filter((c) => lineup[c.id] === group),
+            cap = Math.min(5, team.size - (group - 1) * 5);
+          return (
+            <section
+              className={`raid-group ${over === group && dragging ? "drop-target" : ""}`}
+              key={group}
+              aria-label={`Group ${group}`}
+              data-mobile-current={group === currentGroup}
+              {...zones(group)}
+            >
+              <header>
+                <h3>
+                  <span>{String(group).padStart(2, "0")}</span> Group {group}
+                </h3>
+                <small>
+                  {people.length}/{cap}
+                </small>
+              </header>
+              {people.map(card)}
+              {people.length < cap && (
+                <div className="raid-empty-slot">
+                  <Plus size={13} />
+                  <span>{cap - people.length} open positions</span>
+                </div>
+              )}
+              {admin && (
+                <button
+                  className="group-destination"
+                  disabled={
+                    !active ||
+                    busy ||
+                    people.length >= cap ||
+                    lineup[active] === group
+                  }
+                  onClick={() => move(active, group)}
+                >
+                  {active
+                    ? `Move here · Group ${group}`
+                    : `Select a raider to place`}
+                </button>
+              )}
+            </section>
+          );
+        })}
       </div>
       <section
         className={`confirmed-bench panel ${over === null && dragging ? "drop-target" : ""}`}
@@ -670,6 +732,7 @@ export function RaidPlanner({
   demo?: boolean;
 }) {
   const [rosterOpen, setRosterOpen] = useState(false),
+    [toolsOpen, setToolsOpen] = useState(false),
     [search, setSearch] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -722,7 +785,7 @@ export function RaidPlanner({
       </div>
     );
   return (
-    <div className="raid-planner">
+    <div className="raid-planner" data-tools-open={toolsOpen}>
       <div className="toolbar">
         <div className="segmented">
           {teams.map((t) => (
@@ -740,7 +803,21 @@ export function RaidPlanner({
           ))}
         </div>
         {access.admin && (
-          <div className="button-row">
+          <button
+            className="btn secondary mobile-raid-tools"
+            aria-expanded={toolsOpen}
+            aria-controls={
+              fullTeam
+                ? "raid-team-actions raid-night-actions"
+                : "raid-team-actions"
+            }
+            onClick={() => setToolsOpen(!toolsOpen)}
+          >
+            Raid tools <ChevronDown size={16} />
+          </button>
+        )}
+        {access.admin && (
+          <div className="button-row raid-tools" id="raid-team-actions">
             {fullTeam && (
               <>
                 <button
@@ -790,7 +867,7 @@ export function RaidPlanner({
           )}
         </div>
         {access.admin && fullTeam && (
-          <div className="button-row">
+          <div className="button-row raid-tools" id="raid-night-actions">
             {event && (
               <>
                 {Date.parse(event.end) > Date.now() && (
@@ -846,6 +923,8 @@ export function RaidPlanner({
           </span>
           <button
             className="btn text"
+            aria-label="Add to calendar"
+            title="Add to calendar"
             onClick={() =>
               download(
                 event.title + ".ics",
@@ -854,7 +933,8 @@ export function RaidPlanner({
               )
             }
           >
-            Add to calendar
+            <CalendarPlus className="mobile-calendar-icon" size={18} />
+            <span>Add to calendar</span>
           </button>
         </div>
       )}
@@ -964,6 +1044,7 @@ export function RaidPlanner({
       {rosterOpen && fullTeam && (
         <Modal
           title={"Raiders · " + fullTeam.name}
+          className="raid-roster-dialog"
           onClose={() => setRosterOpen(false)}
         >
           <p className="muted">

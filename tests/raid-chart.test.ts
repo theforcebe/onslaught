@@ -65,20 +65,24 @@ describe("Discord raid chart", () => {
   it("lists only opted-in character names, including their main, alternate or previously selected build", () => {
     const visible = new Set(["oak"]);
     const alternate = raidSignupEmbed(event, [druid, mage], visible);
-    expect(alternate.fields[2].value).toContain("**Oak** · Feral · Alternate");
+    expect(alternate.fields[2].value).toContain(
+      "**Oak** · Druid · Feral · Alternate",
+    );
     expect(JSON.stringify(alternate)).not.toContain("Ember");
     const historic = raidSignupEmbed(
       event,
       [{ ...druid, alternateBuilds: [] }, mage],
       visible,
     );
-    expect(historic.fields[2].value).toContain("**Oak** · Feral · Raid build");
+    expect(historic.fields[2].value).toContain(
+      "**Oak** · Druid · Feral · Raid build",
+    );
     const main = raidSignupEmbed(
       { ...event, signupBuilds: undefined },
       [druid, mage],
       visible,
     );
-    expect(main.fields[0].value).toContain("**Oak** · Feral · Main");
+    expect(main.fields[0].value).toContain("**Oak** · Druid · Feral · Main");
   });
   it("counts new answers once, sorts named entries, and keeps pending or unavailable signups out of the confirmed roles", () => {
     const maybeEvent: RaidEvent = {
@@ -100,7 +104,7 @@ describe("Discord raid chart", () => {
       chart.fields.find((f) => f.name.includes("Role unassigned"))?.name,
     ).toContain("1");
     expect(chart.fields.find((f) => f.name.includes("Maybe"))?.value).toBe(
-      "**Ember** · Frost · Main · ranged\n**Oak** · Feral · Alternate · melee",
+      "**Ember** · Mage · Frost · Main · ranged\n**Oak** · Druid · Feral · Alternate · melee",
     );
     expect(
       chart.fields.find((f) => f.name.includes("Unavailable")),
@@ -144,6 +148,51 @@ describe("Discord raid chart", () => {
       ),
     ).not.toContain("44772");
   });
+  it.each([
+    { size: 40, compact: false },
+    { size: 105, compact: true },
+  ])(
+    "shows every name and class for a $size-character role list",
+    ({ size, compact }) => {
+      const people = Array.from({ length: size }, (_, index) => ({
+        ...mage,
+        id: "mage-" + index,
+        name: "Stormwatch of the Northern Barrens " + index,
+      }));
+      const raid: RaidEvent = {
+        ...event,
+        signups: Object.fromEntries(
+          people.map((character) => [character.id, "going"]),
+        ),
+      };
+      const chart = raidSignupEmbed(
+        raid,
+        people,
+        new Set(people.map((character) => character.id)),
+      );
+      const ranged = chart.fields.filter((field) =>
+        field.name.includes("Ranged"),
+      );
+      expect(ranged[0].name).toBe("🏹 Ranged · " + size);
+      expect(ranged.length).toBeGreaterThan(1);
+      expect(
+        ranged
+          .slice(1)
+          .every((field) => field.name === "🏹 Ranged (continued)"),
+      ).toBe(true);
+      expect(ranged.every((field) => field.value.length <= 1024)).toBe(true);
+      const lines = ranged.flatMap((field) => field.value.split("\n"));
+      for (const character of people) {
+        expect(lines).toContain(
+          "**" +
+            character.name +
+            "** · Mage" +
+            (compact ? "" : " · Frost · Main"),
+        );
+      }
+      expect(lines.join("\n")).not.toMatch(/\+\d+ more/);
+    },
+  );
   it("keeps the full counts when 500 signups exceed Discord's field and embed budgets", () => {
     const people = Array.from({ length: 500 }, (_, i) => ({
       ...druid,
@@ -171,10 +220,23 @@ describe("Discord raid chart", () => {
     expect(chart.description).toBe(
       "**300 going** · 100 maybe · 100 unavailable",
     );
-    expect(chart.fields).toHaveLength(7);
+    expect(chart.fields.length).toBeLessThanOrEqual(25);
+    const primary = chart.fields.filter((f) => !f.name.endsWith("(continued)"));
+    expect(primary).toHaveLength(7);
+    expect(primary.map((f) => f.name)).toEqual([
+      "🛡️ Tanks · 60",
+      "💚 Healers · 60",
+      "⚔️ Melee · 60",
+      "🏹 Ranged · 60",
+      "◻️ Role unassigned · 60",
+      "🕒 Maybe · 100",
+      "➖ Unavailable · 100",
+    ]);
+    expect(
+      chart.fields.filter((f) => /\+\d+ more$/.test(f.value)),
+    ).toHaveLength(7);
     for (const f of chart.fields) {
       expect(f.value.length).toBeLessThanOrEqual(1024);
-      expect(f.value).toMatch(/\+\d+ more$/);
     }
     const totalLength = [
       chart.title,

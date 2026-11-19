@@ -1,0 +1,365 @@
+.raid-planner .mobile-raid-tools,
+.raid-planner .mobile-move-copy,
+.raid-planner .mobile-calendar-icon,
+.raid-planner .mobile-group-switch,
+.raid-planner .mobile-coverage-toggle {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .raid-planner .desktop-move-copy {
+    display: none;
+  }
+  .raid-planner .mobile-move-copy {
+    display: inline;
+  }
+  .raid-planner .mobile-raid-tools,
+  .raid-planner .mobile-coverage-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+  }
+  .raid-planner [aria-expanded="true"] > .lucide-chevron-down {
+    transform: rotate(180deg);
+  }
+  .raid-planner[data-tools-open="false"] .raid-tools {
+    display: none;
+  }
+  .raid-planner .toolbar {
+    display: flex;
+    flex-flow: row wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .raid-planner .toolbar .segmented {
+    min-width: 0;
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+  .raid-planner .toolbar .segmented button {
+    min-height: 44px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .raid-planner .raid-tools {
+    flex: 1 0 100%;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .raid-planner .planner-event-picker {
+    gap: 8px;
+    padding: 10px;
+  }
+  .raid-planner .planner-event-picker > div:first-child {
+    width: 100%;
+    min-width: 0;
+  }
+  .raid-planner .raid-time-summary {
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+  .raid-planner .raid-time-summary > span {
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .raid-planner .raid-time-summary > button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .raid-planner .raid-time-summary .mobile-calendar-icon {
+    display: block;
+  }
+  .raid-planner .raid-time-summary button > span {
+    display: none;
+  }
+  .raid-planner .availability-strip {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    padding: 12px;
+  }
+  .raid-planner .availability-strip .dropdown {
+    width: 100%;
+    max-width: none;
+  }
+  .raid-planner .availability-strip .dropdown-trigger,
+  .raid-planner .planner-event-picker .dropdown-trigger,
+  .raid-edit-dialog .dropdown-trigger {
+    height: auto;
+    min-height: 44px;
+  }
+  .raid-planner .availability-strip .dropdown-trigger > span,
+  .raid-planner .planner-event-picker .dropdown-trigger > span,
+  .raid-edit-dialog .dropdown-trigger > span {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: left;
+  }
+  .raid-planner .availability-strip small {
+    font-size: 12px;
+  }
+  .raid-planner .availability-strip > div:first-child > span > small {
+    display: none;
+  }
+  .raid-planner .rsvp-actions,
+  .raid-edit-dialog .rsvp-actions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 1fr 1fr 1.35fr;
+  }
+  .raid-planner .rsvp-actions button,
+  .raid-edit-dialog .rsvp-actions button {
+    min-height: 44px;
+    padding: 6px;
+    white-space: normal;
+    font-size: 13px;
+    line-height: 1.25;
+  }
+
+  .raid-planner .buff-map-heading {
+    display: flex;
+    flex-flow: row nowrap;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 0;
+  }
+  .raid-planner .buff-map-heading > div:first-child {
+    flex: 1;
+    min-width: 0;
+  }
+  .raid-planner .buff-map-heading .coverage-total {
+    max-width: 90px;
+  }
+  .raid-planner .buff-map-heading p,
+  .raid-planner .coverage-total small {
+    font-size: 12px;
+    line-height: 1.35;
+  }
+  .raid-planner .buff-map-heading .coverage-total strong {
+    font-size: 23px;
+  }
+  .raid-planner .mobile-coverage-toggle {
+    padding-inline: 0;
+  }
+  .raid-planner .buff-map-body:not(.expanded) {
+    display: none;
+  }
+  .raid-planner .buff-map-toolbar {
+    display: grid;
+    font-size: 12px;
+  }
+  .raid-planner .buff-map-toolbar label,
+  .raid-planner .coverage-notes summary {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  .raid-planner .buff-matrix {
+    grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  }
+  .raid-planner .buff-cell {
+    min-height: 48px;
+  }
+  .raid-planner .buff-cell strong,
+  .raid-planner .buff-cell small {
+    font-size: 12px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .raid-planner .buff-detail {
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 6px;
+    row-gap: 8px;
+  }
+  .raid-planner .buff-detail .provider-paths {
+    grid-column: 1/-1;
+  }
+  .raid-planner .buff-detail > .icon-btn {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .raid-planner .provider-name {
+    min-height: 44px;
+  }
+  .raid-planner .provider-path strong {
+    white-space: normal;
+  }
+
+  .raid-planner .lineup-heading h2 {
+    overflow-wrap: anywhere;
+  }
+  .raid-planner .mobile-group-switch {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+    margin: 12px 0 8px;
+  }
+  .raid-planner .mobile-group-switch button {
+    flex: 1 1 44px;
+    min-height: 44px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: var(--bg);
+    color: var(--text);
+  }
+  .raid-planner .mobile-group-switch > span {
+    padding-right: 3px;
+    font-size: 13px;
+  }
+  .raid-planner .mobile-group-switch [aria-pressed="true"],
+  .raid-planner .mobile-group-switch .drop-target {
+    color: var(--gold);
+    border-color: var(--gold);
+  }
+  .raid-planner .raid-group-grid,
+  .raid-planner .bench-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .raid-planner .raid-group-grid > [data-mobile-current="false"] {
+    display: none;
+  }
+  .raid-planner .raid-person-main {
+    min-height: 48px;
+    padding: 6px;
+    gap: 8px;
+  }
+  .raid-planner .raid-person-main strong,
+  .raid-roster-dialog .player-text strong,
+  .raid-roster-dialog .player-text small,
+  .raid-planner .roster-picker .player-text :is(strong, small) {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .raid-planner .raid-person-main strong {
+    font-size: 14px;
+  }
+  .raid-planner .raid-person-main small {
+    font-size: 12px;
+  }
+  .raid-planner .drag-grip {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .raid-planner .group-destination {
+    min-height: 44px;
+    font-size: 13px;
+  }
+  .raid-planner .group-destination:disabled {
+    display: none;
+  }
+  .raid-planner .role-targets > div > span:not(.muted) {
+    display: inline;
+  }
+  .raid-planner .role-targets > div {
+    gap: 4px 6px;
+  }
+  .raid-planner .move-instructions {
+    font-size: 12px;
+  }
+  .raid-roster-dialog .roster-picker {
+    max-height: none;
+    overflow: visible;
+  }
+  .raid-roster-dialog .roster-picker .player > .role-icon {
+    display: none;
+  }
+  .raid-roster-dialog .roster-picker > div {
+    gap: 6px;
+  }
+  .raid-roster-dialog .roster-picker .btn {
+    min-height: 44px;
+    padding-inline: 9px;
+  }
+
+  .raid-edit-dialog :is(.setup-identity, .character-banner, .setup-review) {
+    overflow-wrap: anywhere;
+  }
+  .raid-edit-dialog .setup-identity {
+    align-items: flex-start;
+  }
+  .raid-edit-dialog .setup-identity > div {
+    min-width: 0;
+  }
+  .raid-edit-dialog .choice-field {
+    margin: 16px 0;
+    min-width: 0;
+  }
+  .raid-edit-dialog .choice-field legend {
+    margin-bottom: 8px;
+  }
+  .raid-edit-dialog .role-choices {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .raid-edit-dialog .role-choice {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-content: start;
+    align-items: center;
+    gap: 3px 6px;
+    padding: 8px;
+  }
+  .raid-edit-dialog .role-choice > svg {
+    width: 17px;
+    height: 17px;
+  }
+  .raid-edit-dialog .role-choice small {
+    grid-column: 1/-1;
+    font-size: 12px;
+    line-height: 1.3;
+  }
+  .raid-edit-dialog .spec-choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .raid-edit-dialog .spec-choices button {
+    min-height: 44px;
+    flex: 1 1 auto;
+    padding: 6px 10px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .raid-edit-dialog .ability-choice {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 5px 8px;
+  }
+  .raid-edit-dialog .ability-choice input {
+    margin-top: 2px;
+  }
+  .raid-edit-dialog .ability-benefit {
+    display: inline;
+    grid-column: 2;
+    justify-self: start;
+    max-width: 100%;
+    white-space: normal;
+  }
+  .raid-edit-dialog .code-input {
+    min-height: 120px;
+    height: clamp(130px, 24dvh, 210px);
+  }
+  .raid-edit-dialog .setup-steps {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .raid-edit-dialog .setup-steps li {
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    text-align: center;
+    gap: 4px;
+    font-size: 12px;
+  }
+  .raid-edit-dialog .form-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .raid-edit-dialog .form-actions button {
+    min-height: 44px;
+  }
+}

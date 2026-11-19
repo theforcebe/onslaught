@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   BookOpen,
   CalendarCheck,
@@ -393,128 +394,130 @@ export function SetupGuide({
       >
         <Compass size={18} /> Getting started &amp; help
       </button>
-      {mode && (
-        <Modal
-          title="Guild field guide"
-          className="field-guide"
-          onClose={() => {
-            setMode(null);
-            if (linkedTopic !== undefined) go("overview");
-          }}
-        >
-          <nav className="field-guide-tabs" aria-label="Guide sections">
-            <button
-              aria-pressed={mode === "setup"}
-              onClick={() => setMode("setup")}
-            >
-              <Compass size={16} /> Getting started
-            </button>
-            <button
-              aria-pressed={mode === "help"}
-              onClick={() => setMode("help")}
-            >
-              <BookOpen size={16} /> Quick help
-            </button>
-          </nav>
-          {mode === "setup" ? (
-            <>
-              <ol className="field-guide-steps" aria-label="Setup progress">
-                {titles.map((title, i) => (
-                  <li key={title}>
+      {mode &&
+        createPortal(
+          <Modal
+            title="Guild field guide"
+            className="field-guide"
+            onClose={() => {
+              setMode(null);
+              if (linkedTopic !== undefined) go("overview");
+            }}
+          >
+            <nav className="field-guide-tabs" aria-label="Guide sections">
+              <button
+                aria-pressed={mode === "setup"}
+                onClick={() => setMode("setup")}
+              >
+                <Compass size={16} /> Getting started
+              </button>
+              <button
+                aria-pressed={mode === "help"}
+                onClick={() => setMode("help")}
+              >
+                <BookOpen size={16} /> Quick help
+              </button>
+            </nav>
+            {mode === "setup" ? (
+              <>
+                <ol className="field-guide-steps" aria-label="Setup progress">
+                  {titles.map((title, i) => (
+                    <li key={title}>
+                      <button
+                        aria-label={title + (statuses[i] ? ", complete" : "")}
+                        aria-current={step === i ? "step" : undefined}
+                        onClick={() => setStep(i)}
+                      >
+                        <span>{statuses[i] ? <Check size={14} /> : i + 1}</span>
+                        <span className="field-guide-step-name">{title}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+                <article className="field-guide-content">
+                  <small>
+                    Step {step + 1} of {titles.length}
+                    {step === 3 ? " · Optional" : ""}
+                  </small>
+                  <h3>
+                    {
+                      [
+                        "Connect Battle.net",
+                        access.status === "pending"
+                          ? "Waiting for approval"
+                          : "Join the guild",
+                        "Set up your raid character",
+                        "Link your Discord account",
+                        "Choose your raid night",
+                      ][step]
+                    }
+                  </h3>
+                  {content[step]}
+                </article>
+                <div className="field-guide-controls">
+                  {step > 0 && (
                     <button
-                      aria-label={title + (statuses[i] ? ", complete" : "")}
-                      aria-current={step === i ? "step" : undefined}
-                      onClick={() => setStep(i)}
+                      className="btn text"
+                      onClick={() => setStep(step - 1)}
                     >
-                      <span>{statuses[i] ? <Check size={14} /> : i + 1}</span>
-                      {title}
+                      Back
                     </button>
-                  </li>
+                  )}
+                  {step === 4 ? (
+                    <button
+                      className="btn secondary"
+                      onClick={() => setMode(null)}
+                    >
+                      Finish guide <Check size={15} />
+                    </button>
+                  ) : (
+                    <button
+                      className="btn secondary"
+                      onClick={() => setStep(step + 1)}
+                    >
+                      Next step <ChevronRight size={15} />
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="field-guide-topics">
+                {topics.map(([id, title, icon, contents]) => (
+                  <section key={id}>
+                    <button
+                      className="field-guide-topic"
+                      aria-expanded={topic === id}
+                      aria-controls={"guide-" + id}
+                      onClick={() => setTopic(topic === id ? null : id)}
+                    >
+                      {icon}
+                      {title}
+                      <ChevronRight size={16} />
+                    </button>
+                    <div
+                      id={"guide-" + id}
+                      hidden={topic !== id}
+                      className="field-guide-content"
+                    >
+                      {topic === id && (
+                        <>
+                          {contents}
+                          <a
+                            className="field-guide-permalink"
+                            href={"#help?topic=" + id}
+                          >
+                            Link to this help topic
+                          </a>
+                        </>
+                      )}
+                    </div>
+                  </section>
                 ))}
-              </ol>
-              <article className="field-guide-content">
-                <small>
-                  Step {step + 1} of {titles.length}
-                  {step === 3 ? " · Optional" : ""}
-                </small>
-                <h3>
-                  {
-                    [
-                      "Connect Battle.net",
-                      access.status === "pending"
-                        ? "Waiting for approval"
-                        : "Join the guild",
-                      "Set up your raid character",
-                      "Link your Discord account",
-                      "Choose your raid night",
-                    ][step]
-                  }
-                </h3>
-                {content[step]}
-              </article>
-              <div className="field-guide-controls">
-                {step > 0 && (
-                  <button
-                    className="btn text"
-                    onClick={() => setStep(step - 1)}
-                  >
-                    Back
-                  </button>
-                )}
-                {step === 4 ? (
-                  <button
-                    className="btn secondary"
-                    onClick={() => setMode(null)}
-                  >
-                    Finish guide <Check size={15} />
-                  </button>
-                ) : (
-                  <button
-                    className="btn secondary"
-                    onClick={() => setStep(step + 1)}
-                  >
-                    Next step <ChevronRight size={15} />
-                  </button>
-                )}
               </div>
-            </>
-          ) : (
-            <div className="field-guide-topics">
-              {topics.map(([id, title, icon, contents]) => (
-                <section key={id}>
-                  <button
-                    className="field-guide-topic"
-                    aria-expanded={topic === id}
-                    aria-controls={"guide-" + id}
-                    onClick={() => setTopic(topic === id ? null : id)}
-                  >
-                    {icon}
-                    {title}
-                    <ChevronRight size={16} />
-                  </button>
-                  <div
-                    id={"guide-" + id}
-                    hidden={topic !== id}
-                    className="field-guide-content"
-                  >
-                    {topic === id && (
-                      <>
-                        {contents}
-                        <a
-                          className="field-guide-permalink"
-                          href={"#help?topic=" + id}
-                        >
-                          Link to this help topic
-                        </a>
-                      </>
-                    )}
-                  </div>
-                </section>
-              ))}
-            </div>
-          )}
-        </Modal>
-      )}
+            )}
+          </Modal>,
+          document.body,
+        )}
     </>
   );
 }

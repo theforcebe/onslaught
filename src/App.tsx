@@ -1,4 +1,5 @@
 import { GuildBoard } from "./GuildBoard";
+import "./mobile-roster.css";
 import { SetupGuide } from "./SetupGuide";
 import { ItemTooltip } from "./ItemTooltip";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
@@ -196,6 +197,50 @@ export default function App() {
     [lootTab, setLootTab] = useState("active");
   const state = demo ? practice : live;
   const { page, hubTab } = route;
+  const navigation = useRef<HTMLElement>(null);
+  const menuTrigger = useRef<HTMLButtonElement>(null);
+  const closeMenu = useRef<HTMLButtonElement>(null);
+  const pageHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, [page, hubTab]);
+  useEffect(() => {
+    if (!menu) return;
+    const phone = window.matchMedia("(max-width: 760px)");
+    const resize = () => {
+      if (!phone.matches) setMenu(false);
+    };
+    const keys = (event: KeyboardEvent) => {
+      if (document.querySelector("dialog[open]")) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMenu(false);
+        requestAnimationFrame(() => menuTrigger.current?.focus());
+      }
+      if (event.key !== "Tab") return;
+      const controls = Array.from(
+        navigation.current?.querySelectorAll<HTMLElement>(
+          "button:not(:disabled),a[href]",
+        ) || [],
+      ).filter((el) => el.getClientRects().length > 0);
+      const first = controls[0],
+        last = controls[controls.length - 1];
+      if (
+        (event.shiftKey && document.activeElement === first) ||
+        (!event.shiftKey && document.activeElement === last)
+      ) {
+        event.preventDefault();
+        (event.shiftKey ? last : first)?.focus();
+      }
+    };
+    closeMenu.current?.focus();
+    phone.addEventListener("change", resize);
+    document.addEventListener("keydown", keys);
+    return () => {
+      phone.removeEventListener("change", resize);
+      document.removeEventListener("keydown", keys);
+    };
+  }, [menu]);
   const effectiveAccess = demo ? ADMIN_ACCESS : access;
   const chatAvailable = !demo && !!identity && canUseGuildChat(effectiveAccess);
   useEffect(() => {
@@ -268,6 +313,7 @@ export default function App() {
   useEffect(() => {
     const handle = () => {
       setRoute(guildRoute(location.hash));
+      setMenu(false);
       setFilter("");
     };
     window.addEventListener("hashchange", handle);
@@ -278,6 +324,10 @@ export default function App() {
     setRoute(guildRoute(id));
     setMenu(false);
     setFilter("");
+    if (menu)
+      requestAnimationFrame(() =>
+        pageHeading.current?.focus({ preventScroll: true }),
+      );
   }
   function toggleDemo() {
     if (!live) return;
@@ -497,7 +547,7 @@ export default function App() {
         c.alternateBuilds?.some((b) => b.role === roleFilter)),
   );
   const roster = (
-    <>
+    <div className="roster-screen">
       <div className="toolbar">
         <div className="filters">
           <label className="search-field">
@@ -540,6 +590,23 @@ export default function App() {
         </div>
         {addButton("import", "Import character")}
       </div>
+      <div className="roster-results">
+        <span role="status">
+          {filtered.length} of {state.characters.length} raiders
+        </span>
+        {(filter || classFilter !== "all" || roleFilter !== "all") && (
+          <button
+            className="btn text"
+            onClick={() => {
+              setFilter("");
+              setClassFilter("all");
+              setRoleFilter("all");
+            }}
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
       <div className="roster-list">
         <div className="roster-head">
           <span>Character</span>
@@ -548,85 +615,110 @@ export default function App() {
           <span>Gear snapshot</span>
           <span />
         </div>
-        {filtered.map((c) => (
-          <button
-            className="roster-row"
-            key={c.id}
-            onClick={() => open({ type: "character", character: c })}
-          >
-            <span className="roster-player">
-              <ClassIcon cls={c.class} size={42} />
-              <span>
-                <strong style={{ color: CLASS_COLORS[c.class] }}>
-                  {c.name}
-                </strong>
-                <small>
-                  Level {c.level} · {c.spec || label(c.class)}
-                  {!!c.alternateBuilds?.length &&
-                    ` · Also ${c.alternateBuilds.map((b) => `${b.spec} (${label(b.role)})`).join(", ")}`}
-                </small>
-              </span>
-            </span>
-            <span className={`role-badge ${c.role}`}>
-              <RoleIcon role={c.role} />
-              {label(c.role)}
-            </span>
-            <span className="roster-team">
-              {state.teams.find((t) => t.id === c.teamId)?.name ||
-                c.publicTeamName ||
-                "Not assigned"}
-              <small>
-                {c.group ? `Group ${c.group}` : c.teamId ? "Assigned" : "Bench"}
-              </small>
-            </span>
-            <span className="snapshot-status">
-              {!demo && !canSeeCharacter(access, c, identity) ? (
-                <span className="muted">
-                  <LockKeyhole size={13} /> Private gear
-                </span>
-              ) : c.snapshot ? (
-                <>
-                  <span className="dot green" />
-                  {c.snapshot.gear.length} equipped
+        {filtered.map((c) => {
+          const canInspect = demo || canSeeCharacter(access, c, identity);
+          const Row = canInspect ? "button" : "div";
+          return (
+            <Row
+              className={
+                canInspect ? "roster-row" : "roster-row roster-readonly"
+              }
+              key={c.id}
+              onClick={
+                canInspect
+                  ? () => open({ type: "character", character: c })
+                  : undefined
+              }
+            >
+              <span className="roster-player">
+                <ClassIcon cls={c.class} size={42} />
+                <span>
+                  <strong style={{ color: CLASS_COLORS[c.class] }}>
+                    {c.name}
+                  </strong>
                   <small>
-                    {c.snapshot.metadata.exportedAt || "Imported snapshot"}
+                    Level {c.level} · {c.spec || label(c.class)}
+                    {!!c.alternateBuilds?.length &&
+                      ` · Also ${c.alternateBuilds.map((b) => `${b.spec} (${label(b.role)})`).join(", ")}`}
                   </small>
-                </>
-              ) : (
-                <>
-                  <span className="dot amber" />
-                  Awaiting import<small>Ask this raider for an export</small>
-                </>
-              )}
-            </span>
-            <ChevronRight size={16} />
-          </button>
-        ))}
+                </span>
+              </span>
+              <span className={`role-badge ${c.role}`}>
+                <RoleIcon role={c.role} />
+                {label(c.role)}
+              </span>
+              <span className="roster-details">
+                <span className="roster-team">
+                  <span className="roster-field-label">Team</span>
+                  {state.teams.find((t) => t.id === c.teamId)?.name ||
+                    c.publicTeamName ||
+                    "Not assigned"}
+                  <small>
+                    {c.group
+                      ? `Group ${c.group}`
+                      : c.teamId
+                        ? "Assigned"
+                        : "Bench"}
+                  </small>
+                </span>
+                <span className="snapshot-status">
+                  <span className="roster-field-label">Gear snapshot</span>
+                  {!canInspect ? (
+                    <span className="muted">
+                      <LockKeyhole size={13} /> Private gear
+                    </span>
+                  ) : c.snapshot ? (
+                    <>
+                      <span className="dot green" />
+                      {c.snapshot.gear.length} equipped
+                      <small>
+                        {c.snapshot.metadata.exportedAt || "Imported snapshot"}
+                      </small>
+                    </>
+                  ) : (
+                    <>
+                      <span className="dot amber" />
+                      Awaiting import
+                      <small>Ask this raider for an export</small>
+                    </>
+                  )}
+                </span>
+              </span>
+              {canInspect && <ChevronRight size={16} />}
+            </Row>
+          );
+        })}
       </div>
       {!filtered.length && (
-        <Empty icon={<Search />} title="No matching raiders">
-          Try another name or clear the class and role filters.
+        <Empty
+          icon={<Search />}
+          title={
+            state.characters.length
+              ? "No matching raiders"
+              : "No raiders on the roster yet"
+          }
+        >
+          {state.characters.length
+            ? "Try another name or clear the class and role filters."
+            : "Characters appear here when a guild member imports or adds them."}
         </Empty>
       )}
-      <p className="page-note">
-        {filtered.length} of {state.characters.length} raiders · Open a
-        character to inspect items, bag alternatives, professions and pet
-        details.
-      </p>
-    </>
+    </div>
   );
   const loot = (
-    <>
+    <div className="loot-screen">
       <div className="toolbar">
         <div className="segmented">
           <button
             className={lootTab === "active" ? "active" : ""}
+            aria-pressed={lootTab === "active"}
             onClick={() => setLootTab("active")}
           >
             Council plan <span>{pendingLoot.length}</span>
           </button>
           <button
             className={lootTab === "awarded" ? "active" : ""}
+            aria-pressed={lootTab === "awarded"}
             onClick={() => setLootTab("awarded")}
           >
             Award history <span>{state.loot.length - pendingLoot.length}</span>
@@ -746,10 +838,10 @@ export default function App() {
             : "Add a verified Forever item and its source, collect requests, and set the council order."}
         </Empty>
       )}
-    </>
+    </div>
   );
   const consumables = (
-    <>
+    <div className="supplies-screen">
       <div className="toolbar">
         <p className="muted">{state.supplies.length} preparation targets</p>
         {addButton("supply", "Add a target")}
@@ -857,10 +949,10 @@ export default function App() {
           needs. Members can commit their share.
         </Empty>
       )}
-    </>
+    </div>
   );
   const progress = (
-    <>
+    <div className="progress-screen">
       <div className="toolbar">
         <span className="muted">
           {defeated} defeated ·{" "}
@@ -925,17 +1017,17 @@ export default function App() {
           best remaining health, and strategy notes.
         </Empty>
       )}
-    </>
+    </div>
   );
   const activity = (
-    <>
+    <div className="activity-screen">
       <div className="toolbar">
         <p className="muted">
           Revision {state.revision} · {state.audit.length} recorded changes
         </p>
         <a
           className="btn secondary"
-          href={`${REPO_URL}/commits/main/public/data/raid-state.json`}
+          href="https://github.com/theforcebe/onslaught-data/commits/main/data/guild.json"
           target="_blank"
           rel="noreferrer"
         >
@@ -956,7 +1048,7 @@ export default function App() {
                 {a.actor} <span>·</span> {label(a.action.replaceAll(".", " "))}
               </p>
             </div>
-            <time>
+            <time dateTime={a.at}>
               {formatDate(a.at, {
                 month: "short",
                 day: "numeric",
@@ -976,7 +1068,7 @@ export default function App() {
           </Empty>
         )}
       </section>
-    </>
+    </div>
   );
   const settings = (
     <div className="settings-grid">
@@ -1014,14 +1106,13 @@ export default function App() {
               required
             />
           </Field>
-          <p className="muted">
-            Approve members and choose private sections and teams in{" "}
-            <a href="#access">Members &amp; access</a>.
-          </p>
           <div className="form-actions">
             <button className="btn primary" type="submit">
               Save settings
             </button>
+            <a className="btn secondary" href="#access">
+              Members &amp; access
+            </a>
           </div>
         </Form>
       </section>
@@ -1360,11 +1451,31 @@ export default function App() {
       {menu && (
         <button
           className="mobile-backdrop"
+          tabIndex={-1}
           aria-label="Close navigation"
-          onClick={() => setMenu(false)}
+          onClick={() => {
+            setMenu(false);
+            requestAnimationFrame(() => menuTrigger.current?.focus());
+          }}
         />
       )}
-      <aside className={`sidebar ${menu ? "open" : ""}`}>
+      <aside
+        ref={navigation}
+        id="guild-navigation"
+        className={`sidebar ${menu ? "open" : ""}`}
+        aria-label="Guild navigation"
+      >
+        <button
+          ref={closeMenu}
+          className="icon-btn sidebar-close"
+          aria-label="Close navigation menu"
+          onClick={() => {
+            setMenu(false);
+            requestAnimationFrame(() => menuTrigger.current?.focus());
+          }}
+        >
+          <X size={20} />
+        </button>
         <a className="brand" href="#overview" onClick={() => setMenu(false)}>
           <img
             src={`${import.meta.env.BASE_URL}crest.svg`}
@@ -1392,6 +1503,11 @@ export default function App() {
             .map((n) => (
               <button
                 key={n.id}
+                aria-current={
+                  page === n.id || (n.id === "planner" && raidPage)
+                    ? "page"
+                    : undefined
+                }
                 className={`${page === n.id || (n.id === "planner" && raidPage) ? "active" : ""} ${n.id === "community" ? "guild-nav" : ""}`}
                 onClick={() => go(n.id)}
               >
@@ -1505,11 +1621,14 @@ export default function App() {
           </div>
         </div>
       </aside>
-      <div className="main-shell">
+      <div className="main-shell" inert={menu}>
         <header className="topbar">
           <div className="breadcrumbs">
             <button
               className="icon-btn mobile-only"
+              ref={menuTrigger}
+              aria-expanded={menu}
+              aria-controls="guild-navigation"
               aria-label="Open navigation"
               onClick={() => setMenu(true)}
             >
@@ -1563,23 +1682,29 @@ export default function App() {
             </button>
           </div>
         )}
-        <main>
+        <main data-page={page}>
           <div className="page-heading">
             <div>
               <div className="page-context">
                 <span className="realm-dot" />
                 {state.guild.realm}
               </div>
-              <h1>{title}</h1>
+              <h1 tabIndex={-1} ref={pageHeading}>
+                {title}
+              </h1>
               <p>{subtitle}</p>
             </div>
             {page === "overview" && hasSection(effectiveAccess, "gear") && (
               <button
                 className="btn secondary"
+                aria-label="Import character"
                 onClick={() => open({ type: "import" })}
               >
                 <Upload size={16} />
-                Import character
+                <span className="import-wide">Import character</span>
+                <span className="import-narrow" aria-hidden="true">
+                  Import
+                </span>
               </button>
             )}
           </div>
@@ -1589,17 +1714,30 @@ export default function App() {
             </p>
           )}
           {raidPage && raidTabs.length > 1 && (
-            <div className="raid-workspace-tabs" aria-label="Raid workspace">
-              {raidTabs.map(([id, name]) => (
-                <button
-                  key={id}
-                  className={page === id ? "active" : ""}
-                  onClick={() => go(id)}
-                >
-                  {name}
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="raid-section-picker">
+                <span>Raid section</span>
+                <Dropdown
+                  label="Raid section"
+                  icon={<Swords size={16} />}
+                  value={page}
+                  options={raidTabs.map(([value, label]) => ({ value, label }))}
+                  onChange={go}
+                />
+              </div>
+              <div className="raid-workspace-tabs" aria-label="Raid workspace">
+                {raidTabs.map(([id, name]) => (
+                  <button
+                    key={id}
+                    aria-current={page === id ? "page" : undefined}
+                    className={page === id ? "active" : ""}
+                    onClick={() => go(id)}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            </>
           )}
           {pageAllowed(page)
             ? page === "overview" && effectiveAccess.status !== "active"

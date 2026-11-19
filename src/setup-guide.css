@@ -64,7 +64,7 @@
   font-size: 12px;
   line-height: 1.15;
 }
-.field-guide-steps button span {
+.field-guide-steps button > span:first-child {
   display: grid;
   place-items: center;
   width: 18px;

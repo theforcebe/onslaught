@@ -1147,6 +1147,13 @@ export default function Dialogs(p: Props) {
       title={title}
       onClose={close}
       wide={["character", "import", "loot-detail"].includes(d.type)}
+      className={
+        ["character", "import", "team", "event", "signup", "assign"].includes(
+          d.type,
+        )
+          ? "raid-edit-dialog"
+          : ""
+      }
     >
       {error && (
         <p className="notice danger" role="alert">

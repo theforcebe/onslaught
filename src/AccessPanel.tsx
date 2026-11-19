@@ -1,4 +1,5 @@
 import { useState } from "react";
+import "./mobile-community.css";
 import {
   ShieldCheck,
   Crown,

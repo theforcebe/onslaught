@@ -1,0 +1,327 @@
+.roster-details {
+  display: contents;
+}
+
+.roster-field-label {
+  display: none;
+}
+
+.roster-screen .roster-player > span:last-child,
+.roster-screen .roster-team {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.roster-results {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 6px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.roster-screen .toolbar {
+  margin-bottom: 0;
+}
+
+.roster-screen .roster-readonly {
+  cursor: default;
+}
+.roster-screen .roster-readonly:hover {
+  background: var(--panel);
+}
+
+@media (max-width: 980px) {
+  .roster-screen .roster-head {
+    display: none;
+  }
+
+  .roster-screen .roster-row {
+    grid-template-columns: minmax(0, 1fr) auto 12px;
+    grid-template-areas: "player role arrow" "details details details";
+    gap: 8px;
+    align-items: center;
+    padding: 12px 14px;
+    border-top-color: var(--line);
+  }
+
+  .roster-screen .roster-head + .roster-row {
+    border-top: 0;
+  }
+
+  .roster-screen .roster-player {
+    grid-area: player;
+    min-width: 0;
+    gap: 10px;
+  }
+
+  .roster-screen .roster-player > span:last-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .roster-screen .roster-player strong {
+    font-size: 15px;
+    line-height: 1.3;
+  }
+
+  .roster-screen .roster-player small,
+  .roster-screen .roster-details small {
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .roster-screen .roster-row > .role-badge {
+    display: inline-flex;
+    grid-area: role;
+    gap: 5px;
+    padding: 4px 7px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    color: #f2e5db;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .roster-screen .roster-row > svg {
+    grid-area: arrow;
+    width: 12px;
+  }
+
+  .roster-screen .roster-details {
+    grid-area: details;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
+    padding-top: 7px;
+    border-top: 1px solid #443d4c;
+    overflow-wrap: anywhere;
+  }
+
+  .roster-screen .roster-team,
+  .roster-screen .snapshot-status {
+    display: block;
+    color: #eee7e9;
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .roster-screen .roster-field-label {
+    display: block;
+    margin-bottom: 3px;
+    color: #c4b6c6;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 800px) {
+  :is(
+      .roster-screen,
+      .loot-screen,
+      .supplies-screen,
+      .progress-screen,
+      .activity-screen,
+      .settings-grid
+    )
+    :is(.btn, .icon-btn, .dropdown-trigger),
+  .settings-grid .text-link,
+  .settings-grid .connection > a,
+  .loot-screen .loot-card-actions > a,
+  .loot-screen .item-trigger,
+  .supplies-screen .item-trigger,
+  .modal .gear-item .gear-main,
+  .modal .priority-row .icon-btn {
+    min-height: 44px;
+  }
+
+  :is(.loot-screen, .supplies-screen, .settings-grid) .icon-btn,
+  .loot-screen .loot-card-actions > a,
+  .modal .priority-row .icon-btn {
+    min-width: 44px;
+  }
+
+  .loot-screen .loot-card-actions > a {
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    color: var(--text);
+  }
+
+  :is(.loot-screen, .supplies-screen, .progress-screen, .settings-grid)
+    :is(.panel, .boss-card, .loot-card) {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  :is(.loot-screen, .supplies-screen) .item-trigger {
+    max-width: 100%;
+    min-width: 0;
+    text-align: left;
+    white-space: normal;
+  }
+
+  :is(.loot-screen, .supplies-screen) .item-trigger span:last-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  :is(
+    .loot-screen .loot-card-meta,
+    .supplies-screen .supply-count small,
+    .progress-screen .boss-stats small,
+    .activity-screen .audit-row p,
+    .activity-screen .audit-row time
+  ) {
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--muted);
+  }
+
+  .settings-grid .connection > div,
+  .settings-grid .field input {
+    min-width: 0;
+  }
+
+  .modal .gear-item .item-level {
+    display: inline;
+    flex: none;
+    margin-inline-start: auto;
+    font-size: 12px;
+    white-space: nowrap;
+    color: var(--muted);
+  }
+
+  .modal .gear-item small,
+  .modal .character-banner small,
+  .modal .request-row small {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .modal .gear-item strong {
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .modal:has(.character-banner) .details {
+    padding-block: 4px;
+  }
+
+  .modal:has(.character-banner) .details summary {
+    min-height: 44px;
+    padding-block: 12px;
+    line-height: 1.45;
+  }
+}
+
+@media (max-width: 600px) {
+  .roster-screen .filters {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .roster-screen .search-field {
+    grid-column: 1 / -1;
+    min-height: 44px;
+  }
+
+  .roster-screen .filters .dropdown,
+  .roster-screen .filters .dropdown-trigger {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .loot-screen .loot-list,
+  .supplies-screen .supply-grid,
+  .progress-screen .boss-grid,
+  .settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .loot-screen .loot-card-top {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .loot-screen .loot-card-top .badge {
+    max-width: 70px;
+    white-space: normal;
+  }
+
+  .loot-screen .loot-card-meta {
+    padding-block: 9px;
+  }
+
+  .loot-screen .loot-card-actions,
+  .supplies-screen .form-actions,
+  .settings-grid :is(.form-actions, .button-row) {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .loot-screen .loot-card-actions .btn,
+  .supplies-screen .form-actions .btn {
+    font-size: 13px;
+  }
+
+  .progress-screen .boss-art {
+    height: 82px;
+  }
+
+  .activity-screen .audit-row {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    grid-template-areas: "icon action" ". date";
+    gap: 3px 10px;
+    padding: 14px 0;
+    align-items: start;
+  }
+
+  .activity-screen .audit-icon {
+    grid-area: icon;
+  }
+  .activity-screen .audit-row > div {
+    grid-area: action;
+    overflow-wrap: anywhere;
+  }
+  .activity-screen .audit-row time {
+    grid-area: date;
+    margin-left: 0;
+    white-space: normal;
+  }
+
+  .settings-grid .connection {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .settings-grid .text-link {
+    align-items: center;
+    margin-top: 3px;
+  }
+
+  .modal .priority-row:has(> .icon-btn) {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr) repeat(3, 44px);
+    gap: 4px;
+  }
+  .modal .priority-row:has(> .icon-btn) .player {
+    grid-column: 2 / -1;
+  }
+  .modal .priority-row > .icon-btn:nth-child(3) {
+    grid-column: 3;
+  }
+  .modal .priority-row .player :is(strong, small) {
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+}

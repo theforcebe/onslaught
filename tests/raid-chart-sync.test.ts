@@ -8,7 +8,6 @@ import {
   flushRaidCharts,
   queueRaidChart,
   queueSiteCharts,
-  recordDiscordChartSignup,
   setChartName,
 } from "../server/raid-chart-sync";
 import type { Env } from "../server/worker";
@@ -78,24 +77,17 @@ describe("Discord chart refresh", () => {
     const { env, doc, event, character, name } = fixture();
     const visible = () =>
       chartVisibleIds(env, event.id, guildId, channelId, messageId, doc);
-    const oldClick = String(
-      (BigInt(Date.now() - 1000) - 1420070400000n) << 22n,
-    );
-    await recordDiscordChartSignup(env, event.id, name, oldClick);
     expect(await visible()).toEqual(new Set([character.id]));
     await setChartName(env, event.id, name, false);
-    await recordDiscordChartSignup(env, event.id, name, oldClick);
+    await queueRaidChart(env, event.id);
     expect(await visible()).toEqual(new Set());
     await setChartName(env, event.id, name, true);
     expect(await visible()).toEqual(new Set([character.id]));
     await setChartName(env, event.id, name, false);
-    const newClick = String(
-      (BigInt(Date.now() + 1000) - 1420070400000n) << 22n,
-    );
-    await recordDiscordChartSignup(env, event.id, name, newClick);
-    expect(await visible()).toEqual(new Set([character.id]));
+    await queueRaidChart(env, event.id);
+    expect(await visible()).toEqual(new Set());
   });
-  it("upgrades an open registered message exactly once without sharing earlier signup names", async () => {
+  it("upgrades an open registered message with the existing roster", async () => {
     const { env, read, event, character, job, sqlite } = fixture();
     sqlite.exec(schema); // simulate an existing publication during rollout
     const patch = vi.fn(echoPatch);
@@ -107,7 +99,7 @@ describe("Discord chart refresh", () => {
       failures: 0,
       patched_at: expect.any(Number),
     });
-    expect(patch.mock.calls[0][1].body).not.toContain(character.name);
+    expect(patch.mock.calls[0][1].body).toContain(character.name);
     expect(patch.mock.calls[0][1].body).toContain("raid:chart:going");
     sqlite.exec(schema); // another deploy and cron tick leave the acknowledged message alone
     await flushRaidCharts(env, read, event.id);
@@ -115,14 +107,28 @@ describe("Discord chart refresh", () => {
   });
   it("checks the current owner, membership and exact message for each named participant", async () => {
     const { env, read, event, doc, character, member, job, name } = fixture();
-    await recordDiscordChartSignup(env, event.id, {
-      ...name,
-      messageId: "100000000000000004",
-    });
+    await setChartName(
+      env,
+      event.id,
+      {
+        ...name,
+        messageId: "100000000000000004",
+      },
+      false,
+    );
     const visible = () =>
       chartVisibleIds(env, event.id, guildId, channelId, messageId, doc);
-    expect(await visible()).toEqual(new Set());
-    await recordDiscordChartSignup(env, event.id, name);
+    expect(
+      await chartVisibleIds(
+        env,
+        event.id,
+        guildId,
+        channelId,
+        "100000000000000004",
+        doc,
+      ),
+    ).toEqual(new Set());
+    await queueRaidChart(env, event.id);
     expect(await visible()).toEqual(new Set([character.id]));
     const patch = vi.fn(echoPatch);
     vi.stubGlobal("fetch", patch);

@@ -14,6 +14,7 @@ import {
 import type { GuildDocument } from "../src/lib/access";
 import { ZodError } from "zod";
 import { handleDiscord } from "./discord";
+import { adminSubjects, base64url, pseudonym } from "./battlenet-identity";
 import { handleRaidPublish } from "./discord-raids";
 import { handleRaidInteraction } from "./raid-interactions";
 import {
@@ -39,30 +40,11 @@ export interface Env {
 }
 type Stored = { payload: string };
 const encoder = new TextEncoder();
-const b64 = (bytes: Uint8Array) =>
-  btoa(String.fromCharCode(...bytes))
-    .replaceAll("+", "-")
-    .replaceAll("/", "_")
-    .replaceAll("=", "");
-const random = () => b64(crypto.getRandomValues(new Uint8Array(32)));
+const random = () => base64url(crypto.getRandomValues(new Uint8Array(32)));
 export async function digest(value: string) {
-  return b64(
+  return base64url(
     new Uint8Array(
       await crypto.subtle.digest("SHA-256", encoder.encode(value)),
-    ),
-  );
-}
-async function pseudonym(id: string, keyValue: string) {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(keyValue),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  return b64(
-    new Uint8Array(
-      await crypto.subtle.sign("HMAC", key, encoder.encode(`battlenet:${id}`)),
     ),
   );
 }
@@ -130,12 +112,6 @@ async function take(env: Env, key: string) {
     .bind(key, Date.now())
     .first<Stored>();
   return row ? JSON.parse(row.payload) : undefined;
-}
-function list(value: string | undefined) {
-  return (value || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
 }
 async function limit(env: Env, key: string, max: number) {
   const bucket = Math.floor(Date.now() / 60000);
@@ -232,7 +208,7 @@ async function authenticated(req: Request, env: Env): Promise<Identity> {
     id: string;
     label: string;
   };
-  const admin = list(env.ADMIN_BNET_IDS).includes(stored.subject);
+  const admin = adminSubjects(env).includes(stored.subject);
   return {
     provider: "battlenet",
     id: stored.id,
@@ -508,7 +484,7 @@ async function route(
     const saved = await take(env, `exchange:${await digest(code)}`);
     if (!saved || saved.challenge !== (await digest(verifier)))
       throw new ChangeError("Sign-in expired. Try again.", 401);
-    const admin = list(env.ADMIN_BNET_IDS).includes(saved.subject);
+    const admin = adminSubjects(env).includes(saved.subject);
     const token = random();
     await put(
       env,

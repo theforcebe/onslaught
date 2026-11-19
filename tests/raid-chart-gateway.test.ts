@@ -173,7 +173,6 @@ describe("website RSVP to the published Discord signup", () => {
         expect(background).toBeGreaterThan(0);
         expect(edits).toHaveLength(priorEdits + 1);
         expect(edits.at(-1)).toMatchObject({ url: message, method: "PATCH" });
-        expect(edits.at(-1)!.body).not.toContain(character.name);
         expect(edits.at(-1)!.body).not.toContain(member.label);
         expect(
           sqlite
@@ -187,6 +186,9 @@ describe("website RSVP to the published Discord signup", () => {
       expect((await visibility(true)).response.status).toBe(409);
       expect(edits).toHaveLength(0);
       const tank = await respond("going", main);
+      expect(edits.at(-1)!.body).toContain(
+        "**" + character.name + "** · Druid",
+      );
       expect(tank.fields.map((f) => f.name)).toContain("🛡️ Tanks · 1");
       const healer = await respond("going", alternate);
       expect(healer.description).toContain("**1 going**");
@@ -197,7 +199,7 @@ describe("website RSVP to the published Discord signup", () => {
         "🏹 Ranged · 0",
       ]);
       expect(await receipt()).toMatchObject({
-        myListedCharacters: [],
+        myListedCharacters: [character.id],
         canPublish: false,
       });
       const listed = await visibility(true);
@@ -207,7 +209,9 @@ describe("website RSVP to the published Discord signup", () => {
       expect(
         edits.at(-1)!.embed.fields.find((f) => f.name.includes("Healers"))
           ?.value,
-      ).toContain("**" + character.name + "** · Restoration · Alternate");
+      ).toContain(
+        "**" + character.name + "** · Druid · Restoration · Alternate",
+      );
       expect(edits.at(-1)!.body).not.toContain(member.label);
       expect(await receipt()).toMatchObject({
         myListedCharacters: [character.id],
@@ -227,10 +231,11 @@ describe("website RSVP to the published Discord signup", () => {
       });
       expect((await visibility(false)).response.status).toBe(200);
       expect(edits).toHaveLength(4);
-      expect(edits.at(-1)!.embed).toEqual(healer);
+      expect(edits.at(-1)!.embed.description).toEqual(healer.description);
       expect(edits.at(-1)!.body).not.toContain(character.name);
       expect(await receipt()).toMatchObject({ myListedCharacters: [] });
       const maybe = await respond("tentative", alternate);
+      expect(edits.at(-1)!.body).not.toContain(character.name);
       expect(maybe.description).toBe("**0 going** · 1 maybe · 0 unavailable");
       expect(maybe.fields.map((f) => f.name)).toContain("💚 Healers · 0");
       expect(

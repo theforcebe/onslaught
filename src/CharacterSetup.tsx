@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import "./raid-mobile.css";
 import { ArrowLeft, ArrowRight, Check, Upload } from "lucide-react";
 import { ClassIcon, Field, RoleIcon } from "./components";
 import { Dropdown } from "./Dropdown";
@@ -317,6 +318,7 @@ export function CharacterImport({
   const [step, setStep] = useState(0);
   const setup = useRef<HTMLDivElement>(null);
   useEffect(() => {
+    setup.current?.closest(".modal-body")?.scrollTo({ top: 0 });
     setup.current?.closest("dialog")?.scrollTo({ top: 0 });
   }, [step]);
   const [error, setError] = useState("");

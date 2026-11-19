@@ -1,5 +1,6 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { readFileSync } from "node:fs";
+import { createHmac } from "node:crypto";
 import { privateFixture } from "./access-fixture";
 import { chatDatabase } from "./chat-db";
 import {
@@ -536,6 +537,63 @@ describe("Discord raid signups", () => {
     ).rejects.toThrow("Link your Discord");
     expect(deps.writeRepository).not.toHaveBeenCalled();
   });
+  it("accepts a linked bootstrap admin with no member row and honors their chart privacy", async () => {
+    const { env, deps, click, register, sqlite, store, event, call } =
+      fixture();
+    register();
+    const subject = "712356",
+      key = "raid-admin-fixture",
+      id = createHmac("sha256", key)
+        .update("battlenet:" + subject)
+        .digest("base64url");
+    env.IDENTITY_KEY = key;
+    env.ADMIN_BNET_IDS = " 123, " + subject;
+    store.doc.members = [];
+    const character = store.doc.state.characters[0];
+    character.ownerBattleNet = id;
+    sqlite
+      .prepare("UPDATE discord_links SET member_id=? WHERE discord_id=?")
+      .run(id, user);
+    deps.authenticated = async () => ({
+      provider: "battlenet",
+      id,
+      label: "Fixture admin",
+      admin: true,
+    });
+    await processRaidClick(
+      env,
+      { ...click, data: { custom_id: "raid:chart:absent" } },
+      deps,
+    );
+    expect(store.doc.state.events[0].signups[character.id]).toBe("absent");
+    const status = () => call(signupPath + "?eventId=" + event.id, "GET");
+    expect(await status()).toMatchObject({
+      myListedCharacters: [character.id],
+    });
+    for (const listed of [false, true]) {
+      await handleRaidPublish(
+        new Request(env.PUBLIC_API_URL + signupPath + "/visibility", {
+          method: "POST",
+          body: JSON.stringify({
+            eventId: event.id,
+            characterId: character.id,
+            messageId: post,
+            listed,
+          }),
+        }),
+        env,
+        deps,
+      );
+      expect((await status()).myListedCharacters).toEqual(
+        listed ? [character.id] : [],
+      );
+    }
+    env.ADMIN_BNET_IDS = "123";
+    await expect(processRaidClick(env, click, deps)).rejects.toThrow(
+      "membership",
+    );
+    expect((await status()).myListedCharacters).toEqual([]);
+  });
   it("distinguishes two Feral roles and lets the member switch back to main for this night", async () => {
     const { env, deps, click, store, event, register } = fixture();
     register();
@@ -556,7 +614,7 @@ describe("Discord raid signups", () => {
     store.doc.state.events.push(secondNight);
     const chartClick = { ...click, data: { custom_id: "raid:chart:going" } };
     const prompt = await processRaidClick(env, chartClick, deps);
-    expect(prompt.content).toContain("character name and response will appear");
+    expect(prompt.content).toContain("character and class appear");
     expect(prompt.content).toContain("Alternate");
     const menu = (prompt.components as any)[0].components[0];
     expect(menu.options.map((o: { label: string }) => o.label)).toEqual([

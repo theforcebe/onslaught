@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { adminSubjects } from "./battlenet-identity";
 import type { Env } from "./worker";
 import type { Identity } from "../src/lib/model";
 import {
@@ -118,7 +119,10 @@ export async function discordFetch(
       false,
       503,
     );
-  if (path !== "/applications/@me" && !/^\/(?:channels|users|guilds|oauth2)\//.test(path))
+  if (
+    path !== "/applications/@me" &&
+    !/^\/(?:channels|users|guilds|oauth2)\//.test(path)
+  )
     throw new Error("Unsupported Discord path");
   let response: Response;
   try {
@@ -283,10 +287,15 @@ async function putAuth(env: Env, key: string, payload: unknown) {
 }
 function linkPage(ok: boolean) {
   const back = "https://theforcebe.github.io/onslaught/#discord";
-  if (ok) return new Response(null, {
-    status: 303,
-    headers: { Location: back, "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" },
-  });
+  if (ok)
+    return new Response(null, {
+      status: 303,
+      headers: {
+        Location: back,
+        "Cache-Control": "no-store",
+        "Referrer-Policy": "no-referrer",
+      },
+    });
   return new Response(
     `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><title>Ønslaught Discord connection</title><p>Discord linking could not be completed. Return to Ønslaught and try again.</p><a href="${back}">Return to Discord connection</a>`,
     {
@@ -371,10 +380,7 @@ export async function handleDiscord(
         provider: "battlenet",
         id: session.id,
         label: session.label,
-        admin: (env.ADMIN_BNET_IDS || "")
-          .split(",")
-          .map((x) => x.trim())
-          .includes(session.subject),
+        admin: adminSubjects(env).includes(session.subject),
       };
       if (accessFor(current.document, linkingIdentity).status !== "active")
         return linkPage(false);
@@ -469,7 +475,12 @@ export async function handleDiscord(
           ).all<{ member_id: string; dm_opt_in: number }>()
         : undefined;
     const permissions =
-      (1n << 10n) | (1n << 11n) | (1n << 14n) | (1n << 16n) | (1n << 44n) | (1n << 49n);
+      (1n << 10n) |
+      (1n << 11n) |
+      (1n << 14n) |
+      (1n << 16n) |
+      (1n << 44n) |
+      (1n << 49n);
     return d.json({
       recipients:
         linked?.results

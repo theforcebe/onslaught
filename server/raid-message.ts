@@ -48,7 +48,7 @@ export function raidMessageBody(
       discordLine(event.instance, 240),
       `<t:${stamp(event.start)}:F> – <t:${stamp(event.end)}:t>`,
       interactive
-        ? "Choose your availability below. Responding here lists your character and raid-night role in this channel. Click again to change your role."
+        ? "Choose your availability below. Click again to change your role. Website and Discord signups list your character and class in this channel unless you hide your name in the planner."
         : "Open the raid planner to set your availability for this night.",
       scheduledId ? "Discord’s Interested button sets a reminder." : "",
     ]

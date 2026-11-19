@@ -280,6 +280,7 @@ export function GuildHub(p: Props) {
             <button
               key={t.id}
               role="tab"
+              aria-label={t.label}
               aria-selected={tab === t.id}
               className={tab === t.id ? "active" : ""}
               onClick={() => {
@@ -288,7 +289,10 @@ export function GuildHub(p: Props) {
               }}
             >
               <t.icon size={17} />
-              {t.label}
+              <span className="community-wide-label">{t.label}</span>
+              <span className="community-phone-label">
+                {t.id === "requests" ? "Materials" : t.id === "connection" ? "Discord" : t.label}
+              </span>
             </button>
           ))}
         </div>
@@ -314,7 +318,8 @@ export function GuildHub(p: Props) {
             className="btn text"
             onClick={() => setSelected("connection")}
           >
-            Manage connection
+            <span className="community-wide-label">Manage connection</span>
+            <span className="community-phone-label">Manage</span>
           </button>
         </div>
       )}

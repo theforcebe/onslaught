@@ -1,0 +1,230 @@
+.sidebar .sidebar-close,
+.raid-section-picker,
+.page-heading .import-narrow {
+  display: none;
+}
+
+/* The signup is the primary action even when the desktop art is cropped. */
+@media (max-width: 1200px) {
+  .war-room-banner.board-next-raid > .btn {
+    display: inline-flex;
+    min-height: 44px;
+    white-space: normal;
+  }
+}
+
+@media (max-width: 760px) {
+  .sidebar:not(.open) {
+    visibility: hidden;
+  }
+  .sidebar.open {
+    width: min(320px, calc(100vw - 36px));
+    padding: max(16px, env(safe-area-inset-top)) 14px
+      env(safe-area-inset-bottom);
+    overscroll-behavior: contain;
+  }
+  body:has(.sidebar.open) {
+    overflow: hidden;
+  }
+  .sidebar.open > * {
+    flex-shrink: 0;
+  }
+  .sidebar .sidebar-close {
+    position: absolute;
+    top: max(13px, env(safe-area-inset-top));
+    right: 12px;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border: 1px solid #766074;
+    border-radius: 5px;
+    background: #2b202c;
+  }
+  .sidebar.open .brand {
+    margin-right: 48px;
+    padding: 0 4px 16px;
+  }
+  .sidebar.open .guild-switch {
+    margin-bottom: 12px;
+  }
+  .sidebar.open nav button,
+  .sidebar.open .settings-nav,
+  .sidebar.open .guide-nav {
+    min-height: 44px;
+  }
+  .sidebar.open .sidebar-user {
+    margin-inline: -14px;
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+  body:has(.sidebar.open) .chat-launcher {
+    visibility: hidden;
+  }
+  .main-shell .topbar {
+    min-height: calc(56px + env(safe-area-inset-top));
+    height: auto;
+    padding: env(safe-area-inset-top) max(12px, env(safe-area-inset-right)) 0
+      max(8px, env(safe-area-inset-left));
+    gap: 8px;
+  }
+  .topbar .breadcrumbs {
+    min-width: 0;
+  }
+  .topbar .breadcrumbs strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+  }
+  .breadcrumbs .mobile-only,
+  .top-actions .mode-button,
+  .top-actions .btn.bnet {
+    min-height: 44px;
+  }
+  .breadcrumbs .mobile-only {
+    min-width: 44px;
+  }
+  .topbar .top-actions {
+    gap: 6px;
+    flex: 0 0 auto;
+  }
+  .top-actions:has(.bnet) .live-status {
+    display: none;
+  }
+  .main-shell main {
+    padding-inline: max(14px, env(safe-area-inset-left))
+      max(14px, env(safe-area-inset-right));
+  }
+  main[data-page="overview"] .page-heading {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0 0 16px;
+    padding-bottom: 12px;
+  }
+  main[data-page="overview"] .page-heading > div {
+    min-width: 0;
+  }
+  main[data-page="overview"] .page-heading h1 {
+    margin: 3px 0 2px;
+  }
+  main[data-page="overview"] .page-heading .page-context {
+    overflow-wrap: anywhere;
+  }
+  main[data-page="overview"] .page-heading p {
+    display: none;
+  }
+  .page-heading .import-narrow {
+    display: inline;
+  }
+  .page-heading .import-wide {
+    display: none;
+  }
+  .page-heading > .btn {
+    flex: 0 0 auto;
+    min-height: 44px;
+  }
+  .war-room-banner.board-next-raid {
+    min-height: 0;
+    padding: clamp(18px, 5vw, 30px);
+    gap: 14px;
+    align-content: center;
+  }
+  .board-next-raid > .guild-hall-art {
+    object-position: 69% 20%;
+  }
+  .war-room-banner.board-next-raid:before {
+    background:
+      linear-gradient(90deg, #12101aeb, #18101a98 52%, #20101925),
+      linear-gradient(0deg, #17101cd9, transparent 72%);
+  }
+  .war-room-banner.board-next-raid h2 {
+    margin: 6px 0 8px;
+    max-width: 100%;
+    font-size: clamp(27px, 7.5vw, 39px);
+  }
+  .war-room-banner.board-next-raid p {
+    max-width: 100%;
+    text-shadow: 0 1px 3px #100c14;
+  }
+  .board-next-raid .board-raid-counts {
+    display: inline-grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin: 12px 0 1px;
+  }
+  .board-next-raid .board-raid-counts > div {
+    padding-inline: clamp(7px, 2.7vw, 16px);
+  }
+  .board-next-raid .board-raid-counts dt {
+    font-size: 12px;
+  }
+  .war-room-banner.board-next-raid > .btn {
+    margin: 0;
+    padding: 9px 16px;
+  }
+  .guild-board .watchboard-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .guild-board .panel-title,
+  .guild-board .request-feed-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    align-items: center;
+  }
+  .guild-board .request-feed-row > div {
+    flex: 1 1 125px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .guild-board .panel-title > .btn,
+  .guild-board .request-feed-row > .btn,
+  .guild-board .contributor-strip > .btn {
+    min-height: 44px;
+  }
+  .guild-board .panel-title > .btn {
+    padding-inline: 4px;
+  }
+  .guild-board .dispatch-body {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 640px) {
+  .main-shell .raid-workspace-tabs {
+    display: none;
+  }
+  .raid-section-picker {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid #574454;
+    padding-bottom: 12px;
+  }
+  .raid-section-picker > span {
+    color: #e2cfd5;
+    font-size: 13px;
+  }
+  .raid-section-picker .dropdown {
+    min-width: 0;
+  }
+  .raid-section-picker .dropdown-trigger {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 480px) {
+  .field-guide .field-guide-steps button {
+    min-height: 44px;
+  }
+  .field-guide .field-guide-step-name {
+    display: none;
+  }
+  .field-guide .field-guide-tabs button {
+    min-height: 44px;
+  }
+}

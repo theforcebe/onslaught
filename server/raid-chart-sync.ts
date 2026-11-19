@@ -2,6 +2,7 @@ import type { GuildDocument } from "../src/lib/access";
 import type { RaidAction, RaidEvent } from "../src/lib/model";
 import { config, DiscordError, discordFetch } from "./discord";
 import { raidMessageBody } from "./raid-message";
+import { bootstrapAdminMemberIds } from "./battlenet-identity";
 import type { Env } from "./worker";
 
 type ReadGuild = (env: Env) => Promise<{ document: GuildDocument }>;
@@ -34,25 +35,11 @@ function enqueue(env: Env, id: string, reset: boolean) {
 export async function queueRaidChart(env: Env, eventId: string, reset = false) {
   await enqueue(env, eventId, reset).run();
 }
-export async function recordDiscordChartSignup(
-  env: Env,
-  eventId: string,
-  name?: DiscordNameGrant,
-  interactionId?: string,
-) {
-  if (!name) return queueRaidChart(env, eventId);
-  const clickedAt = interactionId
-    ? Number((BigInt(interactionId) >> 22n) + 1420070400000n)
-    : undefined;
-  return setChartName(env, eventId, name, true, clickedAt);
-}
-
 export async function setChartName(
   env: Env,
   eventId: string,
   name: DiscordNameGrant,
   enabled: boolean,
-  clickedAt?: number,
 ) {
   const scope = [eventId, name.guildId, name.channelId, name.messageId];
   if (!enabled) {
@@ -75,16 +62,8 @@ export async function setChartName(
       `INSERT INTO discord_raid_chart_names(message_id,character_id,member_id)
        SELECT message_id,?,? FROM discord_raid_signups
        WHERE event_id=? AND guild_id=? AND channel_id=? AND message_id=?
-         AND NOT EXISTS(SELECT 1 FROM discord_raid_chart_withdrawals w
-           WHERE w.message_id=discord_raid_signups.message_id AND w.character_id=? AND w.withdrawn_at>=?)
        ON CONFLICT(message_id,character_id) DO UPDATE SET member_id=excluded.member_id`,
-    ).bind(
-      name.characterId,
-      name.memberId,
-      ...scope,
-      name.characterId,
-      clickedAt ?? Number.MAX_SAFE_INTEGER,
-    ),
+    ).bind(name.characterId, name.memberId, ...scope),
     enqueue(env, eventId, false),
   ]);
 }
@@ -98,26 +77,35 @@ export async function chartVisibleIds(
   document: GuildDocument,
 ): Promise<Set<string>> {
   const ids = new Set<string>();
-  if (!messageId) return ids;
-  const { results } = await env.DB.prepare(
-    `SELECT n.character_id,n.member_id FROM discord_raid_chart_names n
-     JOIN discord_raid_signups s ON n.message_id=s.message_id
-     WHERE s.event_id=? AND s.guild_id=? AND s.channel_id=? AND s.message_id=?`,
-  )
-    .bind(eventId, guildId, channelId, messageId)
-    .all<{ character_id: string; member_id: string }>();
+  const hidden = new Map<string, string | null>();
+  if (messageId) {
+    const { results } = await env.DB.prepare(
+      `SELECT w.character_id, n.member_id FROM discord_raid_signups s
+       LEFT JOIN discord_raid_chart_withdrawals w ON w.message_id=s.message_id
+       LEFT JOIN discord_raid_chart_names n ON n.message_id=s.message_id AND n.character_id=w.character_id
+       WHERE s.event_id=? AND s.guild_id=? AND s.channel_id=? AND s.message_id=?`,
+    )
+      .bind(eventId, guildId, channelId, messageId)
+      .all<{ character_id: string | null; member_id: string | null }>();
+    if (!results.length) return ids;
+    for (const row of results)
+      if (row.character_id) hidden.set(row.character_id, row.member_id);
+  }
   const active = new Set(
     document.members.filter((m) => m.status === "active").map((m) => m.id),
   );
-  const owners = new Map(
-    document.state.characters.map((c) => [c.id, c.ownerBattleNet]),
-  );
-  for (const grant of results) {
+  const event = document.state.events.find((e) => e.id === eventId);
+  if (!event) return ids;
+  for (const id of await bootstrapAdminMemberIds(env)) active.add(id);
+  for (const c of document.state.characters) {
+    if (!Object.hasOwn(event.signups, c.id)) continue;
+    if (c.ownerBattleNet && !active.has(c.ownerBattleNet)) continue;
     if (
-      active.has(grant.member_id) &&
-      owners.get(grant.character_id) === grant.member_id
+      hidden.has(c.id) &&
+      (!c.ownerBattleNet || hidden.get(c.id) !== c.ownerBattleNet)
     )
-      ids.add(grant.character_id);
+      continue;
+    ids.add(c.id);
   }
   return ids;
 }
