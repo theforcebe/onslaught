@@ -58,7 +58,6 @@ type SignupLine = ReturnType<typeof namedSignup>;
 type Group = {
   heading: string;
   count: number;
-  bar: string;
   names: SignupLine[];
 };
 type ChartField = { name: string; value: string; inline: true };
@@ -71,7 +70,7 @@ function renderFields(
   const fields: ChartField[] = [];
   for (const group of groups) {
     let name = group.heading + " · " + group.count;
-    let value = group.bar;
+    let value = "";
     const shown = group.names.slice(0, maxPerGroup);
     const lines = shown.map((entry) => entry[detail]);
     const omitted = group.names.length - shown.length;
@@ -84,7 +83,11 @@ function renderFields(
       }
       value += (value ? "\n" : "") + line;
     }
-    fields.push({ name, value, inline: true });
+    fields.push({
+      name,
+      value: value || (group.count ? "Count only" : "No signups"),
+      inline: true,
+    });
   }
   return fields;
 }
@@ -146,14 +149,9 @@ export function raidSignupEmbed(
     const statusOnly = key === "tentative" || key === "absent";
     if ((key === "unassigned" && !count) || (statusOnly && !names.length))
       continue;
-    const filled = confirmed ? Math.round((count / confirmed) * 8) : 0;
-    const bar = statusOnly
-      ? ""
-      : "`" + "█".repeat(filled) + "░".repeat(8 - filled) + "`";
-    groups.push({ heading: headings[key], count, bar, names });
+    groups.push({ heading: headings[key], count, names });
   }
   const title = "Raid composition";
-  const footer = { text: "Bars show each role’s share of confirmed signups." };
   const description =
     "**" +
     confirmed +
@@ -166,10 +164,6 @@ export function raidSignupEmbed(
     title,
     color: 0xa73142,
     description,
-    fields: fitFields(
-      groups,
-      6000 - title.length - description.length - footer.text.length,
-    ),
-    footer,
+    fields: fitFields(groups, 6000 - title.length - description.length),
   };
 }

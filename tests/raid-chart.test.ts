@@ -60,12 +60,14 @@ describe("Discord raid chart", () => {
     ]) {
       expect(json).not.toContain(privateValue);
     }
-    expect(chart.fields[2].value).toContain("████░░░░");
+    expect(chart.fields[2].value).toBe("Count only");
+    expect(json).not.toMatch(/[█░]/);
+    expect(chart).not.toHaveProperty("footer");
   });
-  it("lists only opted-in character names, including their main, alternate or previously selected build", () => {
+  it("lists visible characters with their main, alternate or previously selected build", () => {
     const visible = new Set(["oak"]);
     const alternate = raidSignupEmbed(event, [druid, mage], visible);
-    expect(alternate.fields[2].value).toContain(
+    expect(alternate.fields[2].value).toBe(
       "**Oak** · Druid · Feral · Alternate",
     );
     expect(JSON.stringify(alternate)).not.toContain("Ember");
@@ -126,7 +128,7 @@ describe("Discord raid chart", () => {
   it("renders an empty raid without implying any confirmed roles", () => {
     const chart = raidSignupEmbed({ ...event, signups: {} }, [druid]);
     expect(chart.fields).toHaveLength(4);
-    for (const field of chart.fields) expect(field.value).toContain("░░░░░░░░");
+    for (const field of chart.fields) expect(field.value).toBe("No signups");
     expect(chart.description).toBe("**0 going** · 0 maybe · 0 unavailable");
   });
   it("escapes headings, links and mentions and keeps each label within its UTF-16 budget", () => {
@@ -241,7 +243,6 @@ describe("Discord raid chart", () => {
     const totalLength = [
       chart.title,
       chart.description,
-      chart.footer.text,
       ...chart.fields.flatMap((f) => [f.name, f.value]),
     ].join("").length;
     expect(totalLength).toBeLessThanOrEqual(6000);
