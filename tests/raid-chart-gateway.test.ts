@@ -14,7 +14,15 @@ describe("website RSVP to the published Discord signup", () => {
       sqlite.exec(readFileSync("server/raid-signups.sql", "utf8"));
       const guild = "110000000000000001",
         channel = "110000000000000002",
-        post = "110000000000000003";
+        post = "110000000000000003",
+        app = "110000000000000004",
+        druidEmoji = "110000000000000005";
+      sqlite
+        .prepare("INSERT INTO discord_config(key,payload) VALUES(?,?)")
+        .run(
+          "class-emojis:v1:" + app,
+          JSON.stringify({ complete: true, ids: { druid: druidEmoji } }),
+        );
       let guildDoc = privateFixture();
       const member = guildDoc.members[0],
         character = guildDoc.state.characters[0],
@@ -66,6 +74,7 @@ describe("website RSVP to the published Discord signup", () => {
         IDENTITY_KEY: "fixture",
         ADMIN_BNET_IDS: "",
         DISCORD_BOT_TOKEN: "fixture",
+        DISCORD_CLIENT_ID: app,
       };
       const repo = "https://api.github.com/repos/test/guild";
       const file = repo + "/contents/data/guild.json";
@@ -187,7 +196,7 @@ describe("website RSVP to the published Discord signup", () => {
       expect(edits).toHaveLength(0);
       const tank = await respond("going", main);
       expect(edits.at(-1)!.body).toContain(
-        "**" + character.name + "** · Druid",
+        "<:ons_druid:" + druidEmoji + "> **" + character.name + "**",
       );
       expect(tank.fields.map((f) => f.name)).toContain("🛡️ Tanks · 1");
       const healer = await respond("going", alternate);
@@ -209,9 +218,7 @@ describe("website RSVP to the published Discord signup", () => {
       expect(
         edits.at(-1)!.embed.fields.find((f) => f.name.includes("Healers"))
           ?.value,
-      ).toContain(
-        "**" + character.name + "** · Druid · Restoration · Alternate",
-      );
+      ).toBe("<:ons_druid:" + druidEmoji + "> **" + character.name + "**");
       expect(edits.at(-1)!.body).not.toContain(member.label);
       expect(await receipt()).toMatchObject({
         myListedCharacters: [character.id],

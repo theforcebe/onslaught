@@ -2,6 +2,7 @@ import type { GuildDocument } from "../src/lib/access";
 import type { RaidAction, RaidEvent } from "../src/lib/model";
 import { config, DiscordError, discordFetch } from "./discord";
 import { raidMessageBody } from "./raid-message";
+import { classEmojis } from "./class-emojis";
 import { bootstrapAdminMemberIds } from "./battlenet-identity";
 import type { Env } from "./worker";
 
@@ -193,6 +194,7 @@ async function refreshOne(env: Env, read: ReadGuild, eventId: string) {
             !!row.interactive,
             row.scheduled_id,
             row.guild_id,
+            await classEmojis(env),
           );
           // Repository reads can be slow. Verify ownership one last time and
           // allow enough time for the bounded Discord PATCH to finish.

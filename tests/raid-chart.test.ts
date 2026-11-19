@@ -37,6 +37,10 @@ const event: RaidEvent = {
   signups: { oak: "going", ember: "going" },
   signupBuilds: { oak: { spec: "Feral", role: "melee" } },
 };
+const emojis = {
+  mage: "<:onslaught_mage:123456789012345678>",
+  druid: "<:onslaught_druid:234567890123456789>",
+};
 
 describe("Discord raid chart", () => {
   it("counts the chosen role for the night while keeping character details private by default", () => {
@@ -64,27 +68,33 @@ describe("Discord raid chart", () => {
     expect(json).not.toMatch(/[█░]/);
     expect(chart).not.toHaveProperty("footer");
   });
-  it("lists visible characters with their main, alternate or previously selected build", () => {
+  it("lists only the class emoji and visible name under the selected role for that night", () => {
     const visible = new Set(["oak"]);
-    const alternate = raidSignupEmbed(event, [druid, mage], visible);
-    expect(alternate.fields[2].value).toBe(
-      "**Oak** · Druid · Feral · Alternate",
-    );
+    const alternate = raidSignupEmbed(event, [druid, mage], visible, emojis);
+    expect(alternate.fields[2].value).toBe(emojis.druid + " **Oak**");
     expect(JSON.stringify(alternate)).not.toContain("Ember");
+    expect(JSON.stringify(alternate)).not.toContain(emojis.mage);
     const historic = raidSignupEmbed(
       event,
       [{ ...druid, alternateBuilds: [] }, mage],
       visible,
+      emojis,
     );
-    expect(historic.fields[2].value).toContain(
-      "**Oak** · Druid · Feral · Raid build",
-    );
+    expect(historic.fields[2].value).toBe(emojis.druid + " **Oak**");
     const main = raidSignupEmbed(
       { ...event, signupBuilds: undefined },
       [druid, mage],
       visible,
+      emojis,
     );
-    expect(main.fields[0].value).toContain("**Oak** · Druid · Feral · Main");
+    expect(main.fields[0].value).toBe(emojis.druid + " **Oak**");
+    const partial = raidSignupEmbed(
+      event,
+      [druid, mage],
+      new Set(["oak", "ember"]),
+      { druid: emojis.druid },
+    );
+    expect(partial.fields[3].value).toBe("**Ember** · Mage");
   });
   it("counts new answers once, sorts named entries, and keeps pending or unavailable signups out of the confirmed roles", () => {
     const maybeEvent: RaidEvent = {
@@ -100,13 +110,14 @@ describe("Discord raid chart", () => {
       maybeEvent,
       [mage, druid],
       new Set(["oak", "ember"]),
+      emojis,
     );
     expect(chart.description).toBe("**1 going** · 2 maybe · 1 unavailable");
     expect(
       chart.fields.find((f) => f.name.includes("Role unassigned"))?.name,
     ).toContain("1");
     expect(chart.fields.find((f) => f.name.includes("Maybe"))?.value).toBe(
-      "**Ember** · Mage · Frost · Main · ranged\n**Oak** · Druid · Feral · Alternate · melee",
+      emojis.mage + " **Ember**\n" + emojis.druid + " **Oak**",
     );
     expect(
       chart.fields.find((f) => f.name.includes("Unavailable")),
@@ -122,6 +133,7 @@ describe("Discord raid chart", () => {
         },
         [druid, mage],
         new Set(["ember", "oak"]),
+        emojis,
       ),
     ).toEqual(chart);
   });
@@ -151,11 +163,11 @@ describe("Discord raid chart", () => {
     ).not.toContain("44772");
   });
   it.each([
-    { size: 40, compact: false },
-    { size: 105, compact: true },
+    { size: 40, sharedIcon: false },
+    { size: 105, sharedIcon: true },
   ])(
     "shows every name and class for a $size-character role list",
-    ({ size, compact }) => {
+    ({ size, sharedIcon }) => {
       const people = Array.from({ length: size }, (_, index) => ({
         ...mage,
         id: "mage-" + index,
@@ -171,6 +183,7 @@ describe("Discord raid chart", () => {
         raid,
         people,
         new Set(people.map((character) => character.id)),
+        emojis,
       );
       const ranged = chart.fields.filter((field) =>
         field.name.includes("Ranged"),
@@ -184,15 +197,14 @@ describe("Discord raid chart", () => {
       ).toBe(true);
       expect(ranged.every((field) => field.value.length <= 1024)).toBe(true);
       const lines = ranged.flatMap((field) => field.value.split("\n"));
-      for (const character of people) {
-        expect(lines).toContain(
-          "**" +
-            character.name +
-            "** · Mage" +
-            (compact ? "" : " · Frost · Main"),
-        );
-      }
-      expect(lines.join("\n")).not.toMatch(/\+\d+ more/);
+      expect(lines.every((line) => line.startsWith(emojis.mage + " "))).toBe(
+        true,
+      );
+      expect(lines.some((line) => line.includes(", "))).toBe(sharedIcon);
+      const names = lines
+        .flatMap((line) => line.slice(emojis.mage.length + 1).split(", "))
+        .sort();
+      expect(names).toEqual(people.map((c) => "**" + c.name + "**").sort());
     },
   );
   it("keeps the full counts when 500 signups exceed Discord's field and embed budgets", () => {
@@ -218,6 +230,7 @@ describe("Discord raid chart", () => {
       crowded,
       people,
       new Set(people.map((c) => c.id)),
+      emojis,
     );
     expect(chart.description).toBe(
       "**300 going** · 100 maybe · 100 unavailable",

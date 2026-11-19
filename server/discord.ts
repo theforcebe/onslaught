@@ -121,6 +121,10 @@ export async function discordFetch(
     );
   if (
     path !== "/applications/@me" &&
+    !(
+      snowflake.safeParse(env.DISCORD_CLIENT_ID).success &&
+      path === `/applications/${env.DISCORD_CLIENT_ID}/emojis`
+    ) &&
     !/^\/(?:channels|users|guilds|oauth2)\//.test(path)
   )
     throw new Error("Unsupported Discord path");

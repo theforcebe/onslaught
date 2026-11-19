@@ -8,6 +8,7 @@ import {
 import type { Identity, RaidEvent } from "../src/lib/model";
 import { ChangeError } from "../src/lib/reducer";
 import { config, DiscordError, discordFetch } from "./discord";
+import { classEmojis } from "./class-emojis";
 import {
   attendanceLabels,
   calendarUrl,
@@ -265,6 +266,7 @@ async function publish(
       setting.interactive,
       scheduled.id,
       guildId,
+      await classEmojis(env),
     );
     const sent = await discordFetch(
       env,

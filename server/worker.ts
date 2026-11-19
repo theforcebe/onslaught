@@ -14,6 +14,7 @@ import {
 import type { GuildDocument } from "../src/lib/access";
 import { ZodError } from "zod";
 import { handleDiscord } from "./discord";
+import { provisionClassEmojis } from "./class-emojis";
 import { adminSubjects, base64url, pseudonym } from "./battlenet-identity";
 import { handleRaidPublish } from "./discord-raids";
 import { handleRaidInteraction } from "./raid-interactions";
@@ -636,7 +637,11 @@ export default {
     env: Env,
     ctx: ExecutionContext,
   ) {
-    ctx.waitUntil(flushRaidCharts(env, readRepository));
+    ctx.waitUntil(
+      provisionClassEmojis(env).finally(() =>
+        flushRaidCharts(env, readRepository),
+      ),
+    );
   },
   async fetch(req: Request, env: Env, ctx: ExecutionContext) {
     let response: Response;

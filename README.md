@@ -72,7 +72,7 @@ npm audit
 
 Item data is provided by **[TheWoWDB](https://thewowdb.com/developers/)**. The adapter calls only the `forever` namespace, limits request throughput, caches successful responses for one hour, and retains unresolved IDs. It never sends character exports or authentication credentials to the item service. See [data provenance](docs/DATA.md).
 
-Class artwork is served by Blizzard’s official render host. World of Warcraft and its artwork belong to Blizzard Entertainment. This is an independent guild tool, not an official Blizzard product.
+Website class icons are served by Blizzard’s official render host. The Discord signup uses the nine WoW Forever class symbols from the artwork supplied by the guild. Ønslaught is an independent guild tool. World of Warcraft and its artwork belong to Blizzard Entertainment. [World of Warcraft Vector Class Icons by Harlan Elam](https://dribbble.com/shots/6175355-World-of-Warcraft-Vector-Class-Icons)
 
 The JSON architecture is intended for one guild, with revision conflicts rather than simultaneous merging. Large histories or many guilds should move operational data to a database with repository snapshots. Source changes belong in pull requests; shared raid changes go through the authenticated gateway.
 

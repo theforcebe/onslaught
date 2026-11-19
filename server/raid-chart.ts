@@ -1,5 +1,10 @@
-import { ROLES, label, type Character, type RaidEvent } from "../src/lib/model";
-import { normalizeSpec, signupBuildKind } from "../src/lib/raid";
+import {
+  ROLES,
+  label,
+  type Character,
+  type RaidEvent,
+  type WowClass,
+} from "../src/lib/model";
 
 /** Escape a single line of guild-authored text before placing it in Discord Markdown. */
 export function discordLine(value: string, maxLength = 120): string {
@@ -39,19 +44,11 @@ const headings: Record<Bucket, string> = {
   absent: "➖ Unavailable",
 };
 
-function namedSignup(c: Character, event: RaidEvent, showRole: boolean) {
-  const selected = event.signupBuilds?.[c.id];
-  const role = selected?.role ?? c.role;
-  const spec = normalizeSpec(c.class, selected?.spec ?? c.spec);
+export type ClassEmojis = Partial<Record<WowClass, string>>;
+function namedSignup(c: Character) {
   const name =
     discordLine(c.name.replace(/#\d{3,}\b/gu, ""), 48) || "Unnamed character";
-  const compact = "**" + name + "** · " + label(c.class);
-  const details = [compact];
-  if (spec && role !== "unassigned") {
-    details.push(spec, signupBuildKind(c, { spec, role }));
-  }
-  if (showRole && role !== "unassigned") details.push(role);
-  return { compact, full: details.join(" · ") };
+  return { name: "**" + name + "**", cls: c.class };
 }
 
 type SignupLine = ReturnType<typeof namedSignup>;
@@ -62,9 +59,43 @@ type Group = {
 };
 type ChartField = { name: string; value: string; inline: true };
 
+function rosterLines(
+  entries: SignupLine[],
+  emojis: ClassEmojis,
+  groupByClass: boolean,
+) {
+  if (!groupByClass)
+    return entries.map(({ cls, name }) =>
+      emojis[cls] ? emojis[cls] + " " + name : name + " · " + label(cls),
+    );
+  // A custom emoji's full Discord ID counts towards the embed budget. On
+  // crowded nights, share an icon across names of the same class and role.
+  const byClass = new Map<WowClass, string[]>();
+  for (const { cls, name } of entries) {
+    const names = byClass.get(cls) ?? [];
+    names.push(name);
+    byClass.set(cls, names);
+  }
+  const lines: string[] = [];
+  for (const [cls, names] of byClass) {
+    const prefix = (emojis[cls] || label(cls)) + " ";
+    let line = prefix;
+    for (const name of names) {
+      if (line.length + 2 + name.length > 1024) {
+        lines.push(line);
+        line = prefix;
+      }
+      line += (line === prefix ? "" : ", ") + name;
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
 function renderFields(
   groups: Group[],
-  detail: keyof SignupLine,
+  emojis: ClassEmojis,
+  groupByClass: boolean,
   maxPerGroup: number,
 ) {
   const fields: ChartField[] = [];
@@ -72,7 +103,7 @@ function renderFields(
     let name = group.heading + " · " + group.count;
     let value = "";
     const shown = group.names.slice(0, maxPerGroup);
-    const lines = shown.map((entry) => entry[detail]);
+    const lines = rosterLines(shown, emojis, groupByClass);
     const omitted = group.names.length - shown.length;
     if (omitted) lines.push("+" + omitted + " more");
     for (const line of lines) {
@@ -92,7 +123,11 @@ function renderFields(
   return fields;
 }
 
-function fitFields(groups: Group[], availableLength: number) {
+function fitFields(
+  groups: Group[],
+  emojis: ClassEmojis,
+  availableLength: number,
+) {
   function fits(fields: ChartField[]) {
     return (
       fields.length <= 25 &&
@@ -102,8 +137,8 @@ function fitFields(groups: Group[], availableLength: number) {
       ) <= availableLength
     );
   }
-  for (const detail of ["full", "compact"] as const) {
-    const fields = renderFields(groups, detail, Infinity);
+  for (const groupByClass of [false, true]) {
+    const fields = renderFields(groups, emojis, groupByClass, Infinity);
     if (fits(fields)) return fields;
   }
   // Share the remaining space across roles when even the name/class list is too long.
@@ -111,16 +146,17 @@ function fitFields(groups: Group[], availableLength: number) {
   let high = Math.max(...groups.map((group) => group.names.length));
   while (low < high) {
     const cap = Math.ceil((low + high) / 2);
-    if (fits(renderFields(groups, "compact", cap))) low = cap;
+    if (fits(renderFields(groups, emojis, true, cap))) low = cap;
     else high = cap - 1;
   }
-  return renderFields(groups, "compact", low);
+  return renderFields(groups, emojis, true, low);
 }
 
 export function raidSignupEmbed(
   event: RaidEvent,
   characters: readonly Character[],
   visibleCharacterIds?: ReadonlySet<string>,
+  classEmojis: ClassEmojis = {},
 ) {
   const people = new Map(characters.map((c) => [c.id, c]));
   const buckets = new Map<Bucket, { count: number; names: SignupLine[] }>();
@@ -134,8 +170,7 @@ export function raidSignupEmbed(
     if (status === "going") confirmed++;
     const bucket = buckets.get(key) ?? { count: 0, names: [] };
     bucket.count++;
-    if (c && visibleCharacterIds?.has(id))
-      bucket.names.push(namedSignup(c, event, status !== "going"));
+    if (c && visibleCharacterIds?.has(id)) bucket.names.push(namedSignup(c));
     buckets.set(key, bucket);
   }
   const groups: Group[] = [];
@@ -144,7 +179,7 @@ export function raidSignupEmbed(
     const count = item?.count ?? 0;
     const names =
       item?.names.sort((a, b) =>
-        a.full < b.full ? -1 : a.full > b.full ? 1 : 0,
+        a.name < b.name ? -1 : a.name > b.name ? 1 : a.cls.localeCompare(b.cls),
       ) ?? [];
     const statusOnly = key === "tentative" || key === "absent";
     if ((key === "unassigned" && !count) || (statusOnly && !names.length))
@@ -164,6 +199,10 @@ export function raidSignupEmbed(
     title,
     color: 0xa73142,
     description,
-    fields: fitFields(groups, 6000 - title.length - description.length),
+    fields: fitFields(
+      groups,
+      classEmojis,
+      6000 - title.length - description.length,
+    ),
   };
 }

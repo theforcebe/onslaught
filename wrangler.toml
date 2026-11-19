@@ -9,6 +9,11 @@ enabled = false
 [triggers]
 crons = ["*/5 * * * *"]
 
+[[rules]]
+type = "Data"
+globs = ["**/class-emojis/*.png"]
+fallthrough = true
+
 [vars]
 APP_ORIGIN = "https://theforcebe.github.io"
 PUBLIC_API_URL = "https://onslaught-gateway.onslaught-raid.workers.dev"

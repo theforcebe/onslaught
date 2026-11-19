@@ -1,5 +1,5 @@
 import type { Character, RaidEvent } from "../src/lib/model";
-import { discordLine, raidSignupEmbed } from "./raid-chart";
+import { discordLine, raidSignupEmbed, type ClassEmojis } from "./raid-chart";
 
 export const raidUrl = (eventId: string) =>
   "https://theforcebe.github.io/onslaught/#planner?raid=" +
@@ -19,6 +19,7 @@ export function raidMessageBody(
   interactive: boolean,
   scheduledId: string | null,
   guildId: string,
+  classEmojis?: ClassEmojis,
 ) {
   const buttons: Array<Record<string, unknown>> = interactive
     ? Object.entries(attendanceLabels).map(([status, label]) => ({
@@ -54,7 +55,7 @@ export function raidMessageBody(
     ]
       .filter(Boolean)
       .join("\n"),
-    embeds: [raidSignupEmbed(event, characters, visibleIds)],
+    embeds: [raidSignupEmbed(event, characters, visibleIds, classEmojis)],
     allowed_mentions: { parse: [] },
     components: [{ type: 1, components: buttons }],
   };
