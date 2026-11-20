@@ -7,6 +7,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "worker:dev": "wrangler dev",
     "worker:deploy": "wrangler deploy",
     "check:data": "tsx scripts/validate-data.ts",
@@ -20,6 +21,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261110.1",
+    "@playwright/test": "^1.65.1",
     "@types/node": "^22.15.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",

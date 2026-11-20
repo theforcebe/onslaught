@@ -15,7 +15,12 @@ import type { GuildDocument } from "../src/lib/access";
 import { ZodError } from "zod";
 import { handleDiscord } from "./discord";
 import { provisionClassEmojis } from "./class-emojis";
-import { adminSubjects, base64url, pseudonym } from "./battlenet-identity";
+import {
+  adminSubjects,
+  base64url,
+  bootstrapAdminMemberIds,
+  pseudonym,
+} from "./battlenet-identity";
 import { handleRaidPublish } from "./discord-raids";
 import { handleRaidInteraction } from "./raid-interactions";
 import {
@@ -248,7 +253,10 @@ export async function readRepository(env: Env) {
     throw new ChangeError("A private guild data repository is required.", 503);
   const url = `https://api.github.com/repos/${env.GITHUB_REPOSITORY}/contents/data/guild.json`;
   const r = await fetch(`${url}?ref=main`, {
-    headers: githubHeaders(env),
+    headers: {
+      ...githubHeaders(env),
+      Accept: "application/vnd.github.object+json",
+    },
     redirect: "manual",
   });
   if (!r.ok)
@@ -256,15 +264,46 @@ export async function readRepository(env: Env) {
       "The guild repository is unavailable. No changes were saved.",
       502,
     );
-  const file = (await r.json()) as { sha: string; content: string };
-  const bytes = Uint8Array.from(atob(file.content.replace(/\s/g, "")), (c) =>
-    c.charCodeAt(0),
-  );
-  return {
-    document: DocumentSchema.parse(JSON.parse(new TextDecoder().decode(bytes))),
-    sha: file.sha,
-    url,
+  const file = (await r.json()) as {
+    sha: string;
+    content: string;
+    encoding?: string;
   };
+  let data: unknown;
+  if (file.encoding === "none" && /^[a-f\d]{40}$/i.test(file.sha)) {
+    // GitHub omits inline contents above 1 MB. Pin the second read to this
+    // blob so concurrent edits cannot pair a new document with an older SHA.
+    const blob = await fetch(
+      `https://api.github.com/repos/${env.GITHUB_REPOSITORY}/git/blobs/${file.sha}`,
+      {
+        headers: {
+          ...githubHeaders(env),
+          Accept: "application/vnd.github.raw+json",
+        },
+        redirect: "manual",
+      },
+    );
+    if (!blob.ok)
+      throw new ChangeError(
+        "The guild repository is unavailable. No changes were saved.",
+        502,
+      );
+    data = await blob.json();
+  } else {
+    const bytes = Uint8Array.from(atob(file.content.replace(/\s/g, "")), (c) =>
+      c.charCodeAt(0),
+    );
+    data = JSON.parse(new TextDecoder().decode(bytes));
+  }
+  const document = DocumentSchema.parse(data);
+  const owners = await bootstrapAdminMemberIds(env);
+  for (const member of document.members) {
+    if (owners.includes(member.id)) {
+      member.status = "active";
+      member.role = "admin";
+    }
+  }
+  return { document, sha: file.sha, url };
 }
 async function writeRepository(
   env: Env,
@@ -274,7 +313,9 @@ async function writeRepository(
 ) {
   const bytes = encoder.encode(JSON.stringify(document, null, 2) + "\n");
   let binary = "";
-  for (const b of bytes) binary += String.fromCharCode(b);
+  for (let i = 0; i < bytes.length; i += 8192) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  }
   const r = await fetch(url, {
     method: "PUT",
     redirect: "manual",
@@ -569,6 +610,7 @@ async function route(
       current.document,
       identity,
       await boundedJSON(req),
+      await bootstrapAdminMemberIds(env),
     );
     if (next.state.revision !== current.document.state.revision) {
       await writeRepository(env, current.url, current.sha, next);

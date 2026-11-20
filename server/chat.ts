@@ -43,23 +43,36 @@ const message = (r: Row): ChatMessage => ({
 });
 // Only membership is cached, in private D1, for at most 15 seconds. Failed refreshes fail closed.
 async function members(env: Env, deps: Dependencies): Promise<Member[]> {
-  const hit = await env.DB.prepare(
-    "SELECT payload FROM chat_membership WHERE key=? AND expires_at>?",
-  )
-    .bind("guild", Date.now())
-    .first<{ payload: string }>();
-  if (hit) return z.array(MemberSchema).parse(JSON.parse(hit.payload));
-  const current = (await deps.readRepository(env)).document.members;
-  await env.DB.prepare(
-    "INSERT INTO chat_membership(key,payload,expires_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET payload=excluded.payload,expires_at=excluded.expires_at",
-  )
-    .bind("guild", JSON.stringify(current), Date.now() + 15000)
-    .run();
-  return current;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const previous = await env.DB.prepare(
+      "SELECT payload,expires_at FROM chat_membership WHERE key='guild'",
+    ).first<{ payload: string; expires_at: number }>();
+    if (previous && previous.expires_at > Date.now())
+      return z.array(MemberSchema).parse(JSON.parse(previous.payload));
+    const current = (await deps.readRepository(env)).document.members;
+    // A membership change can finish while GitHub is responding. Only use
+    // this snapshot if the cache entry we started with is still current.
+    const filled = await env.DB.prepare(
+      `INSERT INTO chat_membership(key,payload,expires_at) VALUES('guild',?,?)
+       ON CONFLICT(key) DO UPDATE SET payload=excluded.payload,expires_at=excluded.expires_at
+       WHERE chat_membership.expires_at=? AND chat_membership.payload=? RETURNING key`,
+    )
+      .bind(
+        JSON.stringify(current),
+        Date.now() + 15000,
+        previous?.expires_at ?? null,
+        previous?.payload ?? null,
+      )
+      .first();
+    if (filled) return current;
+  }
+  throw new ChangeError("Guild membership is updating. Please try again.", 503);
 }
 export async function invalidateChatMembers(env: Env) {
-  await env.DB.prepare("DELETE FROM chat_membership WHERE key=?")
-    .bind("guild")
+  await env.DB.prepare(
+    "INSERT INTO chat_membership(key,payload,expires_at) VALUES('guild',?,0) ON CONFLICT(key) DO UPDATE SET payload=excluded.payload,expires_at=0",
+  )
+    .bind(crypto.randomUUID())
     .run();
 }
 export function conversation(

@@ -186,10 +186,12 @@ export function Form({
   );
 }
 export function Meter({
+  label,
   value,
   max = 100,
   color,
 }: {
+  label: string;
   value: number;
   max?: number;
   color?: string;
@@ -198,6 +200,7 @@ export function Meter({
     <div
       className="meter"
       role="progressbar"
+      aria-label={label}
       aria-valuenow={value}
       aria-valuemin={0}
       aria-valuemax={Math.max(max, value)}

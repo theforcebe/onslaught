@@ -1,9 +1,10 @@
 import {
   boundedItemJSON,
-  ITEM_FRESH_MS,
+  itemFreshUntil,
   ITEM_STALE_MS,
   itemParams,
   parseWowhead,
+  retryDelay,
   wowheadURL,
 } from "../src/lib/item-data";
 import type { ItemResult } from "../src/lib/item-data";
@@ -27,24 +28,21 @@ export async function serveItemSearch(
   )
     return new Response("Enter 2–64 characters", { status: 400 });
   const key = new Request(
-    `${url.origin}/item-search/v3?q=${encodeURIComponent(q)}`,
+    `${url.origin}/item-search/v4?q=${encodeURIComponent(q)}`,
   );
   const cached = await cache.match(key).catch(() => undefined);
   if (cached) {
-    const data = (await cached.json()) as {
-      available: boolean;
-      provider?: string;
-      retryAfter?: number;
-    };
-    return new Response(JSON.stringify(data), {
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": `public, max-age=${data.available ? (data.provider === "thewowdb" ? 3600 : 43200) : data.retryAfter || 60}`,
-        "X-Content-Type-Options": "nosniff",
-      },
-    });
+    const data = (await cached.json()) as { expiresAt: number };
+    const remaining = Math.ceil((data.expiresAt - Date.now()) / 1000);
+    if (remaining > 0)
+      return Response.json(data, {
+        headers: {
+          "Cache-Control": `public, max-age=${remaining}`,
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
   }
-  let pending = searchFlight.get(q);
+  let pending = searchFlight.get(key.url);
   if (!pending) {
     pending = (async () => {
       await checkRate();
@@ -68,6 +66,8 @@ export async function serveItemSearch(
             headers: { Accept: "application/json" },
           },
         );
+        if (r.status === 429)
+          retryAfter = retryDelay(r.headers.get("Retry-After"));
         if (r.ok) {
           const data = (await boundedItemJSON(r)) as { results?: unknown[] };
           if (Array.isArray(data?.results)) {
@@ -110,8 +110,8 @@ export async function serveItemSearch(
           );
           if (r.status === 429)
             retryAfter = Math.max(
-              60,
-              Math.min(3600, Number(r.headers.get("Retry-After")) || 60),
+              retryAfter,
+              retryDelay(r.headers.get("Retry-After")),
             );
           if (r.ok) {
             const data = (await boundedItemJSON(r)) as {
@@ -163,25 +163,27 @@ export async function serveItemSearch(
           /* Both providers failing leaves manual item entry available. */
         }
       }
+      const ttl = ok ? (provider === "thewowdb" ? 3600 : 43200) : retryAfter;
       const response = new Response(
         JSON.stringify({
           results,
           available: ok,
           provider,
+          expiresAt: Date.now() + ttl * 1000,
           ...(!ok ? { retryAfter } : {}),
         }),
         {
           headers: {
             "Content-Type": "application/json",
-            "Cache-Control": `public, max-age=${ok ? (provider === "thewowdb" ? 3600 : 43200) : retryAfter}`,
+            "Cache-Control": `public, max-age=${ttl}`,
             "X-Content-Type-Options": "nosniff",
           },
         },
       );
       await cache.put(key, response.clone()).catch(() => {});
       return response;
-    })().finally(() => searchFlight.delete(q));
-    searchFlight.set(q, pending);
+    })().finally(() => searchFlight.delete(key.url));
+    searchFlight.set(key.url, pending);
   }
   return (await pending).clone();
 }
@@ -216,17 +218,8 @@ export async function serveItem(
   } catch {
     /* cache is optional */
   }
-  const age = Date.now() - (cached?.checkedAt || 0),
-    ttl =
-      cached?.status === "resolved"
-        ? ITEM_FRESH_MS
-        : cached?.status === "unresolved"
-          ? 300000
-          : 60000;
   let result =
-    cached && (age < ttl || (cached.retryAt || 0) > Date.now())
-      ? cached
-      : undefined;
+    cached && itemFreshUntil(cached) > Date.now() ? cached : undefined;
   if (!result) {
     let pending = inFlight.get(key.url);
     if (!pending) {
@@ -241,6 +234,9 @@ export async function serveItem(
           });
           if (r.status === 404)
             next = { status: "unresolved", checkedAt: Date.now() };
+          else if (r.status === 429)
+            next.retryAt =
+              Date.now() + 1000 * retryDelay(r.headers.get("Retry-After"));
           else if (r.ok) {
             const item = parseWowhead(
               id,
@@ -256,15 +252,23 @@ export async function serveItem(
         if (
           next.status === "unavailable" &&
           cached?.status === "resolved" &&
-          age < ITEM_STALE_MS
+          Date.now() < cached.checkedAt + ITEM_STALE_MS
         )
-          next = { ...cached, stale: true, retryAt: Date.now() + 60000 };
+          next = {
+            ...cached,
+            stale: true,
+            retryAt: next.retryAt ?? Date.now() + 60000,
+          };
         try {
+          const keepUntil =
+            next.status === "resolved"
+              ? next.checkedAt + ITEM_STALE_MS
+              : itemFreshUntil(next);
           await cache.put(
             key,
             new Response(JSON.stringify(next), {
               headers: {
-                "Cache-Control": `public, max-age=${next.status === "resolved" ? Math.max(1, Math.floor((ITEM_STALE_MS - (Date.now() - next.checkedAt)) / 1000)) : next.status === "unresolved" ? 300 : 60}`,
+                "Cache-Control": `public, max-age=${Math.max(0, Math.ceil((keepUntil - Date.now()) / 1000))}`,
               },
             }),
           );
@@ -280,7 +284,7 @@ export async function serveItem(
   return new Response(JSON.stringify(result), {
     headers: {
       "Content-Type": "application/json",
-      "Cache-Control": `public, max-age=${result.stale ? 60 : result.status === "resolved" ? 3600 : 60}`,
+      "Cache-Control": `public, max-age=${Math.max(0, Math.min(3600, Math.ceil((itemFreshUntil(result) - Date.now()) / 1000)))}`,
       "X-Content-Type-Options": "nosniff",
       "Referrer-Policy": "no-referrer",
     },
@@ -300,10 +304,25 @@ export function publicItemCache(
         if (hit) return hit;
       } catch {}
       const row = await db
-        .prepare("SELECT payload FROM item_cache WHERE key=? AND expires_at>?")
+        .prepare(
+          "SELECT payload,expires_at FROM item_cache WHERE key=? AND expires_at>?",
+        )
         .bind(key, Date.now())
-        .first<{ payload: string }>();
-      return row ? new Response(row.payload) : undefined;
+        .first<{ payload: string; expires_at: number }>();
+      if (!row) return undefined;
+      const remaining = Math.max(
+        0,
+        Math.floor((row.expires_at - Date.now()) / 1000),
+      );
+      const response = new Response(row.payload, {
+        headers: { "Cache-Control": `public, max-age=${remaining}` },
+      });
+      try {
+        if (remaining) await edge.put(request, response.clone());
+      } catch {
+        /* D1 remains available if edge storage is disabled. */
+      }
+      return response;
     },
     async put(request: RequestInfo | URL, response: Response) {
       const key = request instanceof Request ? request.url : String(request),

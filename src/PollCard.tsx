@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BarChart3, ExternalLink, Send, RefreshCw } from "lucide-react";
 import type { RaidAction } from "./lib/model";
 import type { SchedulePoll } from "./lib/community";
@@ -41,32 +41,37 @@ export function PollCard({
   send: () => void;
   onError: (s: string) => void;
 }) {
-  const [choices, setChoices] = useState<number[]>(p.votes[actorId] || []),
+  const [draft, setChoices] = useState<number[]>(),
     [receipt, setReceipt] = useState<Delivery | null>(null),
     [busy, setBusy] = useState(false);
+  const requestNumber = useRef(0);
+  const choices = draft ?? p.votes[actorId] ?? [];
   const sync = async () => {
-    if (demo || !connected) return;
+    if (demo || !connected || (summary && p.voting === "site")) return;
+    const current = ++requestNumber.current;
     try {
-      setReceipt(
-        (
-          await discordCall(
-            `delivery?kind=poll&id=${encodeURIComponent(p.id)}&destination=channel`,
-          )
-        ).receipt,
+      const data = await discordCall(
+        `delivery?kind=poll&id=${encodeURIComponent(p.id)}&destination=channel`,
       );
+      if (current === requestNumber.current) setReceipt(data.receipt);
     } catch (e) {
-      onError((e as Error).message);
+      if (current === requestNumber.current) onError((e as Error).message);
     }
   };
   useEffect(() => {
     if (receipt?.finalized) return;
     void sync();
-    if (p.voting !== "discord" || !connected || demo) return;
-    const timer = setInterval(() => {
-      if (document.visibilityState === "visible") void sync();
-    }, 30000);
-    return () => clearInterval(timer);
-  }, [p.id, connected, demo, receipt?.finalized]);
+    const timer =
+      p.voting === "discord" && connected && !demo
+        ? setInterval(() => {
+            if (document.visibilityState === "visible") void sync();
+          }, 30000)
+        : undefined;
+    return () => {
+      requestNumber.current++;
+      clearInterval(timer);
+    };
+  }, [p.id, p.voting, summary, connected, demo, receipt?.finalized]);
   const closed =
     p.closed || Date.parse(receipt?.expiresAt || p.closesAt) <= Date.now();
   const counts =
@@ -77,6 +82,11 @@ export function PollCard({
       : receipt?.counts;
   const maximum = Math.max(1, ...(counts || []));
   const votes = counts?.reduce((n, x) => n + x, 0) || 0;
+  const indexed = p.options.map((option, i) => ({ option, i }));
+  const rows =
+    summary && counts && indexed.length > 3
+      ? indexed.sort((a, b) => counts[b.i] - counts[a.i]).slice(0, 3)
+      : indexed;
   const dirty =
     JSON.stringify([...choices].sort()) !==
     JSON.stringify([...(p.votes[actorId] || [])].sort());
@@ -102,7 +112,7 @@ export function PollCard({
         <BarChart3 size={24} />
       </header>
       <div className="poll-chart">
-        {p.options.map((option, i) => (
+        {rows.map(({ option, i }) => (
           <div className="poll-option" key={option}>
             {p.voting === "site" && !summary ? (
               <label>
@@ -133,6 +143,11 @@ export function PollCard({
         ))}
       </div>
       <div className="poll-caption">
+        {rows.length < p.options.length && (
+          <span>
+            Top {rows.length} of {p.options.length} options
+          </span>
+        )}
         <span>
           {counts
             ? `${votes} selections${p.voting === "site" ? ` from ${Object.values(p.votes).filter((v) => v.length).length} members` : ""}`
@@ -149,6 +164,7 @@ export function PollCard({
               setBusy(true);
               try {
                 await change({ type: "poll.vote", pollId: p.id, choices });
+                setChoices(undefined);
               } catch (e) {
                 onError((e as Error).message);
               } finally {
@@ -159,7 +175,7 @@ export function PollCard({
             {busy ? "Saving…" : "Save my availability"}
           </button>
         )}
-        {p.voting === "discord" && receipt?.url && !summary && (
+        {p.voting === "discord" && receipt?.url && !closed && (
           <a
             className="btn primary"
             href={receipt.url}
@@ -189,7 +205,7 @@ export function PollCard({
             Close poll
           </button>
         )}
-        {p.voting === "discord" && connected && (
+        {p.voting === "discord" && connected && !summary && (
           <button
             className="icon-btn"
             aria-label={`Refresh results for ${p.title}`}
@@ -200,7 +216,7 @@ export function PollCard({
         )}
       </div>
       {receipt?.syncError && <p className="notice">{receipt.syncError}</p>}
-      {receipt?.syncedAt && (
+      {receipt?.syncedAt && !summary && (
         <small className="muted">
           Synced {when(receipt.syncedAt)} ·{" "}
           {receipt.finalized

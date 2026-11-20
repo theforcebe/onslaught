@@ -1,4 +1,5 @@
 import { PollCard } from "./PollCard";
+import { ZonedDateTimeField } from "./ZonedDateTimeField";
 import { MaterialBoard } from "./MaterialBoard";
 import { ItemTooltip } from "./ItemTooltip";
 import { useEffect, useState } from "react";
@@ -25,7 +26,11 @@ import { makeId } from "./lib/model";
 import type { Identity, RaidAction, RaidState } from "./lib/model";
 import { emptyCommunity } from "./lib/community";
 import type { SchedulePoll } from "./lib/community";
-import { discordCall } from "./lib/api";
+import { chatCall, discordCall } from "./lib/api";
+import {
+  notifyChatDiscordPreference,
+  onChatDiscordPreference,
+} from "./lib/chat-alerts";
 
 type Props = {
   mode?: "polls" | "community";
@@ -57,7 +62,7 @@ type DiscordState = {
   connected: boolean;
   guildName: string;
   channelNames: Record<string, string>;
-  ownLink: { name: string; dmOptIn: boolean } | null;
+  ownLink: { name: string; dmOptIn: boolean; chatDmOptIn: boolean } | null;
   config?: {
     guildId: string;
     pollsChannelId: string;
@@ -151,6 +156,10 @@ export function GuildHub(p: Props) {
               state.teams.find((t) => t.id === c.teamId)?.name ||
               "Raid team",
           })),
+        ...Object.entries(access.teamNames || {}).map(([id, name]) => ({
+          id,
+          name,
+        })),
       ]
         .filter((t) => hasTeam(access, t.id))
         .map((t) => [t.id, t]),
@@ -201,6 +210,46 @@ export function GuildHub(p: Props) {
         .then((r) => setDelivery(r.receipt))
         .catch((e) => setError(e.message));
   };
+  useEffect(
+    () =>
+      onChatDiscordPreference(actorId, (choice) => {
+        setDiscord((current) =>
+          current.ownLink
+            ? {
+                ...current,
+                ownLink: choice.linked
+                  ? { ...current.ownLink, chatDmOptIn: choice.enabled }
+                  : null,
+              }
+            : current,
+        );
+      }),
+    [actorId],
+  );
+  function setDMChoice(field: "chatDmOptIn" | "dmOptIn", enabled: boolean) {
+    const previous = discord.ownLink;
+    if (!previous || busy) return;
+    setDiscord((current) => ({
+      ...current,
+      ownLink: { ...previous, [field]: enabled },
+    }));
+    void perform(async () => {
+      try {
+        if (field === "chatDmOptIn") {
+          const result = await chatCall<{
+            discord: { linked: boolean; enabled: boolean };
+          }>("preferences", { discordDM: enabled });
+          notifyChatDiscordPreference(actorId, result.discord);
+        } else {
+          await discordCall("preferences", { dmOptIn: enabled });
+        }
+        await refreshDiscord();
+      } catch (error) {
+        setDiscord((current) => ({ ...current, ownLink: previous }));
+        throw error;
+      }
+    });
+  }
   const contextField = (
     <Field label="Visible to">
       <Dropdown
@@ -291,7 +340,11 @@ export function GuildHub(p: Props) {
               <t.icon size={17} />
               <span className="community-wide-label">{t.label}</span>
               <span className="community-phone-label">
-                {t.id === "requests" ? "Materials" : t.id === "connection" ? "Discord" : t.label}
+                {t.id === "requests"
+                  ? "Requests"
+                  : t.id === "connection"
+                    ? "Discord"
+                    : t.label}
               </span>
             </button>
           ))}
@@ -447,38 +500,57 @@ export function GuildHub(p: Props) {
             <Link2 size={29} />
             <div>
               <h2>Your Discord connection</h2>
-              <p>
-                Battle.net remains your sign-in. Linking Discord lets the guild
-                send you assigned material requests.
-              </p>
               {discord.ownLink ? (
                 <>
                   <p className="badge green">
                     Linked as {discord.ownLink.name}
                   </p>
-                  <label className="discord-opt-in">
-                    <input
-                      type="checkbox"
-                      checked={discord.ownLink.dmOptIn}
-                      disabled={busy}
-                      onChange={(e) =>
-                        void perform(async () => {
-                          await discordCall("preferences", {
-                            dmOptIn: e.target.checked,
-                          });
-                          await refreshDiscord();
-                        })
-                      }
-                    />{" "}
-                    Allow direct messages for material requests assigned to me
-                  </label>
+                  <fieldset className="discord-dm-options">
+                    <legend>Send me Discord DMs for</legend>
+                    <label className="discord-opt-in">
+                      <input
+                        type="checkbox"
+                        checked={!!discord.ownLink.chatDmOptIn}
+                        disabled={busy}
+                        onChange={(e) =>
+                          setDMChoice("chatDmOptIn", e.currentTarget.checked)
+                        }
+                      />
+                      <span>
+                        <strong>Private guild chat</strong>
+                        <small>
+                          Receive the sender’s name and full message. Reply in
+                          Ønslaught.
+                        </small>
+                      </span>
+                    </label>
+                    <label className="discord-opt-in">
+                      <input
+                        type="checkbox"
+                        checked={discord.ownLink.dmOptIn}
+                        disabled={busy}
+                        onChange={(e) =>
+                          setDMChoice("dmOptIn", e.currentTarget.checked)
+                        }
+                      />{" "}
+                      <span>
+                        <strong>Assigned material requests</strong>
+                        <small>
+                          Receive a request when its organizer sends it to you.
+                        </small>
+                      </span>
+                    </label>
+                  </fieldset>
                   <p className="muted">
-                    Your Discord privacy settings must also allow the bot to
-                    send you DMs.
-                  </p>
-                  <p className="muted">
-                    For private chat copies, open Guild chat → notification
-                    settings and enable Discord forwarding.
+                    Both choices are optional. For delivery, allow direct
+                    messages in this Discord server’s privacy settings.{" "}
+                    <a
+                      href="https://support.discord.com/hc/en-us/articles/217916488"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Discord privacy help
+                    </a>
                   </p>
                   <button
                     className="btn secondary"
@@ -486,6 +558,10 @@ export function GuildHub(p: Props) {
                     onClick={() =>
                       void perform(async () => {
                         await discordCall("unlink", {});
+                        notifyChatDiscordPreference(actorId, {
+                          linked: false,
+                          enabled: false,
+                        });
                         await refreshDiscord();
                       })
                     }
@@ -494,30 +570,36 @@ export function GuildHub(p: Props) {
                   </button>
                 </>
               ) : (
-                <button
-                  className="btn primary"
-                  disabled={
-                    demo ||
-                    !discord.connected ||
-                    !discord.linkConfigured ||
-                    busy
-                  }
-                  onClick={() => {
-                    void perform(async () => {
-                      const result = await discordCall("link/start", {});
-                      const url = new URL(result.url);
-                      if (
-                        url.origin !==
-                          new URL(import.meta.env.VITE_API_URL).origin ||
-                        url.pathname !== "/discord/connect"
-                      )
-                        throw new Error("Invalid Discord connection URL.");
-                      window.location.assign(url.href);
-                    });
-                  }}
-                >
-                  Link my Discord
-                </button>
+                <>
+                  <p>
+                    Link the Discord account you use in the guild server to
+                    respond to raid signups and choose which DMs you receive.
+                  </p>
+                  <button
+                    className="btn primary"
+                    disabled={
+                      demo ||
+                      !discord.connected ||
+                      !discord.linkConfigured ||
+                      busy
+                    }
+                    onClick={() => {
+                      void perform(async () => {
+                        const result = await discordCall("link/start", {});
+                        const url = new URL(result.url);
+                        if (
+                          url.origin !==
+                            new URL(import.meta.env.VITE_API_URL).origin ||
+                          url.pathname !== "/discord/connect"
+                        )
+                          throw new Error("Invalid Discord connection URL.");
+                        window.location.assign(url.href);
+                      });
+                    }}
+                  >
+                    Link my Discord
+                  </button>
+                </>
               )}
               <button
                 className="btn text"
@@ -721,7 +803,7 @@ export function GuildHub(p: Props) {
                         .map((s) => s.trim())
                         .filter(Boolean),
                       timeZone: read(f, "timeZone"),
-                      closesAt: new Date(read(f, "closesAt")).toISOString(),
+                      closesAt: read(f, "closesAt"),
                       voting: pollMode as "site" | "discord",
                       ...(scope ? { teamId: scope } : {}),
                     },
@@ -783,20 +865,16 @@ export function GuildHub(p: Props) {
                       defaultValue={state.guild.timeZone}
                     />
                   </Field>
-                  <Field label="Voting closes · your device time">
-                    <input
-                      name="closesAt"
-                      type="datetime-local"
-                      required
-                      defaultValue={new Date(
-                        Date.now() +
-                          7 * 86400000 -
-                          new Date().getTimezoneOffset() * 60000,
-                      )
+                  <ZonedDateTimeField
+                    label="Voting closes · your device time"
+                    name="closesAt"
+                    timeZone={Intl.DateTimeFormat().resolvedOptions().timeZone}
+                    initial={
+                      new Date(Date.now() + 7 * 86400000)
                         .toISOString()
-                        .slice(0, 16)}
-                    />
-                  </Field>
+                        .slice(0, 16) + ":00.000Z"
+                    }
+                  />
                 </div>
                 <Field label="Where members vote">
                   <Dropdown

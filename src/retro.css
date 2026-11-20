@@ -389,6 +389,46 @@ textarea::placeholder {
   gap: 8px;
   line-height: 20px;
 }
+.form-select {
+  display: block;
+  min-width: 0;
+}
+.form-select select.dropdown-trigger {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding-inline: 12px 36px;
+  background-image: none;
+  text-overflow: ellipsis;
+}
+.form-select > svg {
+  pointer-events: none;
+  position: absolute;
+  inset-inline-end: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+}
+.form-select select:disabled { cursor: default; opacity: .65; }
+.form-select select:user-invalid { border-color: #fa9e91; }
+@supports (appearance: base-select) {
+  @media (hover: hover) and (pointer: fine) {
+    .form-select select, .form-select select::picker(select) { appearance: base-select; }
+    .form-select select::picker-icon { display: none; }
+    .form-select select::picker(select) {
+      margin-block: 4px;
+      padding: 4px;
+      border: 1px solid #af8ba9;
+      border-radius: 5px;
+      background: #211e2d;
+      color: #f0f1fa;
+      box-shadow: 0 10px 24px #0008;
+    }
+    .form-select option { min-height: 40px; padding: 8px 12px; border-radius: 3px; }
+    .form-select option:checked, .form-select option:focus { background: #49283e; color: #fff0d2; }
+    .form-select option:disabled { color: #a9a4b2; }
+  }
+}
 .dropdown-trigger > span:not(.dropdown-icon) {
   min-width: 0;
   overflow: hidden;

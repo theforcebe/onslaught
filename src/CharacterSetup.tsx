@@ -16,11 +16,10 @@ import type {
   Character,
   RaidBuild,
   RaidAction,
-  RaidState,
   Snapshot,
   WowClass,
 } from "./lib/model";
-import { parseSimc } from "./lib/parser";
+import { importMismatch, parseSimc, sameImportedCharacter } from "./lib/parser";
 import { EXAMPLE_EXPORT } from "./lib/example";
 
 export function ProfileChoices({
@@ -297,15 +296,17 @@ export function CharacterProfileEditor({
 }
 
 export function CharacterImport({
-  state,
+  candidates,
   character,
   change,
   demo,
+  switchCharacter,
 }: {
-  state: RaidState;
+  candidates: Character[];
   character?: Character;
   change: (a: RaidAction) => void | Promise<void>;
   demo: boolean;
+  switchCharacter?: () => void;
 }) {
   const [raw, setRaw] = useState("");
   const [snapshot, setSnapshot] = useState<Snapshot>();
@@ -328,25 +329,28 @@ export function CharacterImport({
       if (step === 0) {
         const parsed = parseSimc(raw);
         const existing =
-          character ||
-          state.characters.find(
-            (c) =>
-              c.name.toLowerCase() === parsed.name.toLowerCase() &&
-              c.snapshot?.server === parsed.server &&
-              c.snapshot?.region === parsed.region,
-          );
+          character || candidates.find((c) => sameImportedCharacter(c, parsed));
+        const mismatch = existing && importMismatch(existing, parsed);
+        if (mismatch) throw new Error(mismatch);
         setSnapshot(parsed);
         setCharacterId(existing?.id || makeId());
-        setProfile(
-          existing
-            ? profileFor(existing)
-            : profileFor({
-                class: parsed.class,
-                role: "unassigned",
-                spec: parsed.spec,
-                buffs: [],
-              }),
-        );
+        const initialProfile = existing
+          ? profileFor(existing)
+          : profileFor({
+              class: parsed.class,
+              role: "unassigned",
+              spec: parsed.spec,
+              buffs: [],
+            });
+        setProfile(initialProfile);
+        if (
+          existing &&
+          !validateProfile(parsed.class, initialProfile, parsed.level)
+        ) {
+          setStep(3);
+          setError("");
+          return;
+        }
       } else if (snapshot) {
         const problem = validateProfile(
           snapshot.class,
@@ -390,8 +394,10 @@ export function CharacterImport({
         <>
           <h3>Start with your character export</h3>
           <p className="muted">
-            Paste your SimC export. We’ll guide you through your role,
-            specialization and raid abilities before saving anything.
+            Equip your gear in WoW Forever, type <code>/simc</code>, then paste
+            the export or choose its file.
+            {character &&
+              " You’ll review the update with your saved raid build."}
           </p>
           <div className="import-tools">
             <label className="btn secondary file-button">
@@ -406,8 +412,14 @@ export function CharacterImport({
                     setError("Choose an export smaller than 100 KB.");
                     return;
                   }
-                  setRaw(await file.text());
-                  setError("");
+                  try {
+                    setRaw(await file.text());
+                    setError("");
+                  } catch {
+                    setError(
+                      "This file could not be read. Choose it again or paste your export.",
+                    );
+                  }
                 }}
               />
             </label>
@@ -420,6 +432,11 @@ export function CharacterImport({
                 }}
               >
                 Load fictional example
+              </button>
+            )}
+            {switchCharacter && (
+              <button className="btn text" onClick={switchCharacter}>
+                Choose another character
               </button>
             )}
           </div>
@@ -477,6 +494,15 @@ export function CharacterImport({
               <strong>{profile.buffs.length}</strong>
             </div>
           </div>
+          <button
+            className="btn text"
+            onClick={() => {
+              setError("");
+              setStep(1);
+            }}
+          >
+            Edit role, spec &amp; buffs
+          </button>
           {!!profile.alternateBuilds?.length && (
             <p>
               <strong>Alternate builds</strong> ·{" "}
@@ -564,6 +590,12 @@ export function CharacterImport({
                   raw,
                   profile,
                 });
+              } catch (e) {
+                setError(
+                  e instanceof Error
+                    ? e.message
+                    : "Could not save your character. Try again.",
+                );
               } finally {
                 setBusy(false);
               }

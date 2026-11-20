@@ -26,6 +26,28 @@ export type ItemResult = {
 export type ItemModifiers = Record<string, string>;
 export const ITEM_FRESH_MS = 12 * 3600000,
   ITEM_STALE_MS = 30 * 86400000;
+export function itemFreshUntil(result: ItemResult) {
+  if (result.status === "resolved") {
+    const freshUntil = result.checkedAt + ITEM_FRESH_MS;
+    return Math.min(
+      Math.max(freshUntil, result.retryAt ?? 0),
+      result.checkedAt + ITEM_STALE_MS,
+    );
+  }
+  return (
+    result.retryAt ??
+    result.checkedAt + (result.status === "unresolved" ? 300000 : 60000)
+  );
+}
+export function retryDelay(header: string | null, now = Date.now()) {
+  if (!header) return 60;
+  const seconds = /^\d+$/.test(header)
+    ? Number(header)
+    : (Date.parse(header) - now) / 1000;
+  return Number.isFinite(seconds)
+    ? Math.max(60, Math.min(3600, Math.ceil(seconds)))
+    : 60;
+}
 export function itemParams(modifiers: ItemModifiers = {}) {
   const params = new URLSearchParams();
   for (const [from, to, max] of [

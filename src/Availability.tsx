@@ -11,10 +11,12 @@ export function SignupChoices({
   character,
   event,
   change,
+  compact = false,
 }: {
   character: Character;
   event: RaidEvent;
   change: (a: RaidAction) => void | Promise<void>;
+  compact?: boolean;
 }) {
   const [pendingBuild, setPendingBuild] = useState("");
   const [busy, setBusy] = useState(false);
@@ -47,6 +49,11 @@ export function SignupChoices({
       ? [...choices, recorded]
       : choices;
   const save = async (nextStatus: typeof status, build?: RaidBuild) => {
+    if (
+      nextStatus === status &&
+      (!build || buildKey(build) === buildKey(recorded || choices[0] || build))
+    )
+      return;
     setBusy(true);
     setError("");
     try {
@@ -88,7 +95,7 @@ export function SignupChoices({
               }}
             />
           </fieldset>
-        ) : (
+        ) : compact ? null : (
           <span className="availability-build">{describeBuild(selected)}</span>
         ))}
       <div
@@ -130,6 +137,7 @@ export function Availability({
   demo,
   change,
   setup,
+  compact = false,
 }: {
   state: RaidState;
   event: RaidEvent;
@@ -138,6 +146,7 @@ export function Availability({
   demo?: boolean;
   change: (a: RaidAction) => Promise<void>;
   setup: () => void;
+  compact?: boolean;
 }) {
   const own = state.characters.filter(
       (c) => demo || (c.ownerBattleNet === identity?.id && !!identity),
@@ -145,24 +154,30 @@ export function Availability({
     [selected, setSelected] = useState("");
   const character =
     own.find((c) => c.id === selected) ||
+    own.find((c) => !!event.signups[c.id]) ||
     own.find((c) => c.teamId === event.teamId) ||
     own[0];
   return (
-    <section className="availability-strip" aria-label="Your raid availability">
+    <section
+      className={`availability-strip${compact ? " availability-board" : ""}`}
+      aria-label="Your raid availability"
+    >
       <div>
         <CalendarCheck size={21} />
         <span>
-          <strong>Your availability</strong>
-          <small>
-            {new Date(event.start).toLocaleString(undefined, {
-              weekday: "short",
-              month: "short",
-              day: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
-              timeZoneName: "short",
-            })}
-          </small>
+          <strong>{compact ? "Your RSVP" : "Your availability"}</strong>
+          {!compact && (
+            <small>
+              {new Date(event.start).toLocaleString(undefined, {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+                timeZoneName: "short",
+              })}
+            </small>
+          )}
         </span>
       </div>
       {Date.parse(event.end) <= Date.now() && !character ? (
@@ -181,6 +196,9 @@ export function Availability({
               options={own.map((c) => ({
                 value: c.id,
                 label: c.name,
+                detail: [label(c.class), c.snapshot?.server || c.publicTeamName]
+                  .filter(Boolean)
+                  .join(" · "),
                 icon: <ClassIcon cls={c.class} size={23} />,
               }))}
             />
@@ -195,6 +213,7 @@ export function Availability({
             character={character}
             event={event}
             change={change}
+            compact={compact}
           />
         </>
       ) : (

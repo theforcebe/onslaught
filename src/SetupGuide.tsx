@@ -22,7 +22,7 @@ import {
 } from "./lib/access";
 import { discordCall } from "./lib/api";
 import type { Character, Identity, RaidState } from "./lib/model";
-import { guildRoute, raidRoute, type HelpTopic } from "./lib/navigation";
+import { raidRoute, type HelpTopic } from "./lib/navigation";
 import { upcomingRaid } from "./lib/upcoming-raid";
 import "./setup-guide.css";
 
@@ -84,31 +84,6 @@ export function SetupGuide({
     responded,
   ];
   const recommended = !signedIn ? 0 : !active ? 1 : !owns.length ? 2 : 4;
-  const accountKey = identity ? "onslaught:welcome:v2:" + identity.id : "";
-  const welcomeKey =
-    !accountKey ||
-    demo ||
-    access.status === "visitor" ||
-    access.status === "suspended"
-      ? ""
-      : active
-        ? accountKey
-        : accountKey + ":membership";
-  const prompted = useRef("");
-  useEffect(() => {
-    if (!welcomeKey || prompted.current === welcomeKey) return;
-    const route = guildRoute(window.location.hash);
-    if (route.helpTopic !== undefined || (active && route.raidId)) return;
-    prompted.current = welcomeKey;
-    try {
-      if (localStorage.getItem(welcomeKey)) return;
-      localStorage.setItem(welcomeKey, "seen");
-    } catch {
-      /* The guide still works for this visit. */
-    }
-    setStep(recommended);
-    setMode("setup");
-  }, [welcomeKey, recommended, active]);
   const openedFromLink = useRef(false);
   useEffect(() => {
     if (linkedTopic !== undefined) {
@@ -152,11 +127,11 @@ export function SetupGuide({
         {active
           ? `Your membership is approved${access.role ? " as " + RANK_NAMES[access.role] : ""}. Your membership page lists the sections and teams you can open.`
           : access.status === "pending"
-            ? "Your request is with the guild admins. You can browse the roster and raid schedule while you wait. After approval, this guide picks up with your next step."
+            ? "Your request is with the guild admins. You can browse the roster and raid schedule while you wait. After approval, your overview shows the next step."
             : access.status === "suspended"
               ? "Your membership is suspended. Contact a guild admin to review your access."
               : signedIn
-                ? "Send your BattleTag to the guild admins for approval. They assign your rank and the teams and sections you can access."
+                ? "Select Request membership here or on Overview. An admin will see your BattleTag and can assign your rank, teams, and section access."
                 : "Sign in with Battle.net first. Then request membership here so an admin can approve your account."}
       </p>
       {!signedIn ? (
@@ -223,9 +198,7 @@ export function SetupGuide({
           full export.
         </li>
         <li>
-          Paste it into the importer or choose a saved export. Select your
-          primary spec and role, add any alternate builds, check your learned
-          buffs, then review and save.
+          Choose Import character in the header, paste the export or choose its file, then select your spec, role and buffs. Later, choose Update character. If you have alts, pick the character you played. A gear refresh takes you straight to review with your saved builds.
         </li>
       </ol>
       {active && gear ? (
@@ -279,14 +252,15 @@ export function SetupGuide({
     <>
       <p>
         {discordStatus === "linked"
-          ? "Your Discord account is linked. You can manage material-request DMs in Discord connection."
-          : "Open Discord connection, choose Link my Discord and authorize the same Discord account you use in the guild server. You can turn on material-request DMs there."}
+          ? "Your Discord account is linked. Choose whether you want the guild bot to DM you private guild chat messages, assigned material requests, or both."
+          : "Choose Link my Discord and authorize the account you use in the guild server. When you return, choose whether to receive private guild chat messages or assigned material requests as Discord DMs."}
       </p>
-      <p>
-        For copies of private site messages, enable Discord forwarding in Guild
-        chat notification settings.
-      </p>
-      {button("Open Discord connection", () => go("discord"))}
+      {button(
+        discordStatus === "linked"
+          ? "Choose my Discord DMs"
+          : "Open Discord connection",
+        () => go("discord"),
+      )}
     </>
   ) : (
     membershipGate

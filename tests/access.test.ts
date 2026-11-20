@@ -24,6 +24,54 @@ const owner = {
   admin: true,
 };
 describe("section and team privacy", () => {
+  it("includes authorized team names for independent section grants before a team has raiders or events", () => {
+    const doc = privateFixture();
+    const team = {
+      ...doc.state.teams[0],
+      id: "fresh",
+      name: "Saturday raiders",
+      description: "Private team plan",
+    };
+    doc.state.teams.push(team);
+    Object.assign(doc.members[0], {
+      role: "officer",
+      sections: ["community"],
+      teamIds: [team.id],
+    });
+    const view = project(doc, member);
+    expect(view.access.teamNames).toEqual({ fresh: "Saturday raiders" });
+    expect(view.state.teams).toEqual([]);
+    expect(JSON.stringify(view)).not.toContain(team.description);
+    expect(project(doc).access.teamNames).toBeUndefined();
+    doc.members[0].allTeams = true;
+    expect(Object.keys(project(doc, member).access.teamNames!)).toHaveLength(
+      doc.state.teams.length,
+    );
+  });
+  it.each(["pending", "suspended"] as const)(
+    "removes roster ownership and private alternate-build details when membership is %s",
+    (status) => {
+      const doc = privateFixture();
+      const char = doc.state.characters[0];
+      char.alternateBuilds = [
+        { spec: "Survival", role: "melee", buffs: ["private-buff"] },
+      ];
+      const night = doc.state.events[0];
+      night.signupBuilds = { [char.id]: { spec: "Survival", role: "melee" } };
+      expect(project(doc, member).state.characters[0].ownerBattleNet).toBe(
+        member.id,
+      );
+      doc.members[0].status = status;
+      const view = project(doc, member);
+      expect(view.state.characters[0].ownerBattleNet).toBeUndefined();
+      expect(
+        view.state.characters[0].alternateBuilds?.[0].buffs,
+      ).toBeUndefined();
+      expect(view.state.events[0].signupBuilds).toEqual({});
+      expect(view.state.events[0].signups).toEqual({});
+      expect(view.upcomingAttendance).toBeUndefined();
+    },
+  );
   it("offers personal gear, loot and pledge edits only for owned characters on authorized teams", () => {
     const d = privateFixture(),
       a = accessFor(d, member);

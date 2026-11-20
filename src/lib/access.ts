@@ -80,6 +80,7 @@ export const AccessSchema = z.object({
   sections: z.array(z.enum(SECTIONS)),
   allTeams: z.boolean(),
   teamIds: z.array(key),
+  teamNames: z.record(key, z.string().max(300)).optional(),
 });
 export type Access = z.infer<typeof AccessSchema>;
 export const PUBLIC_ACCESS: Access = {
@@ -188,7 +189,7 @@ export function canSeeCharacter(
     hasSection(access, "gear") &&
     (c.teamId
       ? hasTeam(access, c.teamId)
-      : access.allTeams || c.ownerBattleNet === identity?.id)
+      : access.allTeams || (!!identity && c.ownerBattleNet === identity.id))
   );
 }
 export function canActForCharacter(
@@ -208,18 +209,28 @@ export function canActForCharacter(
 export function project(doc: GuildDocument, identity?: Identity): GuildView {
   const a = accessFor(doc, identity),
     s = doc.state;
-  const teamName = (id?: string) => s.teams.find((t) => t.id === id)?.name;
+  const teams = new Map(s.teams.map((t) => [t.id, t.name]));
   const allowed = (section: Section, teamId?: string) =>
     hasSection(a, section) && hasTeam(a, teamId);
-  const visibleCharacter = (id: string) => {
-    const c = s.characters.find((x) => x.id === id);
-    return (
-      !!c &&
-      (c.teamId
-        ? hasTeam(a, c.teamId)
-        : a.allTeams || c.ownerBattleNet === identity?.id)
-    );
-  };
+  const owned = new Set(
+    s.characters
+      .filter(
+        (c) =>
+          a.status === "active" &&
+          !!identity &&
+          c.ownerBattleNet === identity.id,
+      )
+      .map((c) => c.id),
+  );
+  const visible = new Set(
+    s.characters
+      .filter((c) =>
+        c.teamId ? hasTeam(a, c.teamId) : a.allTeams || owned.has(c.id),
+      )
+      .map((c) => c.id),
+  );
+  const visibleCharacter = (id: string) => visible.has(id);
+  const eventTeams = new Map(s.events.map((e) => [e.id, e.teamId]));
   const state: RaidState = {
     schemaVersion: 1,
     revision: s.revision,
@@ -250,7 +261,7 @@ export function project(doc: GuildDocument, identity?: Identity): GuildView {
             : undefined,
       })),
       teamId: c.teamId,
-      publicTeamName: teamName(c.teamId),
+      publicTeamName: c.teamId ? teams.get(c.teamId) : undefined,
       group: allowed("planner", c.teamId) ? c.group : undefined,
       notes: canSeeCharacter(a, c, identity) ? c.notes : "",
       snapshot: canSeeCharacter(a, c, identity) ? c.snapshot : undefined,
@@ -261,26 +272,17 @@ export function project(doc: GuildDocument, identity?: Identity): GuildView {
           visibleCharacter(c.id))
           ? c.buffs
           : undefined,
-      ownerBattleNet:
-        a.admin || c.ownerBattleNet === identity?.id
-          ? c.ownerBattleNet
-          : undefined,
+      ownerBattleNet: a.admin || owned.has(c.id) ? c.ownerBattleNet : undefined,
     })),
     teams: s.teams.filter(
       (t) => a.admin || (hasTeam(a, t.id) && hasSection(a, "planner")),
     ),
     events: s.events.map((e) => {
-      const ownsCharacter = (id: string) =>
-        a.status === "active" &&
-        !!identity &&
-        s.characters.some(
-          (c) => c.id === id && c.ownerBattleNet === identity.id,
-        );
+      const canViewAttendance = allowed("attendance", e.teamId);
       const signups = Object.fromEntries(
         Object.entries(e.signups).filter(
           ([id]) =>
-            ownsCharacter(id) ||
-            (allowed("attendance", e.teamId) && visibleCharacter(id)),
+            owned.has(id) || (canViewAttendance && visibleCharacter(id)),
         ),
       );
       return {
@@ -288,13 +290,13 @@ export function project(doc: GuildDocument, identity?: Identity): GuildView {
         title: e.title,
         instance: e.instance,
         teamId: e.teamId,
-        publicTeamName: teamName(e.teamId),
+        publicTeamName: teams.get(e.teamId),
         start: e.start,
         end: e.end,
         timeZone: e.timeZone,
-        notes: allowed("attendance", e.teamId) ? e.notes : "",
+        notes: canViewAttendance ? e.notes : "",
         lineup:
-          allowed("planner", e.teamId) && allowed("attendance", e.teamId)
+          allowed("planner", e.teamId) && canViewAttendance
             ? Object.fromEntries(
                 Object.entries(e.lineup || {}).filter(([id]) =>
                   visibleCharacter(id),
@@ -324,7 +326,7 @@ export function project(doc: GuildDocument, identity?: Identity): GuildView {
       .filter((x) =>
         allowed(
           "consumables",
-          s.events.find((e) => e.id === x.eventId)?.teamId,
+          x.eventId ? eventTeams.get(x.eventId) : undefined,
         ),
       )
       .map((x) => ({
@@ -344,14 +346,16 @@ export function project(doc: GuildDocument, identity?: Identity): GuildView {
       const requests = c.requests.filter((r) =>
         canSeeRequest(a, r, identity?.id),
       );
+      const requestIds = new Set(requests.map((r) => r.id));
+      const announcementIds = new Set(announcements.map((m) => m.id));
       return {
         announcements,
         requests,
         polls: c.polls.filter((p) => allowed("attendance", p.teamId)),
         replies: c.replies.filter((r) =>
           r.kind === "request"
-            ? requests.some((x) => x.id === r.recordId)
-            : announcements.some((x) => x.id === r.recordId),
+            ? requestIds.has(r.recordId)
+            : announcementIds.has(r.recordId),
         ),
       };
     })(),
@@ -359,33 +363,30 @@ export function project(doc: GuildDocument, identity?: Identity): GuildView {
   const nextRaid = a.status === "active" ? upcomingRaid(s.events) : undefined;
   return ViewSchema.parse({
     state,
-    access: a,
+    access:
+      a.status === "active"
+        ? {
+            ...a,
+            teamNames: Object.fromEntries(
+              [...teams].filter(([id]) => hasTeam(a, id)),
+            ),
+          }
+        : a,
     ...(nextRaid ? { upcomingAttendance: countAttendance(nextRaid) } : {}),
     ...(a.admin ? { members: doc.members } : {}),
     people:
       a.admin || (a.role === "officer" && hasSection(a, "consumables"))
         ? doc.members
-            .filter((m) => {
-              const target = accessFor(doc, {
-                provider: "battlenet",
-                id: m.id,
-                label: m.label,
-              });
-              return target.status === "active";
-            })
-            .map((m) => {
-              const target = accessFor(doc, {
-                provider: "battlenet",
-                id: m.id,
-                label: m.label,
-              });
-              return {
-                id: m.id,
-                label: m.label,
-                allTeams: target.allTeams,
-                teamIds: target.teamIds.filter((id) => hasTeam(a, id)),
-              };
-            })
+            .filter((m) => m.status === "active")
+            .map((m) => ({
+              id: m.id,
+              label: m.label,
+              allTeams: m.role === "admin" || m.allTeams,
+              teamIds:
+                m.role === "admin"
+                  ? []
+                  : m.teamIds.filter((id) => hasTeam(a, id)),
+            }))
         : [],
     ...(identity?.provider === "battlenet"
       ? {
@@ -557,6 +558,7 @@ export function updateMember(
   doc: GuildDocument,
   identity: Identity,
   input: unknown,
+  recoveryOwners: readonly string[] = [],
 ): GuildDocument {
   if (!accessFor(doc, identity).admin)
     throw new ChangeError("Only an admin can manage member access.", 403);
@@ -568,6 +570,14 @@ export function updateMember(
     throw new ChangeError(
       "This member must sign in and request access first.",
       404,
+    );
+  if (
+    recoveryOwners.includes(req.member.id) &&
+    (req.member.status !== "active" || req.member.role !== "admin")
+  )
+    throw new ChangeError(
+      "This account is a recovery owner. Its Admin access is managed in the gateway configuration.",
+      409,
     );
   if (
     req.member.id === identity.id &&

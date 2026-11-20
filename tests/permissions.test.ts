@@ -248,11 +248,62 @@ describe("server-authoritative changes", () => {
         request(s, {
           type: "character.import",
           characterId: "duplicate",
-          raw: source,
+          raw: source.replace("region=us", "region=US"),
         }),
         member,
       ),
     ).toThrow("already on the roster");
+  });
+  it("checks the selected roster name before its first gear import", () => {
+    const s = base();
+    delete s.characters[0].snapshot;
+    expect(() =>
+      applyChange(
+        s,
+        request(s, {
+          type: "character.import",
+          characterId: s.characters[0].id,
+          raw: source.replaceAll("Example Raider", "Same Class Alt"),
+        }),
+        member,
+      ),
+    ).toThrow("You selected Example Raider");
+  });
+  it("distinguishes same-name alts by realm and only updates the selected roster entry", () => {
+    const s = base();
+    const alt = source.replace("server=demo_realm", "server=another_realm");
+    const two = applyChange(
+      s,
+      request(s, {
+        type: "character.import",
+        characterId: "other-realm",
+        raw: alt,
+      }),
+      member,
+    );
+    expect(() =>
+      applyChange(
+        two,
+        request(two, {
+          type: "character.import",
+          characterId: "other-realm",
+          raw: source,
+        }),
+        member,
+      ),
+    ).toThrow("different character or realm");
+    const newer = alt.replace("level=30", "level=31");
+    const updated = applyChange(
+      two,
+      request(two, {
+        type: "character.import",
+        characterId: "other-realm",
+        raw: newer,
+      }),
+      member,
+    );
+    expect(updated.characters[0]).toEqual(s.characters[0]);
+    expect(updated.characters[1].level).toBe(31);
   });
   it("validates event time order and preserves signups on admin edits", () => {
     const s = base();

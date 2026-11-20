@@ -967,7 +967,7 @@ export function RaidPlanner({
           access={access}
           demo={demo}
           change={change}
-          setup={() => open({ type: "import" })}
+          setup={() => open({ type: "import", personal: true })}
         />
       )}
       {event && fullTeam && canPlan ? (
@@ -1092,7 +1092,7 @@ export function RaidPlanner({
                           (_, i) => i + 1,
                         ).find(
                           (g) =>
-                            roster.filter((c) => c.group === g).length <
+                            roster.filter((c) => (c.group || 1) === g).length <
                             Math.min(5, fullTeam.size - (g - 1) * 5),
                         );
                         if (!group) return;

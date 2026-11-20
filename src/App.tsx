@@ -1,4 +1,5 @@
 import { GuildBoard } from "./GuildBoard";
+import { MembershipNotice } from "./MembershipNotice";
 import "./mobile-roster.css";
 import { SetupGuide } from "./SetupGuide";
 import { ItemTooltip } from "./ItemTooltip";
@@ -99,7 +100,7 @@ import {
   requestMembership,
   sessionActive,
 } from "./lib/api";
-import { calendarFile, download } from "./lib/calendar";
+import { download } from "./lib/calendar";
 const nav = [
   { id: "overview", name: "Overview", icon: LayoutDashboard },
   { id: "planner", name: "Raid planner", icon: Swords },
@@ -439,10 +440,14 @@ export default function App() {
   const editableCharacters = state.characters.filter((c) =>
     canActForCharacter(effectiveAccess, c, identity),
   );
-  const teamMembers = state.characters.filter((c) => c.teamId === team?.id);
+  const canImport = hasSection(effectiveAccess, "gear");
+  const linkedCharacters = state.characters.filter(
+    (c) => demo || (!!identity && c.ownerBattleNet === identity.id),
+  );
+  const myCharacters = linkedCharacters.filter(
+    (c) => demo || canSeeCharacter(effectiveAccess, c, identity),
+  );
   const nextRaid = upcomingRaid(state.events);
-  const unassigned = state.characters.filter((c) => c.role === "unassigned");
-  const imports = state.characters.filter((c) => c.snapshot);
   const pendingLoot = state.loot.filter((l) => !l.awardedTo);
   const pledged = state.supplies.reduce(
     (sum, s) =>
@@ -503,8 +508,7 @@ export default function App() {
     setDialog(d);
   };
   const addButton = (type: string, text: string) =>
-    (effectiveAccess.admin ||
-      (type === "import" && hasSection(effectiveAccess, "gear"))) && (
+    effectiveAccess.admin && (
       <button className="btn primary" onClick={() => open({ type })}>
         <Plus size={16} />
         {text}
@@ -514,6 +518,13 @@ export default function App() {
     acceptView(await requestMembership());
     toast("Membership request sent to guild admins.");
   };
+  const openMyCharacter = () =>
+    open(
+      linkedCharacters.length > 1 ||
+        linkedCharacters.length !== myCharacters.length
+        ? { type: "my-characters" }
+        : { type: "import", character: myCharacters[0], personal: true },
+    );
   const planner = (
     <Suspense
       fallback={
@@ -588,7 +599,6 @@ export default function App() {
             ]}
           />
         </div>
-        {addButton("import", "Import character")}
       </div>
       <div className="roster-results">
         <span role="status">
@@ -724,17 +734,7 @@ export default function App() {
             Award history <span>{state.loot.length - pendingLoot.length}</span>
           </button>
         </div>
-        {addButton("loot", "Plan an item")}
-      </div>
-      <div className="info-banner">
-        <Gem size={21} />
-        <div>
-          <strong>Good loot decisions need context.</strong>
-          <p>
-            Compare requests with equipped gear. Council order is explicit;
-            import data alone is not a simulation.
-          </p>
-        </div>
+        {(pendingLoot.length > 0 || lootTab === "awarded") && addButton("loot", "Plan an item")}
       </div>
       <div className="loot-list">
         {state.loot
@@ -824,8 +824,8 @@ export default function App() {
           icon={<Gem size={36} />}
           title={
             lootTab === "awarded"
-              ? "The first award is still ahead."
-              : "Give every drop a destination."
+              ? "No awards yet"
+              : "No loot priorities yet"
           }
           action={
             lootTab === "active"
@@ -835,7 +835,9 @@ export default function App() {
         >
           {lootTab === "awarded"
             ? "Council awards and their reasons will appear here."
-            : "Add a verified Forever item and its source, collect requests, and set the council order."}
+            : effectiveAccess.admin
+              ? "Add a Forever item and its boss. Members can request it and the council can set priority."
+              : "When the council adds a boss drop, you can compare your equipped gear and request the item."}
         </Empty>
       )}
     </div>
@@ -844,7 +846,7 @@ export default function App() {
     <div className="supplies-screen">
       <div className="toolbar">
         <p className="muted">{state.supplies.length} preparation targets</p>
-        {addButton("supply", "Add a target")}
+        {state.supplies.length > 0 && addButton("supply", "Add a target")}
       </div>
       {needed > 0 && (
         <section className="supply-summary">
@@ -855,7 +857,7 @@ export default function App() {
               {pledged} of {needed} requested supplies have a volunteer.
             </p>
           </div>
-          <Meter value={pledged} max={needed} />
+          <Meter label="Guild supplies pledged" value={pledged} max={needed} />
         </section>
       )}
       <div className="supply-grid">
@@ -898,7 +900,7 @@ export default function App() {
                 </strong>
                 <small>Committed</small>
               </div>
-              <Meter value={count} max={s.needed} />
+              <Meter label={`${s.name} pledged`} value={count} max={s.needed} />
               <p className="muted supply-note">
                 {s.notes || "Coordinate with the guild before the raid."}
               </p>
@@ -942,7 +944,7 @@ export default function App() {
       {!state.supplies.length && (
         <Empty
           icon={<FlaskConical size={36} />}
-          title="Bring more than your best damage."
+          title="No preparation targets yet"
           action={addButton("supply", "Set a preparation target")}
         >
           Track potions, food, reagents, crafted gear, or any material the raid
@@ -959,7 +961,7 @@ export default function App() {
           {state.bosses.filter((b) => b.status === "progressing").length} in
           progress
         </span>
-        {addButton("boss", "Track an encounter")}
+        {state.bosses.length > 0 && addButton("boss", "Track an encounter")}
       </div>
       <div className="boss-grid">
         {state.bosses.map((b, i) => (
@@ -1010,7 +1012,7 @@ export default function App() {
       {!state.bosses.length && (
         <Empty
           icon={<Flag size={36} />}
-          title="Every first kill starts with a first pull."
+          title="No encounters tracked yet"
           action={addButton("boss", "Track your first encounter")}
         >
           Add the encounters your guild is actually tackling. Record attempts,
@@ -1328,11 +1330,11 @@ export default function App() {
             <span className="pulse-dot" />
             Ønslaught · WoW Forever
           </span>
-          <h2>{nextRaid?.title || "Stronger, together."}</h2>
+          <h2>{nextRaid?.title || "No upcoming raid"}</h2>
           <p>
             {nextRaid
               ? `${nextRaid.instance} · ${formatDate(nextRaid.start, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" })}`
-              : "One guild. Every class. A place for every raider."}
+              : "The next raid will appear here when the guild schedules it."}
           </p>
           <div className="hero-actions">
             <button className="btn gold" onClick={() => go("roster")}>
@@ -1354,8 +1356,7 @@ export default function App() {
       <div className="overview-bottom spaced">
         <section className="panel">
           <div className="panel-title">
-            <h3>Every class brings something.</h3>
-            <span className="badge">Public</span>
+            <h3>Roster by class</h3>
           </div>
           <div className="class-distribution">
             {CLASSES.map((cls) => (
@@ -1376,23 +1377,6 @@ export default function App() {
               </div>
             ))}
           </div>
-        </section>
-        <section className="panel">
-          <div className="panel-title">
-            <h3>Your raid workspace</h3>
-            <ShieldCheck size={20} />
-          </div>
-          <p className="muted">
-            Gear, loot priorities, consumables, attendance, and encounter notes
-            are available to approved members for their assigned sections and
-            teams.
-          </p>
-          <button
-            className="btn primary"
-            onClick={() => (identity ? go("access") : void signIn())}
-          >
-            {identity ? "View your access" : "Sign in with Battle.net"}
-          </button>
         </section>
       </div>
     </>
@@ -1495,7 +1479,6 @@ export default function App() {
               WoW Forever · {state.guild.region}
             </small>
           </div>
-          <ChevronDown size={14} />
         </div>
         <nav aria-label="Main navigation">
           {nav
@@ -1535,6 +1518,15 @@ export default function App() {
           )}
         </nav>
         <div className="sidebar-bottom">
+          {(effectiveAccess.admin || import.meta.env.DEV) && (
+            <button
+              className={`mode-button ${demo ? "demo" : ""}`}
+              onClick={toggleDemo}
+            >
+              <span className={`dot ${demo ? "amber" : "green"}`} />
+              {demo ? "Demo workspace" : "Live guild"} <ChevronDown size={12} />
+            </button>
+          )}
           <SetupGuide
             key={demo ? "demo-guide" : identity?.id || "visitor-guide"}
             linkedTopic={route.helpTopic}
@@ -1547,7 +1539,7 @@ export default function App() {
             join={joinGuild}
             importCharacter={(character) => {
               setMenu(false);
-              open({ type: "import", character });
+              open({ type: "import", character, personal: true });
             }}
             openChat={() => {
               setMenu(false);
@@ -1639,20 +1631,16 @@ export default function App() {
             <strong>{raidPage ? "Raid planner" : navigationName(page)}</strong>
           </div>
           <div className="top-actions">
-            {effectiveAccess.admin || import.meta.env.DEV ? (
+            {canImport && (
               <button
-                className={`mode-button ${demo ? "demo" : ""}`}
-                onClick={toggleDemo}
+                className="btn primary personal-character-action"
+                onClick={openMyCharacter}
               >
-                <span className={`dot ${demo ? "amber" : "green"}`} />
-                {demo ? "Demo workspace" : "Live guild"}
-                <ChevronDown size={12} />
+                <Upload size={16} />
+                {linkedCharacters.length
+                  ? "Update character"
+                  : "Import character"}
               </button>
-            ) : (
-              <span className="live-status">
-                <span className="dot green" />
-                Live guild
-              </span>
             )}
             <button
               className={`icon-btn ${refreshing ? "spin" : ""}`}
@@ -1662,7 +1650,7 @@ export default function App() {
             >
               <RefreshCw size={16} />
             </button>
-            {!identity && (
+            {!identity && !demo && (
               <button className="btn bnet" onClick={() => void signIn()}>
                 <span>✧</span>Battle.net sign in
               </button>
@@ -1694,20 +1682,34 @@ export default function App() {
               </h1>
               <p>{subtitle}</p>
             </div>
-            {page === "overview" && hasSection(effectiveAccess, "gear") && (
-              <button
-                className="btn secondary"
-                aria-label="Import character"
-                onClick={() => open({ type: "import" })}
-              >
-                <Upload size={16} />
-                <span className="import-wide">Import character</span>
-                <span className="import-narrow" aria-hidden="true">
-                  Import
-                </span>
-              </button>
-            )}
           </div>
+          {!demo && identity && page !== "access" && (
+            <MembershipNotice
+              status={effectiveAccess.status}
+              join={joinGuild}
+            />
+          )}
+          {page === "overview" &&
+            !demo &&
+            effectiveAccess.status === "active" &&
+            !linkedCharacters.length && (
+              <p className="first-character-note">
+                {canImport ? (
+                  <>
+                    Your membership is active. Choose{" "}
+                    <strong>Import character</strong> above and paste your{" "}
+                    <code>/simc</code> export to add your first raider.
+                  </>
+                ) : (
+                  <>
+                    Your membership is active. Ask a guild admin to link your
+                    roster character or grant{" "}
+                    <strong>Gear &amp; character notes</strong> access for
+                    importing.
+                  </>
+                )}
+              </p>
+            )}
           {error && !demo && (
             <p className="notice danger" role="alert">
               {error}
@@ -1809,6 +1811,8 @@ export default function App() {
           }
         >
           <Dialogs
+            linkedCharacters={linkedCharacters}
+            myCharacters={myCharacters}
             key={`${dialog.type}-${dialog.character?.id || dialog.loot?.id || dialog.request?.id || ""}`}
             dialog={dialog}
             editableCharacters={editableCharacters}
@@ -1836,7 +1840,7 @@ export default function App() {
             }}
             state={state}
             close={() => setDialog(undefined)}
-            change={change}
+            change={(a) => change(a, a.type === "character.import")}
             open={open}
             toast={toast}
             demo={demo}

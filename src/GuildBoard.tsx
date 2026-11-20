@@ -14,6 +14,7 @@ import type { Identity, RaidAction, RaidState } from "./lib/model";
 import { contributionBoard, emptyCommunity } from "./lib/community";
 import { ItemTooltip } from "./ItemTooltip";
 import { PollCard } from "./PollCard";
+import { Availability } from "./Availability";
 
 export function GuildBoard({
   state,
@@ -37,6 +38,7 @@ export function GuildBoard({
     open = c.requests.filter((r) => !r.cancelled && r.fulfilled < r.quantity),
     poll = c.polls[0],
     contributors = contributionBoard(c.requests),
+    [claiming, setClaiming] = useState(""),
     [error, setError] = useState("");
   const next = upcomingRaid(state.events);
   const counts =
@@ -51,11 +53,7 @@ export function GuildBoard({
     : state.characters.filter(
         (c) => identity && c.ownerBattleNet === identity.id,
       );
-  const response = {
-    going: "Going",
-    tentative: "Maybe",
-    absent: "Can’t make it",
-  };
+  const canRespond = !!next && own.length > 0 && access.status === "active";
   return (
     <div className="guild-board">
       <section
@@ -77,7 +75,16 @@ export function GuildBoard({
               ? "Raid in progress"
               : "Upcoming raid"}
           </span>
-          <h2>{next?.title || "No upcoming raid"}</h2>
+          <h2>
+            {canRespond && next ? (
+              <a href={"#" + raidRoute(next.id)}>
+                {next.title}
+                <ArrowUpRight size={18} aria-hidden="true" />
+              </a>
+            ) : (
+              next?.title || "No upcoming raid"
+            )}
+          </h2>
           {next && (
             <>
               <p>
@@ -117,28 +124,29 @@ export function GuildBoard({
                   </div>
                 </dl>
               )}
-              {own.length > 0 && (
-                <p className="board-own-signup">
-                  {own
-                    .map(
-                      (c) =>
-                        c.name +
-                        " · " +
-                        (response[next.signups[c.id]] || "No response"),
-                    )
-                    .join(" / ")}
-                </p>
-              )}
             </>
           )}
         </div>
-        <button
-          className="btn hero-secondary"
-          onClick={() => go(next ? raidRoute(next.id) : "planner")}
-        >
-          {next ? "View raid & sign up" : "Open raid planner"}
-          <ArrowUpRight size={16} />
-        </button>
+        {canRespond && next ? (
+          <Availability
+            state={state}
+            event={next}
+            access={access}
+            identity={identity}
+            demo={demo}
+            compact
+            change={change}
+            setup={() => go("roster")}
+          />
+        ) : (
+          <button
+            className="btn hero-secondary"
+            onClick={() => go(next ? raidRoute(next.id) : "planner")}
+          >
+            {next ? "View raid" : "Open raid planner"}
+            <ArrowUpRight size={16} />
+          </button>
+        )}
       </section>
       {error && (
         <p className="notice danger" role="alert">
@@ -151,35 +159,36 @@ export function GuildBoard({
             <div className="panel-title">
               <span className="eyebrow">
                 <Megaphone size={16} />
-                LATEST DISPATCH
+                Guild announcement
               </span>
               <button className="btn text" onClick={() => go("community")}>
-                View board
+                Guild board
                 <ArrowUpRight size={14} />
               </button>
             </div>
             {announcement ? (
               <>
                 <h2>{announcement.title}</h2>
-                <p className="dispatch-body">{announcement.body}</p>
+                {announcement.body.length > 300 ? (
+                  <>
+                    <p className="dispatch-body">
+                      {announcement.body.slice(0, 260).replace(/\s+\S*$/, "")}…
+                    </p>
+                    <details>
+                      <summary>Read full announcement</summary>
+                      <p className="dispatch-body">{announcement.body}</p>
+                    </details>
+                  </>
+                ) : (
+                  <p className="dispatch-body">{announcement.body}</p>
+                )}
                 <small className="muted">
                   {announcement.createdByName} ·{" "}
                   {new Date(announcement.createdAt).toLocaleString()}
                 </small>
               </>
             ) : (
-              <>
-                <h3>
-                  {hasSection(access, "community")
-                    ? "No announcements yet"
-                    : "Guild announcements"}
-                </h3>
-                <p className="muted">
-                  {hasSection(access, "community")
-                    ? "The latest message from your guild leadership will appear here."
-                    : "Your admin can grant access to the guild board."}
-                </p>
-              </>
+              <p className="muted">No announcements yet.</p>
             )}
           </section>
         )}
@@ -195,7 +204,7 @@ export function GuildBoard({
             </button>
           </div>
           {open.length ? (
-            open.slice(0, 6).map((r) => (
+            open.slice(0, 3).map((r) => (
               <div className="request-feed-row" key={r.id}>
                 <div>
                   {r.itemId ? (
@@ -211,9 +220,32 @@ export function GuildBoard({
                 {!r.recipientId ? (
                   <button
                     className="btn secondary"
-                    onClick={() => go("materials")}
+                    disabled={!!claiming}
+                    aria-label={
+                      claiming === r.id
+                        ? "Claiming…"
+                        : "I’ll take this request for " + r.item
+                    }
+                    onClick={async () => {
+                      setClaiming(r.id);
+                      setError("");
+                      try {
+                        await change({
+                          type: "material.claim",
+                          requestId: r.id,
+                        });
+                      } catch (e) {
+                        setError(
+                          e instanceof Error
+                            ? e.message
+                            : "Could not claim this request.",
+                        );
+                      } finally {
+                        setClaiming("");
+                      }
+                    }}
                   >
-                    Take request
+                    {claiming === r.id ? "Claiming…" : "I’ll take this"}
                   </button>
                 ) : (
                   <span className="badge">
@@ -225,9 +257,6 @@ export function GuildBoard({
           ) : (
             <p className="muted">No outstanding requests in your guild view.</p>
           )}
-          <small className="muted">
-            Updates refresh automatically while this page is open.
-          </small>
         </section>
         {hasSection(access, "attendance") && (
           <section className="poll-preview">
@@ -240,6 +269,7 @@ export function GuildBoard({
             </div>
             {poll ? (
               <PollCard
+                key={poll.id}
                 summary
                 poll={poll}
                 actorId={demo ? "demo-admin" : identity?.id || ""}
@@ -252,40 +282,29 @@ export function GuildBoard({
               />
             ) : (
               <div className="panel">
-                <p className="muted">
-                  {hasSection(access, "attendance")
-                    ? "Raid-night polls and their results will appear here."
-                    : "Your admin can grant access to scheduling polls."}
-                </p>
+                <p className="muted">No scheduling polls yet.</p>
               </div>
             )}
           </section>
         )}
       </div>
-      <section className="contributor-strip">
-        <span>
-          <Trophy size={18} />
-          Guild contributors
-        </span>
-        {contributors.slice(0, 4).map((p, i) => (
-          <div key={p.id}>
-            <b>{i + 1}</b>
-            <strong>{p.name}</strong>
-            <small>
-              {p.completed} completed · {p.helped} helped
-            </small>
-          </div>
-        ))}
-        {!contributors.length && (
-          <p className="muted">
-            Fulfilled material requests build the guild contribution board.
-          </p>
-        )}
-        <button className="btn text" onClick={() => go("materials")}>
-          View contributions
-          <ArrowUpRight size={14} />
-        </button>
-      </section>
+      {contributors.length > 0 && (
+        <section className="contributor-strip">
+          <span>
+            <Trophy size={18} />
+            Guild contributors
+          </span>
+          {contributors.slice(0, 4).map((p, i) => (
+            <div key={p.id}>
+              <b>{i + 1}</b>
+              <strong>{p.name}</strong>
+              <small>
+                {p.completed} completed · {p.helped} helped
+              </small>
+            </div>
+          ))}
+        </section>
+      )}
     </div>
   );
 }

@@ -56,6 +56,7 @@ type Link = {
   discord_id: string;
   display_name: string;
   dm_opt_in: number;
+  chat_dm_opt_in: number;
 };
 type Deps = {
   authenticated: (r: Request, e: Env) => Promise<Identity>;
@@ -78,7 +79,9 @@ export async function config(env: Env): Promise<Config | undefined> {
 }
 async function link(env: Env, id: string) {
   return env.DB.prepare(
-    "SELECT member_id,discord_id,display_name,dm_opt_in FROM discord_links WHERE member_id=?",
+    `SELECT member_id,discord_id,display_name,dm_opt_in,
+     EXISTS (SELECT 1 FROM chat_discord_preferences p WHERE p.member_id=l.member_id AND p.discord_id=l.discord_id) AS chat_dm_opt_in
+     FROM discord_links l WHERE member_id=?`,
   )
     .bind(id)
     .first<Link>();
@@ -443,20 +446,18 @@ export async function handleDiscord(
         .first<{ member_id: string }>();
       if (existing && existing.member_id !== saved.memberId)
         return linkPage(false);
-      await env.DB.prepare(
-        "DELETE FROM chat_discord_preferences WHERE member_id=?",
-      )
-        .bind(saved.memberId)
-        .run();
-      await env.DB.prepare(
-        "INSERT INTO discord_links (member_id,discord_id,display_name,dm_opt_in) VALUES (?,?,?,0) ON CONFLICT(member_id) DO UPDATE SET discord_id=excluded.discord_id,display_name=excluded.display_name,dm_opt_in=0",
-      )
-        .bind(
+      await env.DB.batch([
+        env.DB.prepare(
+          "DELETE FROM chat_discord_preferences WHERE member_id=?",
+        ).bind(saved.memberId),
+        env.DB.prepare(
+          "INSERT INTO discord_links (member_id,discord_id,display_name,dm_opt_in) VALUES (?,?,?,0) ON CONFLICT(member_id) DO UPDATE SET discord_id=excluded.discord_id,display_name=excluded.display_name,dm_opt_in=0",
+        ).bind(
           saved.memberId,
           user.id,
           String(user.global_name || user.username).slice(0, 100),
-        )
-        .run();
+        ),
+      ]);
       return linkPage(true);
     } catch {
       return linkPage(false);
@@ -500,7 +501,11 @@ export async function handleDiscord(
       guildName: cfg?.guildName || "Ønslaught",
       channelNames: cfg?.channelNames || {},
       ownLink: own
-        ? { name: own.display_name, dmOptIn: !!own.dm_opt_in }
+        ? {
+            name: own.display_name,
+            dmOptIn: !!own.dm_opt_in,
+            chatDmOptIn: !!own.chat_dm_opt_in,
+          }
         : null,
       ...(access.admin
         ? {
@@ -575,14 +580,14 @@ export async function handleDiscord(
     return d.json({ ok: true });
   }
   if (u.pathname === "/api/discord/unlink" && req.method === "POST") {
-    await env.DB.prepare(
-      "DELETE FROM chat_discord_preferences WHERE member_id=?",
-    )
-      .bind(identity.id)
-      .run();
-    await env.DB.prepare("DELETE FROM discord_links WHERE member_id=?")
-      .bind(identity.id)
-      .run();
+    await env.DB.batch([
+      env.DB.prepare(
+        "DELETE FROM chat_discord_preferences WHERE member_id=?",
+      ).bind(identity.id),
+      env.DB.prepare("DELETE FROM discord_links WHERE member_id=?").bind(
+        identity.id,
+      ),
+    ]);
     return d.json({ ok: true });
   }
   if (u.pathname === "/api/discord/delivery" && req.method === "GET") {

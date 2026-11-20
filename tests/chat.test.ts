@@ -164,9 +164,14 @@ describe("private guild messenger", () => {
     db.sqlite
       .prepare("INSERT INTO discord_links VALUES(?,?,?,1)")
       .run("bob", "111111111111111111", "Bob");
-    db.sqlite
-      .prepare("INSERT INTO discord_config VALUES('guild',?)")
-      .run(JSON.stringify({ guildId: "222222222222222222" }));
+    db.sqlite.prepare("INSERT INTO discord_config VALUES('guild',?)").run(
+      JSON.stringify({
+        guildId: "222222222222222222",
+        announcementsChannelId: "333333333333333333",
+        pollsChannelId: "444444444444444444",
+        requestsChannelId: "555555555555555555",
+      }),
+    );
     const original = upstream.getMockImplementation()!;
     upstream.mockImplementation(async (url, init) =>
       url.includes("discord.com")
@@ -190,6 +195,22 @@ describe("private guild messenger", () => {
       (await call("bob", "preferences", { discordDM: true })).data.discord
         .enabled,
     ).toBe(true);
+    const connection = async () =>
+      (await call("bob", "/api/discord/status")).data.ownLink;
+    expect(await connection()).toEqual({
+      name: "Bob",
+      dmOptIn: true,
+      chatDmOptIn: true,
+    });
+    await call("bob", "/api/discord/preferences", { dmOptIn: false });
+    expect(await connection()).toEqual({
+      name: "Bob",
+      dmOptIn: false,
+      chatDmOptIn: true,
+    });
+    expect(
+      (await call("alice", "/api/discord/status")).data.ownLink,
+    ).toBeNull();
     const nonce = crypto.randomUUID();
     expect(
       (await send("alice", "Ready? @everyone", "bob", nonce)).data
@@ -207,6 +228,11 @@ describe("private guild messenger", () => {
       ],
     });
     await call("bob", "preferences", { discordDM: false });
+    expect(await connection()).toEqual({
+      name: "Bob",
+      dmOptIn: false,
+      chatDmOptIn: false,
+    });
     expect(
       (await send("alice", "After opt-out", "bob")).data.discordDelivery,
     ).toBe("disabled");
@@ -553,11 +579,48 @@ describe("private guild messenger", () => {
     });
     expect(changed.status).toBe(200);
     expect(
-      db.sqlite.prepare("SELECT COUNT(*) AS n FROM chat_membership").get()?.n,
+      db.sqlite
+        .prepare("SELECT COUNT(*) AS n FROM chat_membership WHERE expires_at>0")
+        .get()?.n,
     ).toBe(0);
     expect((await call("alice", "messages")).status).toBe(403);
     await invalidateChatMembers(env);
     upstream.mockRejectedValue(new Error("offline"));
     expect((await call("bob", "messages")).status).toBe(500);
+  });
+  it("discards a chat membership read that started before a suspension", async () => {
+    const { call, upstream, doc } = await setup();
+    const original = upstream.getMockImplementation()!;
+    let pause = true;
+    let release!: () => void, started!: () => void;
+    const resume = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const reading = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    upstream.mockImplementation(async (url, init) => {
+      const result = await original(url, init);
+      if (pause && url.includes("/contents/") && !init?.method) {
+        pause = false;
+        started();
+        await resume;
+      }
+      return result;
+    });
+    const inFlight = call("alice", "status");
+    await reading;
+    try {
+      const changed = await call("admin", "/api/members", {
+        id: "concurrent-suspension",
+        expectedRevision: 0,
+        member: { ...doc.members[0], status: "suspended" },
+      });
+      expect(changed.status).toBe(200);
+    } finally {
+      release();
+    }
+    expect((await inFlight).status).toBe(403);
+    expect((await call("alice", "messages")).status).toBe(403);
   });
 });

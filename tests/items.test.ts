@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   boundedItemJSON,
@@ -7,8 +8,10 @@ import {
   tooltipText,
   wowheadURL,
   ITEM_FRESH_MS,
+  ITEM_STALE_MS,
 } from "../src/lib/item-data";
-import { serveItem } from "../server/items";
+import { publicItemCache, serveItem } from "../server/items";
+import { chatDatabase } from "./chat-db";
 const sample = {
   name: "Test Jerkin",
   quality: 2,
@@ -146,6 +149,90 @@ describe("Forever tooltip gateway", () => {
     expect(result.status).toBe("resolved");
     expect(result.stale).toBe(true);
     expect(result.item.name).toBe("Test Jerkin");
+  });
+  it("rechecks missing IDs after five minutes and recovers from a rate-limited provider", async () => {
+    vi.useFakeTimers();
+    const start = Date.now(),
+      c = cache();
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(
+        new Response(null, { status: 429, headers: { "Retry-After": "180" } }),
+      )
+      .mockResolvedValueOnce(Response.json(sample));
+    vi.stubGlobal("fetch", fetch);
+    const get = async () =>
+      (await serveItem(request(), c as any, async () => {})).json();
+    expect(await get()).toMatchObject({ status: "unresolved" });
+    vi.setSystemTime(start + 299999);
+    expect(await get()).toMatchObject({ status: "unresolved" });
+    vi.setSystemTime(start + 300000);
+    expect(await get()).toMatchObject({
+      status: "unavailable",
+      retryAt: start + 480000,
+    });
+    vi.setSystemTime(start + 479999);
+    expect(await get()).toMatchObject({ status: "unavailable" });
+    vi.setSystemTime(start + 480000);
+    expect(await get()).toMatchObject({ status: "resolved" });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+  it("ages shared D1 data across edge locations and never extends the stale limit through retries", async () => {
+    vi.useFakeTimers();
+    const start = Date.now(),
+      { db, sqlite } = chatDatabase();
+    try {
+      sqlite.exec(readFileSync("server/items-schema.sql", "utf8"));
+      const first = publicItemCache(db, cache() as any);
+      const newEdge = cache(),
+        second = publicItemCache(db, newEdge as any);
+      const fetch = vi
+        .fn()
+        .mockResolvedValueOnce(Response.json(sample))
+        .mockImplementation(async () => new Response(null, { status: 503 }));
+      vi.stubGlobal("fetch", fetch);
+      const get = (storage: typeof first) =>
+        serveItem(request(), storage, async () => {});
+      await get(first);
+      vi.setSystemTime(start + ITEM_FRESH_MS - 5000);
+      expect((await get(second)).headers.get("cache-control")).toBe(
+        "public, max-age=5",
+      );
+      expect(newEdge.values.size).toBe(1);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      vi.setSystemTime(start + ITEM_STALE_MS - 1000);
+      const last = await get(second);
+      expect(await last.json()).toMatchObject({
+        status: "resolved",
+        stale: true,
+      });
+      expect(last.headers.get("cache-control")).toBe("public, max-age=1");
+      vi.setSystemTime(start + ITEM_STALE_MS);
+      expect(await (await get(second)).json()).toMatchObject({
+        status: "unavailable",
+      });
+    } finally {
+      sqlite.close();
+    }
+  });
+  it("limits distinct lookups to three active requests, including simultaneous repeat views", async () => {
+    vi.resetModules();
+    const { getItem } = await import("../src/lib/items");
+    let active = 0,
+      peak = 0;
+    const fetch = vi.fn(async () => {
+      peak = Math.max(peak, ++active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active--;
+      return Response.json(sample);
+    });
+    vi.stubGlobal("fetch", fetch);
+    const ids = [2, 3, 4, 5, 6, 7, 8, 5, 2, 2];
+    const results = await Promise.all(ids.map((id) => getItem(id)));
+    expect(results.map((r) => r.item?.id)).toEqual(ids);
+    expect(peak).toBe(3);
+    expect(fetch).toHaveBeenCalledTimes(7);
   });
   it("deduplicates client lookups by complete variant without any credentials", async () => {
     vi.resetModules();

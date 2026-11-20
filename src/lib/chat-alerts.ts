@@ -1,4 +1,29 @@
-import type { ChatNotification } from "./chat";
+import type { ChatNotification, ChatStatus } from "./chat";
+
+type DiscordPreference = NonNullable<ChatStatus["discord"]>;
+const preferenceListeners = new Set<
+  (account: string, choice: DiscordPreference) => void
+>();
+
+/** The connection page and open messenger can both edit the same preference. */
+export function onChatDiscordPreference(
+  account: string,
+  listener: (choice: DiscordPreference) => void,
+) {
+  const receive = (changedAccount: string, choice: DiscordPreference) => {
+    if (changedAccount === account) listener(choice);
+  };
+  preferenceListeners.add(receive);
+  return () => {
+    preferenceListeners.delete(receive);
+  };
+}
+export function notifyChatDiscordPreference(
+  account: string,
+  choice: DiscordPreference,
+) {
+  for (const listener of preferenceListeners) listener(account, choice);
+}
 
 export function newChatAlert(
   latest: ChatNotification | null | undefined,

@@ -10,3 +10,5 @@ dist/
 
 # Local browser QA harnesses (fictional records only)
 work/
+test-results/
+playwright-report/

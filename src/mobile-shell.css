@@ -4,6 +4,190 @@
   display: none;
 }
 
+html {
+  scroll-padding-top: calc(74px + env(safe-area-inset-top));
+}
+.main-shell > .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  background: #1b1721;
+  box-shadow: 0 2px 9px #100d153d;
+}
+.top-actions .personal-character-action {
+  min-height: 44px;
+  white-space: nowrap;
+}
+.membership-notice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 16px;
+  margin: 0 0 20px;
+  padding: 16px 20px;
+  border: 1px solid #bb7776;
+  border-inline-start: 4px solid #f19781;
+  border-radius: 6px;
+  background: linear-gradient(110deg, #40222d, #231c27);
+  color: #ffe6ce;
+}
+.membership-notice h2 {
+  margin: 0;
+  font-size: 1.3rem;
+  color: #fff5e8;
+}
+.membership-notice p {
+  margin: 4px 0 0;
+  color: #efdde1;
+  line-height: 1.5;
+}
+.membership-notice .btn {
+  min-height: 44px;
+}
+.first-character-note {
+  margin: 0 0 16px;
+  padding-left: 12px;
+  border-left: 2px solid #bc867b;
+  color: #ecdbe3;
+  line-height: 1.5;
+}
+.personal-character-list {
+  display: grid;
+  gap: 8px;
+}
+.personal-character-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 58px;
+  padding: 9px 12px;
+  border: 1px solid #795b6e;
+  border-radius: 5px;
+  background: #2a202d;
+  color: #fff1e3;
+  text-align: left;
+  cursor: pointer;
+}
+.personal-character-row:hover,
+.personal-character-row:focus-visible {
+  border-color: #e3a78d;
+  background: #3b2634;
+}
+.personal-character-row > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.personal-character-row small {
+  color: #e1cad3;
+}
+.personal-character-list > .btn {
+  justify-self: start;
+  min-height: 44px;
+  margin-top: 4px;
+}
+.war-room-banner.board-next-raid h2 a {
+  color: #f2eafa;
+  text-decoration: none;
+}
+.war-room-banner.board-next-raid h2 a:hover {
+  color: #ffdfb8;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+.board-next-raid h2 a svg {
+  margin-inline-start: 0.25em;
+  vertical-align: middle;
+}
+.board-next-raid:has(.availability-board) {
+  gap: 16px;
+}
+.board-next-raid .availability-board {
+  position: relative;
+  align-self: end;
+  justify-self: start;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 12px 14px;
+  gap: 8px 14px;
+  border: 1px solid #a07b84;
+  background: #201720ef;
+  color: #fff0e7;
+}
+.availability-board .dropdown,
+.availability-board .signup-build {
+  min-width: 0;
+  max-width: 100%;
+}
+.availability-board .dropdown-trigger,
+.availability-board .rsvp-actions button {
+  min-height: 44px;
+}
+.availability-board .availability-character {
+  color: #ebd8de;
+}
+.dispatch-card details summary {
+  min-height: 44px;
+  align-content: center;
+  color: #ffd4bd;
+  cursor: pointer;
+}
+.dispatch-card details .dispatch-body {
+  white-space: pre-wrap;
+}
+.dispatch-card .dispatch-body:has(+ details[open]) {
+  display: none;
+}
+@media (max-width: 640px) {
+  .membership-notice {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 14px;
+    gap: 8px;
+  }
+  .membership-notice > svg {
+    align-self: start;
+  }
+  .membership-notice .btn {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .board-next-raid .availability-board {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    padding: 10px;
+  }
+  .availability-board .rsvp-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1.45fr;
+    margin-left: 0;
+  }
+  .availability-board .rsvp-actions button {
+    padding-inline: 2px;
+  }
+  .availability-board .dropdown-trigger > span:not(.dropdown-icon) {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: start;
+  }
+  .availability-board .availability-character {
+    grid-row: 1;
+    grid-column: 1;
+    justify-self: end;
+    max-width: 52%;
+    overflow-wrap: anywhere;
+  }
+  .availability-board > div:first-child:has(+ .availability-character) {
+    grid-row: 1;
+    grid-column: 1;
+    width: fit-content;
+  }
+}
+
 /* The signup is the primary action even when the desktop art is cropped. */
 @media (max-width: 1200px) {
   .war-room-banner.board-next-raid > .btn {

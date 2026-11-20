@@ -8,6 +8,10 @@ Lineups require **Raid planner + Attendance & raid notes + the specific team**. 
 
 ## Guided imports
 
+After Battle.net sign-in, **Request membership** appears on Overview. The request shows as pending until an admin approves it. Members with gear access can use **Import character** or **Update character** in the persistent header on every page. Members with multiple linked characters choose the one they played. The importer checks the name, class and previously recorded realm before updating gear. Returning characters with a complete build go straight from export to review and can edit their role, spec or buffs there.
+
+The upcoming raid on **Overview** accepts an RSVP and alternate build directly. Open the raid title for lineup planning. Members can also claim an open material request on Overview.
+
 Import follows Export → Role & spec → Buffs → Review. Choose a primary role and a Forever talent tree for your class. Under **Alternate specs & roles**, add any other builds you can play. A Druid can register Feral Tank, Feral Melee and Restoration Healer on the same character. Select each build under **Buffs** to declare its own abilities. Refreshing a gear export preserves saved builds.
 
 In **Raid planner → Your availability**, select a build for that night and choose Going, Maybe or Can’t make it. Changing the build after signing up updates the existing response. Your primary profile and other nights keep their own settings. The active lineup uses that night's role and buff declarations. The site and Discord close signups when the scheduled raid ends.
@@ -31,8 +35,8 @@ When Blizzard changes class rules, update `src/lib/raid.ts` and this review date
 
 ## Unified raid workspace
 
-Raid planner contains lineup and personal availability, raid-night polls, loot, raid supplies, and progress. The legacy Schedule link redirects here. Personal availability is available to every approved rank for its own characters, independently of permission to view private attendance or edit structure. Manage raiders opens a searchable roster picker; admins can also record RSVPs and download calendar events from the planner. Times use the viewer’s browser time zone.
+Raid planner contains lineup and personal availability, raid-night polls, loot, raid supplies, and progress. The legacy Schedule link redirects here. Every approved rank can respond for its own characters. Manage raiders opens a searchable roster picker. Admins can also record RSVPs. New raids use the guild time zone, and editing uses the event’s saved zone. Attendees see their local time. Calendar downloads preserve the scheduled instant, including during daylight-saving transitions.
 
 Buff coverage counts only confirmed, same-team raiders in valid group slots within the team’s capacity. Bench, tentative, absent, wrong-team, out-of-range and over-capacity entries never contribute. Bench providers are explicitly labeled not covered.
 
-The first-use guide covers Battle.net, approval, character setup, optional Discord linking/DMs, and personal availability. Completion is local to the member’s browser and does not store credentials. It can be reopened from Getting started.
+Getting started opens a guide to Battle.net, approval, character setup, optional Discord linking and DM delivery, and personal availability. The guide shows progress from the member’s current guild information. Quick help links directly to each task.

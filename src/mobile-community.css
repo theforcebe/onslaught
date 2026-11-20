@@ -1,6 +1,51 @@
 .community-phone-label {
   display: none;
 }
+.discord-dm-options {
+  min-width: 0;
+  margin: 14px 0 8px;
+  padding: 0;
+  border: 0;
+}
+.discord-dm-options legend {
+  font-weight: 700;
+}
+.guild-hub .discord-dm-options .discord-opt-in {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  margin: 0;
+  padding: 9px 2px;
+  gap: 10px;
+  cursor: pointer;
+}
+.discord-dm-options .discord-opt-in + .discord-opt-in {
+  border-top: 1px solid var(--line);
+}
+.discord-dm-options .discord-opt-in input {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  margin: 0;
+}
+.discord-dm-options strong,
+.discord-dm-options small {
+  display: block;
+}
+.discord-dm-options small {
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+.discord-link-card p a,
+.chat-preferences small a {
+  color: #f1cca4;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.guild-messenger .chat-discord-toggle {
+  min-height: 44px;
+  align-items: center;
+}
 /* The desktop messenger is a non-modal dialog in its original fixed position. */
 #guild-messenger {
   margin: 0;

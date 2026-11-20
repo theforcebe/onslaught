@@ -1,9 +1,9 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ExternalLink, LoaderCircle, Package, X } from "lucide-react";
 import { getItem, itemLink, safeIcon } from "./lib/items";
-import { itemKey } from "./lib/item-data";
+import { itemKey, itemParams } from "./lib/item-data";
 import type { ItemModifiers, ItemResult } from "./lib/item-data";
 
 type Props = {
@@ -28,15 +28,23 @@ export function ItemTooltip({
     [loading, setLoading] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null),
     panel = useRef<HTMLDivElement>(null),
+    returningFocus = useRef(false),
     closeTimer = useRef<ReturnType<typeof setTimeout>>(undefined),
     key = itemKey(id, modifiers),
     tooltipId = useId();
   const clearClose = () => clearTimeout(closeTimer.current);
-  const hide = () => {
+  const hide = (restoreFocus = false) => {
     clearClose();
+    if (restoreFocus) returningFocus.current = true;
     setOpen(false);
     setPinned(false);
   };
+  useLayoutEffect(() => {
+    if (!open && returningFocus.current) {
+      trigger.current?.focus({ preventScroll: true });
+      returningFocus.current = false;
+    }
+  }, [open]);
   const leave = () => {
     clearClose();
     if (!pinned) closeTimer.current = setTimeout(() => setOpen(false), 180);
@@ -67,23 +75,35 @@ export function ItemTooltip({
   }, [open, key]);
   useEffect(() => {
     if (!open) return;
+    const visual = window.visualViewport;
     const position = () => {
       const t = trigger.current?.getBoundingClientRect(),
         p = panel.current;
       if (!t || !p) return;
-      const viewport = document.documentElement.clientWidth;
+      const viewport = visual?.width ?? document.documentElement.clientWidth;
+      const x = visual?.offsetLeft ?? 0;
+      const y = visual?.offsetTop ?? 0;
+      const bottom = y + (visual?.height ?? window.innerHeight) - 12;
       const width = Math.min(365, viewport - 24);
       p.style.width = `${width}px`;
-      const height = Math.min(p.scrollHeight, window.innerHeight - 32);
-      p.style.left = `${Math.max(12, Math.min(t.left, viewport - width - 12))}px`;
-      p.style.top = `${Math.max(12, Math.min(t.bottom + 8, window.innerHeight - height - 12))}px`;
+      const below = bottom - t.bottom - 6;
+      const above = t.top - 6 - (y + 12);
+      const placeAbove = p.scrollHeight + 2 > below && above > below;
+      p.style.maxHeight = `${Math.max(44, Math.min(bottom - y - 12, placeAbove ? above : below))}px`;
+      const height = p.getBoundingClientRect().height;
+      const top = placeAbove ? t.top - height - 6 : t.bottom + 6;
+      p.style.left = `${Math.max(x + 12, Math.min(t.left, x + viewport - width - 12))}px`;
+      p.style.top = `${Math.max(y + 12, Math.min(top, bottom - height))}px`;
     };
     panel.current?.showPopover?.();
     position();
     const observer = new ResizeObserver(position);
     if (panel.current) observer.observe(panel.current);
     const keydown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") hide();
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      hide(!!panel.current?.contains(document.activeElement));
     };
     const outside = (e: PointerEvent) => {
       if (
@@ -94,22 +114,29 @@ export function ItemTooltip({
     };
     window.addEventListener("resize", position);
     window.addEventListener("scroll", position, true);
-    document.addEventListener("keydown", keydown);
+    visual?.addEventListener("resize", position);
+    visual?.addEventListener("scroll", position);
+    document.addEventListener("keydown", keydown, true);
     document.addEventListener("pointerdown", outside);
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", position);
       window.removeEventListener("scroll", position, true);
-      document.removeEventListener("keydown", keydown);
+      visual?.removeEventListener("resize", position);
+      visual?.removeEventListener("scroll", position);
+      document.removeEventListener("keydown", keydown, true);
       document.removeEventListener("pointerdown", outside);
     };
-  }, [open, result]);
+  }, [open]);
+  useEffect(() => {
+    if (pinned)
+      panel.current?.querySelector("button")?.focus({ preventScroll: true });
+  }, [pinned]);
   const item = result?.item,
     src = safeIcon(item?.icon_url),
     lines = item?.tooltipLines || [];
-  const unsupported = Object.keys(modifiers).filter(
-    (k) => !["bonus_id", "enchant_id", "gem_id"].includes(k),
-  );
+  const requested = itemParams(modifiers);
+  const hasUnverifiedModifiers = Object.keys(modifiers).length > requested.size;
   return (
     <>
       <button
@@ -117,15 +144,26 @@ export function ItemTooltip({
         type="button"
         className={`item-trigger ${className} ${item?.quality || ""}`}
         aria-label={`Inspect ${name}`}
+        aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? tooltipId : undefined}
         onMouseEnter={() => {
           clearClose();
           setOpen(true);
         }}
-        onMouseLeave={leave}
+        onMouseLeave={() => {
+          if (
+            document.activeElement !== trigger.current &&
+            !panel.current?.contains(document.activeElement)
+          )
+            leave();
+        }}
         onFocus={(e) => {
-          if (!panel.current?.contains(e.relatedTarget)) setOpen(true);
+          if (
+            !returningFocus.current &&
+            !panel.current?.contains(e.relatedTarget)
+          )
+            setOpen(true);
         }}
         onBlur={(e) => {
           if (!panel.current?.contains(e.relatedTarget)) leave();
@@ -165,7 +203,23 @@ export function ItemTooltip({
             aria-label={`${name} item details`}
             className="item-tooltip"
             onMouseEnter={clearClose}
-            onMouseLeave={leave}
+            onMouseLeave={() => {
+              if (
+                document.activeElement !== trigger.current &&
+                !panel.current?.contains(document.activeElement)
+              )
+                leave();
+            }}
+            onFocus={clearClose}
+            onBlur={(e) => {
+              // WebKit focuses the containing native dialog before dispatching a tapped button's click.
+              if (pinned && (!e.relatedTarget || e.relatedTarget === trigger.current?.closest("dialog[open]"))) return;
+              if (
+                !panel.current?.contains(e.relatedTarget) &&
+                e.relatedTarget !== trigger.current
+              )
+                hide();
+            }}
           >
             <header>
               <span className={`item-tooltip-name ${item?.quality || ""}`}>
@@ -175,10 +229,8 @@ export function ItemTooltip({
               <button
                 className="icon-btn"
                 aria-label="Close item details"
-                onClick={() => {
-                  hide();
-                  trigger.current?.focus();
-                }}
+                type="button"
+                onClick={() => hide(true)}
               >
                 <X size={16} />
               </button>
@@ -206,9 +258,8 @@ export function ItemTooltip({
             ) : (
               <p className="muted">
                 {result?.status === "unresolved"
-                  ? "This item is not indexed yet."
-                  : "Item lookup is temporarily unavailable."}{" "}
-                Your imported details are preserved.
+                  ? "Wowhead Forever has no details for this item ID."
+                  : "Item lookup is temporarily unavailable."}
               </p>
             )}
             {!!Object.keys(modifiers).length && (
@@ -221,7 +272,7 @@ export function ItemTooltip({
                 ))}
               </details>
             )}
-            {!!unsupported.length && (
+            {hasUnverifiedModifiers && (
               <p className="item-caveat">
                 Content tuning and other unverified modifiers may differ
                 in-game. Imported values remain saved.
@@ -244,7 +295,7 @@ export function ItemTooltip({
               </small>
             </footer>
           </div>,
-          document.body,
+          trigger.current?.closest("dialog[open]") ?? document.body,
         )}
     </>
   );

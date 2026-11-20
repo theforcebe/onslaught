@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ZonedDateTimeField } from "./ZonedDateTimeField";
 import { Package, Plus, Send, Trophy } from "lucide-react";
 import type { Access, GuildView } from "./lib/access";
 import { hasSection } from "./lib/access";
@@ -171,7 +172,11 @@ export function MaterialBoard({
                     {r.fulfilled}
                     <span> / {r.quantity}</span>
                   </strong>
-                  <Meter value={r.fulfilled} max={r.quantity} />
+                  <Meter
+                    label={`${r.item} delivered`}
+                    value={r.fulfilled}
+                    max={r.quantity}
+                  />
                 </div>
                 <p className="request-owner">
                   {r.recipientId ? (
@@ -373,9 +378,7 @@ export function MaterialBoard({
                   itemId: selected?.id,
                   quantity: Number(f.get("quantity")),
                   notes: String(f.get("notes") || ""),
-                  dueAt: f.get("dueAt")
-                    ? new Date(String(f.get("dueAt"))).toISOString()
-                    : undefined,
+                  dueAt: String(f.get("dueAt") || "") || undefined,
                 },
               })
             }
@@ -402,9 +405,12 @@ export function MaterialBoard({
                   required
                 />
               </Field>
-              <Field label="Needed by (optional)">
-                <input name="dueAt" type="datetime-local" />
-              </Field>
+              <ZonedDateTimeField
+                label="Needed by · your time (optional)"
+                name="dueAt"
+                timeZone={Intl.DateTimeFormat().resolvedOptions().timeZone}
+                required={false}
+              />
             </div>
             {lead && (
               <fieldset className="recipient-picker">

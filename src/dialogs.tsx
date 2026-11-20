@@ -1,5 +1,6 @@
 import { Dropdown, Select } from "./Dropdown";
 import { SignupChoices } from "./Availability";
+import { ZonedDateTimeField } from "./ZonedDateTimeField";
 import { useState } from "react";
 import {
   ExternalLink,
@@ -30,6 +31,7 @@ import type { Member } from "./lib/access";
 import { download } from "./lib/calendar";
 export type DialogState = {
   type: string;
+  personal?: boolean;
   character?: Character;
   team?: Team;
   loot?: Loot;
@@ -41,6 +43,8 @@ export type DialogState = {
 type Props = {
   dialog: DialogState;
   editableCharacters: Character[];
+  myCharacters: Character[];
+  linkedCharacters: Character[];
   saveRaid: (event: RaidEvent, publish: boolean) => Promise<void>;
   state: RaidState;
   close: () => void;
@@ -57,9 +61,11 @@ const num = (d: FormData, k: string) => Number(d.get(k));
 function Actions({
   label: caption = "Save change",
   admin = false,
+  disabled = false,
 }: {
   label?: string;
   admin?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <div className="form-actions">
@@ -68,7 +74,7 @@ function Actions({
           <ShieldCheck size={14} /> Admin permission required
         </span>
       )}
-      <button className="btn primary" type="submit">
+      <button className="btn primary" type="submit" disabled={disabled}>
         {caption}
       </button>
     </div>
@@ -127,13 +133,62 @@ export default function Dialogs(p: Props) {
   };
   let title = "",
     content;
+  if (d.type === "my-characters") {
+    title = "Choose your character";
+    content = (
+      <div className="personal-character-list">
+        {p.linkedCharacters.map((c) => {
+          const available = p.myCharacters.some((owned) => owned.id === c.id);
+          return (
+            <button
+              key={c.id}
+              className="personal-character-row"
+              disabled={!available}
+              onClick={() =>
+                open({ type: "import", character: c, personal: true })
+              }
+            >
+              <ClassIcon cls={c.class} size={36} />
+              <span>
+                <strong>{c.name}</strong>
+                <small>
+                  {[
+                    label(c.class),
+                    c.spec,
+                    c.snapshot?.server || c.publicTeamName,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </small>
+                {!available && (
+                  <small>Ask an admin for this team’s gear access.</small>
+                )}
+              </span>
+            </button>
+          );
+        })}
+        <button
+          className="btn secondary"
+          onClick={() => open({ type: "import", personal: true })}
+        >
+          Import another character
+        </button>
+      </div>
+    );
+  }
   if (d.type === "import") {
     title = d.character
       ? `Update ${d.character.name}’s gear & builds`
       : "Set up your raid character";
     content = (
       <CharacterImport
-        state={state}
+        key={d.character?.id || "new"}
+        switchCharacter={
+          d.personal && d.character
+            ? () => open({ type: "my-characters" })
+            : undefined
+        }
+        candidates={d.personal ? p.myCharacters : p.editableCharacters}
         character={d.character}
         change={change}
         demo={demo}
@@ -141,6 +196,7 @@ export default function Dialogs(p: Props) {
     );
   }
   if (d.type === "character" && d.character) {
+    const activeMembers = p.members.filter((m) => m.status === "active");
     const c =
       state.characters.find((x) => x.id === d.character!.id) || d.character;
     title = c.name;
@@ -264,22 +320,30 @@ export default function Dialogs(p: Props) {
               <Field label="Approved member">
                 <Select
                   name="memberId"
-                  defaultValue={c.ownerBattleNet || ""}
+                  defaultValue={
+                    activeMembers.some((m) => m.id === c.ownerBattleNet)
+                      ? c.ownerBattleNet
+                      : ""
+                  }
                   required
+                  disabled={!activeMembers.length}
                 >
                   <option value="" disabled>
                     Choose a member
                   </option>
-                  {p.members
-                    .filter((m) => m.status === "active")
-                    .map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.label}
-                      </option>
-                    ))}
+                  {activeMembers.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
+                  ))}
                 </Select>
               </Field>
-              <Actions admin />
+              {!activeMembers.length && (
+                <p className="muted">
+                  Approve a guild member to assign this character.
+                </p>
+              )}
+              <Actions admin disabled={!activeMembers.length} />
             </Form>
           </details>
         )}
@@ -405,13 +469,7 @@ export default function Dialogs(p: Props) {
   }
   if (d.type === "event") {
     title = d.event ? "Edit raid" : "Schedule a raid";
-    const local = (s?: string) => {
-      if (!s) return "";
-      const t = new Date(s);
-      return new Date(t.getTime() - t.getTimezoneOffset() * 60000)
-        .toISOString()
-        .slice(0, 16);
-    };
+    const raidZone = d.event?.timeZone || state.guild.timeZone;
     content = (
       <Form
         onSubmit={(f) => {
@@ -422,9 +480,9 @@ export default function Dialogs(p: Props) {
               title: val(f, "title"),
               instance: val(f, "instance"),
               teamId: val(f, "teamId"),
-              start: new Date(val(f, "start")).toISOString(),
-              end: new Date(val(f, "end")).toISOString(),
-              timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              start: val(f, "start"),
+              end: val(f, "end"),
+              timeZone: raidZone,
               notes: val(f, "notes"),
               signups: d.event?.signups || {},
             };
@@ -469,29 +527,24 @@ export default function Dialogs(p: Props) {
             </Select>
           </Field>
         </div>
-        <div className="form-grid">
-          <Field label="Starts">
-            <input
-              name="start"
-              type="datetime-local"
-              defaultValue={local(d.event?.start)}
-              required
-            />
-          </Field>
-          <Field label="Ends">
-            <input
-              name="end"
-              type="datetime-local"
-              defaultValue={local(d.event?.end)}
-              required
-            />
-          </Field>
-        </div>
         <p className="muted">
-          Enter times in your device’s time zone:{" "}
-          {Intl.DateTimeFormat().resolvedOptions().timeZone}. Everyone will see
-          the same instant in their chosen time zone.
+          Enter raid times in <strong>{raidZone.replaceAll("_", " ")}</strong>.
+          Members see the raid in their local time.
         </p>
+        <div className="form-grid">
+          <ZonedDateTimeField
+            label="Starts"
+            name="start"
+            timeZone={raidZone}
+            initial={d.event?.start}
+          />
+          <ZonedDateTimeField
+            label="Ends"
+            name="end"
+            timeZone={raidZone}
+            initial={d.event?.end}
+          />
+        </div>
         <Field label="Raid notes">
           <textarea
             name="notes"
@@ -778,6 +831,11 @@ export default function Dialogs(p: Props) {
   }
   if (d.type === "loot-detail" && d.loot) {
     const l = state.loot.find((x) => x.id === d.loot!.id) || d.loot;
+    const remainingCandidates = state.characters.filter(
+      (c) =>
+        !l.priority.includes(c.id) &&
+        (!l.eligible.length || l.eligible.includes(c.class)),
+    );
     title = l.name;
     content = (
       <>
@@ -871,23 +929,29 @@ export default function Dialogs(p: Props) {
             }
           >
             <div className="inline-form">
-              <Select name="characterId" required defaultValue="">
+              <Select
+                name="characterId"
+                aria-label="Add eligible raider to priority"
+                required
+                defaultValue=""
+                disabled={!remainingCandidates.length}
+              >
                 <option value="" disabled>
-                  Add eligible raider to priority…
+                  {remainingCandidates.length
+                    ? "Add eligible raider to priority…"
+                    : "No eligible raiders to add"}
                 </option>
-                {state.characters
-                  .filter(
-                    (c) =>
-                      !l.priority.includes(c.id) &&
-                      (!l.eligible.length || l.eligible.includes(c.class)),
-                  )
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
+                {remainingCandidates.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
               </Select>
-              <button className="btn secondary" type="submit">
+              <button
+                className="btn secondary"
+                type="submit"
+                disabled={!remainingCandidates.length}
+              >
                 Add
               </button>
             </div>
@@ -944,10 +1008,16 @@ export default function Dialogs(p: Props) {
             {p.admin && (
               <button
                 className="btn primary"
+                disabled={!lootCandidates.length}
                 onClick={() => open({ type: "award", loot: l })}
               >
                 Record award
               </button>
+            )}
+            {p.admin && !lootCandidates.length && (
+              <p className="muted">
+                No roster characters match the eligible classes for this drop.
+              </p>
             )}
           </div>
         )}

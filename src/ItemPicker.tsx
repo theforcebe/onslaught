@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { API_URL } from "./lib/api";
 import { ItemTooltip } from "./ItemTooltip";
@@ -11,7 +11,10 @@ export type ItemSuggestion = {
   category: string;
   source?: "thewowdb";
 };
-const cache = new Map<string, { at: number; results: ItemSuggestion[] }>();
+const cache = new Map<
+  string,
+  { expiresAt: number; results: ItemSuggestion[] }
+>();
 export function ItemPicker({
   value,
   onChange,
@@ -23,8 +26,12 @@ export function ItemPicker({
     [results, setResults] = useState<ItemSuggestion[]>([]),
     [loading, setLoading] = useState(false),
     [error, setError] = useState(""),
-    [active, setActive] = useState(0);
+    [active, setActive] = useState(0),
+    [expanded, setExpanded] = useState(true),
+    [retry, setRetry] = useState(0);
   const id = useId();
+  const input = useRef<HTMLInputElement>(null);
+  const showList = expanded && results.length > 0;
   useEffect(() => {
     const q = query.trim().replace(/\s+/g, " ").toLowerCase();
     setResults([]);
@@ -35,11 +42,7 @@ export function ItemPicker({
       return;
     }
     const old = cache.get(q);
-    if (
-      old &&
-      Date.now() - old.at <
-        (old.results.some((r) => r.source === "thewowdb") ? 3600000 : 43200000)
-    ) {
+    if (old && Date.now() < old.expiresAt) {
       setResults(old.results);
       setLoading(false);
       return;
@@ -50,7 +53,11 @@ export function ItemPicker({
       try {
         const r = await fetch(
           `${API_URL}/api/items/search?q=${encodeURIComponent(q)}`,
-          { signal: abort.signal },
+          {
+            signal: abort.signal,
+            credentials: "omit",
+            referrerPolicy: "no-referrer",
+          },
         );
         if (!r.ok) throw new Error("Search is busy. Try again shortly.");
         const data = await r.json();
@@ -59,7 +66,12 @@ export function ItemPicker({
             "Item search is temporarily unavailable. You can enter the item name below.",
           );
         if (!abort.signal.aborted) {
-          cache.set(q, { at: Date.now(), results: data.results });
+          const ttl = data.provider === "thewowdb" ? 3600000 : 43200000;
+          const expiresAt = Math.min(
+            data.expiresAt ?? Infinity,
+            Date.now() + ttl,
+          );
+          cache.set(q, { expiresAt, results: data.results });
           if (cache.size > 100) cache.delete(cache.keys().next().value!);
           setResults(data.results);
         }
@@ -73,7 +85,7 @@ export function ItemPicker({
       clearTimeout(timer);
       abort.abort();
     };
-  }, [query, value]);
+  }, [query, value, retry]);
   return (
     <div className="item-picker">
       {value ? (
@@ -84,7 +96,11 @@ export function ItemPicker({
             type="button"
             className="icon-btn"
             aria-label="Change selected item"
-            onClick={() => onChange(undefined)}
+            onClick={() => {
+              onChange(undefined);
+              setExpanded(true);
+              requestAnimationFrame(() => input.current?.focus());
+            }}
           >
             <X size={16} />
           </button>
@@ -94,33 +110,49 @@ export function ItemPicker({
           <label className="search item-search">
             <Search size={17} />
             <input
+              ref={input}
               aria-label="Search Forever items"
               role="combobox"
-              aria-expanded={!!results.length}
-              aria-controls={id}
+              aria-expanded={showList}
+              aria-controls={showList ? id : undefined}
               aria-autocomplete="list"
-              aria-activedescendant={
-                results.length ? `${id}-${active}` : undefined
-              }
+              aria-activedescendant={showList ? `${id}-${active}` : undefined}
               value={query}
               maxLength={64}
               placeholder="Search materials, food, flasks…"
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setExpanded(true);
+              }}
+              onFocus={() => setExpanded(true)}
               onKeyDown={(e) => {
                 if (e.key === "ArrowDown" || e.key === "ArrowUp") {
                   e.preventDefault();
+                  if (!expanded) {
+                    setExpanded(true);
+                    setActive(
+                      e.key === "ArrowUp" ? Math.max(0, results.length - 1) : 0,
+                    );
+                    return;
+                  }
                   setActive(
                     (i) =>
                       (i + (e.key === "ArrowDown" ? 1 : -1) + results.length) %
                       Math.max(1, results.length),
                   );
                 }
-                if (e.key === "Enter" && results[active]) {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
                   e.preventDefault();
-                  onChange(results[active]);
+                  if (showList && results[active]) onChange(results[active]);
                 }
-                if (e.key === "Escape") {
-                  setResults([]);
+                if (
+                  e.key === "Escape" &&
+                  expanded &&
+                  (loading || results.length)
+                ) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setExpanded(false);
                 }
               }}
             />
@@ -133,7 +165,16 @@ export function ItemPicker({
                   ? "No matching suggestions. Refine the name or enter it manually."
                   : "Search by name, then choose the exact item. Refine broad searches to find more matches.")}
           </div>
-          {!!results.length && (
+          {error && (
+            <button
+              type="button"
+              className="btn secondary"
+              onClick={() => setRetry((n) => n + 1)}
+            >
+              Retry item search
+            </button>
+          )}
+          {showList && (
             <div
               id={id}
               role="listbox"

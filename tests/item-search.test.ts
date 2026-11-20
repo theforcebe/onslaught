@@ -1,6 +1,9 @@
 import { it, expect, vi, afterEach } from "vitest";
 import { serveItemSearch } from "../server/items";
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 function cache() {
   const records = new Map<string, Response>();
   return {
@@ -158,4 +161,49 @@ it("respects fallback rate-limit backoff in cached errors", async () => {
     ),
   ).toContain("max-age=180");
   expect(fetch).toHaveBeenCalledTimes(2);
+});
+it("shares concurrent normalized searches and gives nearly expired empty results only their remaining lifetime", async () => {
+  vi.useFakeTimers();
+  const start = Date.now(),
+    c = cache(),
+    rate = vi.fn(async () => {});
+  const req = (q: string) =>
+    new Request("https://gateway.example/api/items/search?q=" + q);
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(new Response(null, { status: 403 }))
+    .mockResolvedValueOnce(Response.json({ version: "forever", results: [] }))
+    .mockResolvedValueOnce(
+      Response.json({
+        results: [
+          {
+            type: 3,
+            id: 2589,
+            name: "Linen Cloth",
+            quality: 1,
+            icon: "inv_fabric",
+          },
+        ],
+      }),
+    );
+  vi.stubGlobal("fetch", fetch);
+  const [a, b] = await Promise.all([
+    serveItemSearch(req("Linen"), c, rate),
+    serveItemSearch(req("linen"), c, rate),
+  ]);
+  expect(await a.json()).toEqual(await b.json());
+  expect(rate).toHaveBeenCalledTimes(1);
+  vi.setSystemTime(start + 3599000);
+  const old = await serveItemSearch(req("linen"), c, rate);
+  expect(old.headers.get("cache-control")).toBe("public, max-age=1");
+  expect(await old.json()).toMatchObject({
+    results: [],
+    provider: "thewowdb",
+    expiresAt: start + 3600000,
+  });
+  vi.setSystemTime(start + 3600000);
+  expect(
+    await (await serveItemSearch(req("linen"), c, rate)).json(),
+  ).toMatchObject({ results: [{ id: 2589 }], provider: "wowhead" });
+  expect(rate).toHaveBeenCalledTimes(2);
 });

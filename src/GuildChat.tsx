@@ -5,7 +5,6 @@ import {
   Send,
   Users,
   LockKeyhole,
-  ChevronLeft,
   Search,
   Hash,
   Mail,
@@ -29,7 +28,12 @@ import type {
   ChatDelivery,
 } from "./lib/chat";
 import { mentionQuery, moveMentions, messageParts } from "./lib/chat-mentions";
-import { chatBell, newChatAlert } from "./lib/chat-alerts";
+import {
+  chatBell,
+  newChatAlert,
+  onChatDiscordPreference,
+  notifyChatDiscordPreference,
+} from "./lib/chat-alerts";
 
 export function GuildChat({
   identity,
@@ -192,14 +196,25 @@ export function GuildChat({
     );
     setStatus(data);
   };
+  useEffect(
+    () =>
+      onChatDiscordPreference(identity.id, (discord) => {
+        setStatus((s) => ({ ...s, discord }));
+      }),
+    [identity.id],
+  );
   const saveDiscordPreference = async (enabled: boolean) => {
+    const previous = status.discord;
+    if (!previous?.linked || savingPreferences) return;
     setSavingPreferences(true);
+    setStatus((s) => ({ ...s, discord: { ...previous, enabled } }));
     try {
       const data = await chatCall<{
         discord: { linked: boolean; enabled: boolean };
       }>("preferences", { discordDM: enabled });
-      setStatus((s) => ({ ...s, discord: data.discord }));
+      notifyChatDiscordPreference(identity.id, data.discord);
     } catch (e) {
+      setStatus((s) => ({ ...s, discord: previous }));
       fail(e);
     } finally {
       setSavingPreferences(false);
@@ -217,7 +232,9 @@ export function GuildChat({
       setDraftMentions([]);
       setBlocked(true);
       setPeer("");
-      setDirectory(false);
+      // Keep a lost private conversation out of the public composer.
+      setDirectory(Boolean(currentPeer.current));
+      setQuery("");
       setPreferences(false);
       setMentionsOnly(false);
       setDelivery(null);
@@ -387,12 +404,14 @@ export function GuildChat({
     if (
       open &&
       !directory &&
+      !preferences &&
+      !blocked &&
       !sending &&
       !mentionsOnly &&
       !window.matchMedia("(max-width: 700px)").matches
     )
       field.current?.focus();
-  }, [open, directory, peer, sending, mentionsOnly]);
+  }, [open, directory, peer, sending, mentionsOnly, preferences, blocked]);
   const choose = (id: string, showMentions = false) => {
     if (`${id}:${showMentions}` !== scope) loadedScope.current = "";
     setPeer(id);
@@ -472,7 +491,7 @@ export function GuildChat({
         ...(peer ? { peer } : {}),
       });
       if (!mounted.current) return;
-      if (currentPeer.current === selected && currentOpen.current) {
+      if (currentPeer.current === selected) {
         // Do not advance the incremental cursor: messages arriving during this send must still be fetched.
         setMessages((old) =>
           [
@@ -485,7 +504,7 @@ export function GuildChat({
         pending.current = null;
         setDelivery(result.discordDelivery || null);
         bottom.current = true;
-        field.current?.focus();
+        if (currentOpen.current) field.current?.focus();
       }
     } catch (e) {
       fail(e);
@@ -497,6 +516,15 @@ export function GuildChat({
     unread = Object.values(status.unread).reduce((a, b) => a + b, 0),
     unreadMentions = status.unreadMentions || 0;
   const privateUnread = unread - (status.unread.general || 0);
+  const directoryPeople = status.people
+    .filter((p) =>
+      p.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
+    )
+    .sort(
+      (a, b) =>
+        Number(!!status.unread[b.id]) - Number(!!status.unread[a.id]) ||
+        a.label.localeCompare(b.label),
+    );
   useEffect(() => {
     const original = document.title.replace(/^\(\d+\) /, "");
     const count = privateUnread + unreadMentions;
@@ -577,8 +605,12 @@ export function GuildChat({
         className={`chat-launcher ${open ? "is-open" : ""}`}
         onClick={() => {
           if (!open && privateUnread > 0) {
-            setDirectory(true);
-            setPreferences(false);
+            const latest = status.latestNotification;
+            const target =
+              latest?.kind === "dm"
+                ? latest.peer
+                : status.people.find((p) => status.unread[p.id])?.id;
+            if (target) choose(target);
           } else if (!open && unreadMentions > 0) choose("", true);
           setOpen(!open);
         }}
@@ -686,16 +718,27 @@ export function GuildChat({
                   disabled={!status.discord?.linked || savingPreferences}
                   onChange={(e) => void saveDiscordPreference(e.target.checked)}
                 />
-                <span>Send my private messages to Discord too</span>
+                <span>Receive private chat copies in Discord</span>
               </label>
               <small>
-                {status.discord?.linked
-                  ? "Copies the sender’s name and full message to you through the guild bot. Reply on the site; Discord replies aren’t synced."
-                  : "Link Discord in Guild coordination → Discord connection, then turn this on."}
+                {status.discord?.linked ? (
+                  "The guild bot sends you the sender’s name and full message. Reply in Ønslaught."
+                ) : (
+                  <a href="#discord" onClick={() => setOpen(false)}>
+                    Link my Discord to receive private messages
+                  </a>
+                )}
               </small>
               <button
                 className="btn secondary"
-                onClick={() => setPreferences(false)}
+                onClick={() => {
+                  setPreferences(false);
+                  messenger.current
+                    ?.querySelector<HTMLButtonElement>(
+                      ".messenger-title [aria-pressed]",
+                    )
+                    ?.focus();
+                }}
               >
                 Back to chat
               </button>
@@ -706,6 +749,7 @@ export function GuildChat({
               <div className="messenger-tabs">
                 <button
                   className={!peer && !directory ? "active" : ""}
+                  aria-pressed={!peer && !directory}
                   onClick={() => choose("")}
                 >
                   <Hash size={16} />
@@ -724,7 +768,11 @@ export function GuildChat({
                 </button>
                 <button
                   className={peer || directory ? "active" : ""}
-                  onClick={() => setDirectory((v) => !v)}
+                  aria-pressed={!!peer || directory}
+                  onClick={() => {
+                    setQuery("");
+                    setDirectory(true);
+                  }}
                 >
                   <Mail size={16} />
                   Private messages
@@ -750,28 +798,28 @@ export function GuildChat({
                     </label>
                     <p>Choose a member to start a private conversation.</p>
                     <div className="chat-people">
-                      {status.people
-                        .filter((p) =>
-                          p.label.toLowerCase().includes(query.toLowerCase()),
-                        )
-                        .map((p) => (
-                          <button key={p.id} onClick={() => choose(p.id)}>
-                            <span className="chat-avatar">
-                              {p.label.slice(0, 1)}
-                            </span>
-                            <span>
-                              <strong>{p.label}</strong>
-                              <small>{RANK_NAMES[p.role]}</small>
-                            </span>
-                            {status.unread[p.id] > 0 ? (
-                              <b>{status.unread[p.id]}</b>
-                            ) : (
-                              <LockKeyhole size={14} />
-                            )}
-                          </button>
-                        ))}
-                      {!status.people.length && (
-                        <p>No other approved members yet.</p>
+                      {directoryPeople.map((p) => (
+                        <button key={p.id} onClick={() => choose(p.id)}>
+                          <span className="chat-avatar">
+                            {p.label.slice(0, 1)}
+                          </span>
+                          <span>
+                            <strong>{p.label}</strong>
+                            <small>{RANK_NAMES[p.role]}</small>
+                          </span>
+                          {status.unread[p.id] > 0 ? (
+                            <b>{status.unread[p.id]}</b>
+                          ) : (
+                            <LockKeyhole size={14} />
+                          )}
+                        </button>
+                      ))}
+                      {!directoryPeople.length && (
+                        <p role="status">
+                          {status.people.length
+                            ? "No matching members. Try another name."
+                            : "No other approved members yet."}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -780,21 +828,10 @@ export function GuildChat({
                     <div className="chat-conversation-heading">
                       {peer ? (
                         <>
-                          <button
-                            className="icon-btn"
-                            aria-label="Choose another member"
-                            onClick={() => setDirectory(true)}
-                          >
-                            <ChevronLeft size={17} />
-                          </button>
                           <LockKeyhole size={14} />
                           <span>
                             <strong>{person?.label || "Guild member"}</strong>
-                            <small>
-                              Only the two of you can open this conversation in
-                              the app. The recipient can opt into a Discord
-                              copy.
-                            </small>
+                            <small>Private conversation · reply here.</small>
                           </span>
                         </>
                       ) : (

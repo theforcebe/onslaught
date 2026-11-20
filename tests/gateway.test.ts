@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { privateFixture } from "./access-fixture";
-import worker, { digest, cors } from "../server/worker";
+import worker, { digest, cors, readRepository } from "../server/worker";
+import { pseudonym } from "../server/battlenet-identity";
 import type { Env } from "../server/worker";
 function environment() {
   const rows = new Map<string, { payload: string; expires_at: number }>();
@@ -80,6 +81,89 @@ const post = (
     body: JSON.stringify(body),
   });
 describe("credential and OAuth boundaries", () => {
+  it("loads large guilds from the same immutable revision used for subsequent saves", async () => {
+    const { env } = environment();
+    const doc = privateFixture();
+    const template = doc.state.characters[0];
+    doc.state.characters = Array.from({ length: 18 }, (_, i) => ({
+      ...template,
+      id: "raider-" + i,
+      snapshot: { ...template.snapshot!, raw: "# gear\n".repeat(10000) },
+    }));
+    const body = JSON.stringify(doc);
+    expect(Buffer.byteLength(body)).toBeGreaterThan(1024 * 1024);
+    const blobSha = "b".repeat(40);
+    const repo = "https://api.github.com/repos/" + env.GITHUB_REPOSITORY;
+    const file = repo + "/contents/data/guild.json";
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      expect(init.redirect).toBe("manual");
+      if (url === repo) return Response.json({ private: true });
+      if (url === file + "?ref=main") {
+        expect(new Headers(init.headers).get("Accept")).toBe(
+          "application/vnd.github.object+json",
+        );
+        return Response.json({ sha: blobSha, encoding: "none", content: "" });
+      }
+      expect(url).toBe(repo + "/git/blobs/" + blobSha);
+      expect(new Headers(init.headers).get("Accept")).toBe(
+        "application/vnd.github.raw+json",
+      );
+      return new Response(body);
+    });
+    const current = await readRepository(env);
+    expect(current.sha).toBe(blobSha);
+    expect(current.url).toBe(file);
+    expect(current.document.state.characters[17].snapshot?.raw).toBe(
+      doc.state.characters[17].snapshot?.raw,
+    );
+  });
+
+  it("shows configured owners' effective Admin membership and prevents a misleading directory suspension", async () => {
+    const { env, rows } = environment();
+    const doc = privateFixture();
+    const recoveryId = await pseudonym("123", env.IDENTITY_KEY);
+    doc.members.push({
+      ...doc.members[0],
+      id: recoveryId,
+      role: "raider",
+      status: "suspended",
+    });
+    doc.members[0].role = "admin";
+    const writes = mockRepository(doc);
+    const token = "t".repeat(43);
+    rows.set("session:" + (await digest(token)), {
+      payload: JSON.stringify({
+        subject: "999",
+        id: doc.members[0].id,
+        label: "Other Admin",
+      }),
+      expires_at: Date.now() + 3600000,
+    });
+    const headers = { Authorization: "Bearer " + token };
+    const read = await worker.fetch(
+      new Request(env.PUBLIC_API_URL + "/api/state", { headers }),
+      env,
+      ctx,
+    );
+    expect(((await read.json()) as any).members[1]).toMatchObject({
+      id: recoveryId,
+      role: "admin",
+      status: "active",
+    });
+    const edit = await worker.fetch(
+      post(
+        "/api/members",
+        { id: "suspend", expectedRevision: 0, member: doc.members[1] },
+        env.APP_ORIGIN,
+        headers,
+      ),
+      env,
+      ctx,
+    );
+    expect(edit.status).toBe(409);
+    expect(await edit.text()).toContain("recovery owner");
+    expect(writes).toHaveLength(0);
+  });
   it("keeps older open guild tabs readable when characters have alternate builds", async () => {
     const doc = privateFixture();
     doc.state.characters[0].alternateBuilds = [{ spec: "Fury", role: "melee" }];

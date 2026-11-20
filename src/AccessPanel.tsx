@@ -33,11 +33,11 @@ const rankDescriptions: Record<Rank, string> = {
   guild_member: "Access you assign",
 };
 const sectionDetails: Record<Section, string> = {
-  planner: "Groups and team plans",
+  planner: "Team plans. Add Attendance for raid-night lineups.",
   gear: "Equipment, imports and notes",
   loot: "Priorities and personal requests",
   consumables: "Supplies and personal pledges",
-  attendance: "Raid notes and personal RSVPs",
+  attendance: "Other raiders’ RSVPs, raid notes and night polls",
   progress: "Encounters and strategy",
   activity: "Admin-only guild history",
   community: "Announcements and focused conversations",
@@ -50,6 +50,7 @@ function MemberEditor({
   save,
   close,
   reload,
+  editingSelf,
 }: {
   member: Member;
   current?: Member;
@@ -57,6 +58,7 @@ function MemberEditor({
   save: (member: Member) => Promise<void>;
   close: () => void;
   reload: () => void;
+  editingSelf: boolean;
 }) {
   const [draft, setDraft] = useState(member);
   const [saving, setSaving] = useState(false);
@@ -174,7 +176,15 @@ function MemberEditor({
               {error}
             </p>
           )}
-          <fieldset className="access-fieldset" disabled={saving}>
+          {editingSelf && (
+            <p className="muted">
+              Your own Admin privileges are protected in this directory.
+            </p>
+          )}
+          <fieldset
+            className="access-fieldset"
+            disabled={saving || editingSelf}
+          >
             <legend>Membership</legend>
             <div className="segmented-control status-control">
               {(
@@ -199,7 +209,10 @@ function MemberEditor({
               ))}
             </div>
           </fieldset>
-          <fieldset className="access-fieldset" disabled={saving}>
+          <fieldset
+            className="access-fieldset"
+            disabled={saving || editingSelf}
+          >
             <legend>Guild rank</legend>
             <div className="rank-options">
               {RANKS.map((rank) => {
@@ -388,6 +401,7 @@ export function AccessPanel({
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | Member["status"]>("all");
   const [editing, setEditing] = useState<Member | null>(null);
+  const [joining, setJoining] = useState(false);
   const statuses = [
     ["all", "All members"],
     ["pending", "Pending"],
@@ -413,27 +427,6 @@ export function AccessPanel({
   return (
     <div className="access-page">
       {!access.admin && (
-        <section className="panel access-intro">
-          <ShieldCheck size={26} />
-          <div>
-            <h3>Your guild access</h3>
-            <p className="muted">
-              Roster and schedule are public. Private sections and raid teams
-              are assigned to each person by an admin.
-            </p>
-            <p className="muted">
-              Once approved, every member can use Guild chat in the sidebar or
-              the chat button at the bottom-right, regardless of rank.
-            </p>
-            <p className="muted">
-              Admins have full control. Officers, Raiders, and Guild Members get
-              only their assigned access. Guild-wide records need section
-              access; team records also need the matching team.
-            </p>
-          </div>
-        </section>
-      )}
-      {!access.admin && (
         <section className="panel">
           <h3>
             {access.status === "pending"
@@ -446,7 +439,7 @@ export function AccessPanel({
           </h3>
           <p className="muted">
             {access.status === "active"
-              ? `Sections: ${access.sections.map((s) => SECTION_NAMES[s]).join(", ") || "No private sections yet"}. Team access: ${access.allTeams ? "All teams" : access.teamIds.map((id) => state.teams.find((t) => t.id === id)?.name || state.characters.find((c) => c.teamId === id)?.publicTeamName || state.events.find((e) => e.teamId === id)?.publicTeamName || "Assigned team").join(", ") || "No teams yet"}.`
+              ? `Sections: ${access.sections.map((s) => SECTION_NAMES[s]).join(", ") || "No private sections yet"}. Team access: ${access.allTeams ? "All teams" : access.teamIds.map((id) => access.teamNames?.[id] || state.teams.find((t) => t.id === id)?.name || state.characters.find((c) => c.teamId === id)?.publicTeamName || state.events.find((e) => e.teamId === id)?.publicTeamName || "Assigned team").join(", ") || "No teams yet"}.`
               : access.status === "pending"
                 ? "An admin will review your request. You can browse upcoming raids and the public roster while you wait."
                 : access.status === "suspended"
@@ -456,10 +449,35 @@ export function AccessPanel({
                     : "Sign in with Battle.net, then request membership. An admin assigns your rank and access."}
           </p>
           {identity && access.status === "unregistered" && (
-            <button className="btn primary" onClick={() => void join()}>
-              Request membership
+            <button
+              className="btn primary"
+              disabled={joining}
+              onClick={async () => {
+                setJoining(true);
+                try {
+                  await join();
+                } finally {
+                  setJoining(false);
+                }
+              }}
+            >
+              {joining ? "Sending request…" : "Request membership"}
             </button>
           )}
+        </section>
+      )}
+      {!access.admin && (
+        <section className="panel access-intro">
+          <ShieldCheck size={26} />
+          <div>
+            <h3>Your guild access</h3>
+            <p className="muted">
+              Everyone can browse the roster and schedule. Approved members can
+              use guild chat, sign up with their characters, and volunteer for
+              material requests. An Admin grants private sections and teams
+              individually.
+            </p>
+          </div>
         </section>
       )}
       {access.admin && (
@@ -562,9 +580,9 @@ export function AccessPanel({
                     key={member.id}
                     type="button"
                     className="member-directory-row"
-                    aria-label={`Manage access for ${member.label}`}
                     onClick={() => setEditing(structuredClone(member))}
                   >
+                    <span className="sr-only">Manage access for </span>
                     <span className="member-directory-person">
                       <span className={`member-emblem rank-${member.role}`}>
                         <Icon size={18} />
@@ -628,6 +646,7 @@ export function AccessPanel({
               key={JSON.stringify(editing)}
               member={editing}
               current={current}
+              editingSelf={editing.id === identity?.id}
               teams={state.teams}
               save={save}
               close={() => setEditing(null)}

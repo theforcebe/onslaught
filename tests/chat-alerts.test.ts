@@ -1,8 +1,37 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { newChatAlert, chatBell } from "../src/lib/chat-alerts";
+import {
+  newChatAlert,
+  chatBell,
+  notifyChatDiscordPreference,
+  onChatDiscordPreference,
+} from "../src/lib/chat-alerts";
 const latest = { seq: 42, peer: "bob", senderName: "Bob", kind: "dm" as const };
 afterEach(() => vi.unstubAllGlobals());
 describe("chat alerts", () => {
+  it("synchronizes the open account's Discord chat consent across views and discards stale account events", () => {
+    const connection = vi.fn(),
+      messenger = vi.fn();
+    const leave = onChatDiscordPreference("alice", connection);
+    const close = onChatDiscordPreference("alice", messenger);
+    try {
+      const enabled = { linked: true, enabled: true };
+      notifyChatDiscordPreference("bob", enabled);
+      expect(connection).not.toHaveBeenCalled();
+      notifyChatDiscordPreference("alice", enabled);
+      expect(connection).toHaveBeenCalledWith(enabled);
+      expect(messenger).toHaveBeenCalledWith(enabled);
+      close();
+      notifyChatDiscordPreference("alice", { linked: false, enabled: false });
+      expect(messenger).toHaveBeenCalledTimes(1);
+      expect(connection).toHaveBeenLastCalledWith({
+        linked: false,
+        enabled: false,
+      });
+    } finally {
+      close();
+      leave();
+    }
+  });
   it("alerts for fresh DMs in a closed or background chat, but not old unread history or repeated polls", () => {
     expect(newChatAlert(latest, 41, { peer: "bob", visible: false })).toBe(
       true,

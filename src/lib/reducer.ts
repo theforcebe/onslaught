@@ -1,6 +1,11 @@
 import { RequestSchema, StateSchema } from "./model";
 import type { Character, RaidState, Identity, ChangeRequest } from "./model";
-import { parseSimc, rejectCredentials } from "./parser";
+import {
+  importMismatch,
+  parseSimc,
+  rejectCredentials,
+  sameImportedCharacter,
+} from "./parser";
 import {
   buildKey,
   characterBuilds,
@@ -141,26 +146,10 @@ export function applyChange(
       let c = s.characters.find((c) => c.id === a.characterId);
       if (c) {
         own(c.id);
-        if (c.class !== snapshot.class)
-          throw new ChangeError("This export has a different character class.");
-        if (
-          c.snapshot &&
-          (c.snapshot.name.toLowerCase() !== snapshot.name.toLowerCase() ||
-            c.snapshot.server !== snapshot.server ||
-            c.snapshot.region !== snapshot.region)
-        )
-          throw new ChangeError(
-            "This export belongs to a different character or realm. Import it as a new character.",
-          );
+        const mismatch = importMismatch(c, snapshot);
+        if (mismatch) throw new ChangeError(mismatch);
       } else {
-        if (
-          s.characters.some(
-            (x) =>
-              x.name.toLowerCase() === snapshot.name.toLowerCase() &&
-              x.snapshot?.server === snapshot.server &&
-              x.snapshot?.region === snapshot.region,
-          )
-        )
+        if (s.characters.some((x) => sameImportedCharacter(x, snapshot)))
           throw new ChangeError(
             "This character is already on the roster. Ask an admin to assign ownership.",
           );
@@ -213,25 +202,20 @@ export function applyChange(
       if (a.team.tanks + a.team.healers > a.team.size)
         throw new ChangeError("Role targets exceed team size.");
       const members = s.characters.filter((c) => c.teamId === a.team.id);
+      const groupsFit = (groups: number[]) => {
+        const counts = new Map<number, number>();
+        return groups.every((group) => {
+          const count = (counts.get(group) || 0) + 1;
+          counts.set(group, count);
+          return count <= Math.min(5, a.team.size - (group - 1) * 5);
+        });
+      };
       if (
-        members.length > a.team.size ||
-        members.some((c) => (c.group || 1) > Math.ceil(a.team.size / 5)) ||
-        s.events
-          .filter((e) => e.teamId === a.team.id)
-          .some(
-            (e) =>
-              Object.values(e.lineup || {}).some(
-                (g) => g > Math.ceil(a.team.size / 5),
-              ) ||
-              Array.from(
-                { length: Math.ceil(a.team.size / 5) },
-                (_, i) => i + 1,
-              ).some(
-                (g) =>
-                  Object.values(e.lineup || {}).filter((x) => x === g).length >
-                  Math.min(5, a.team.size - (g - 1) * 5),
-              ),
-          )
+        !groupsFit(members.map((c) => c.group || 1)) ||
+        s.events.some(
+          (e) =>
+            e.teamId === a.team.id && !groupsFit(Object.values(e.lineup || {})),
+        )
       )
         throw new ChangeError("Move members before reducing team size.");
       update(s.teams, a.team);
@@ -257,7 +241,7 @@ export function applyChange(
       if (
         a.group > Math.ceil(team.size / 5) ||
         others.length >= team.size ||
-        others.filter((x) => x.group === a.group).length >=
+        others.filter((x) => (x.group || 1) === a.group).length >=
           Math.min(5, team.size - (a.group - 1) * 5)
       )
         throw new ChangeError("That group or team is full.");

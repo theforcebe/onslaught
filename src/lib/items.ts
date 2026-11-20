@@ -1,10 +1,11 @@
 import {
   boundedItemJSON,
-  ITEM_FRESH_MS,
+  itemFreshUntil,
   ITEM_STALE_MS,
   itemKey,
   itemParams,
   parseWowhead,
+  retryDelay,
   wowheadURL,
 } from "./item-data";
 import type { ItemResult, ItemModifiers } from "./item-data";
@@ -77,15 +78,7 @@ export async function getItem(
   } catch {
     /* optional */
   }
-  const age = Date.now() - (cached?.checkedAt || 0),
-    ttl =
-      cached?.status === "resolved"
-        ? ITEM_FRESH_MS
-        : cached?.status === "unresolved"
-          ? 300000
-          : 60000;
-  if (cached && (age < ttl || (cached.retryAt || 0) > Date.now()))
-    return cached;
+  if (cached && itemFreshUntil(cached) > Date.now()) return cached;
   let pending = inFlight.get(key);
   if (!pending) {
     pending = (async () => {
@@ -104,6 +97,9 @@ export async function getItem(
         });
         if (r.status === 404)
           result = { status: "unresolved", checkedAt: Date.now() };
+        else if (r.status === 429)
+          result.retryAt =
+            Date.now() + 1000 * retryDelay(r.headers.get("Retry-After"));
         else if (r.ok) {
           const raw = await boundedItemJSON(r);
           if (API) {
@@ -127,9 +123,13 @@ export async function getItem(
       if (
         result.status === "unavailable" &&
         cached?.status === "resolved" &&
-        age < ITEM_STALE_MS
+        Date.now() < cached.checkedAt + ITEM_STALE_MS
       ) {
-        const stale = { ...cached, stale: true, retryAt: Date.now() + 60000 };
+        const stale = {
+          ...cached,
+          stale: true,
+          retryAt: result.retryAt ?? Date.now() + 60000,
+        };
         save(key, stale);
         return stale;
       }

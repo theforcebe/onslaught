@@ -72,6 +72,7 @@ describe("alternate raid builds", () => {
     const d = fixture(),
       c = d.state.characters[0];
     const alternate = { spec: "Survival", role: "melee" as const, buffs: [] };
+    c.name = c.snapshot!.name;
     c.alternateBuilds = [alternate];
     const gear = {
       type: "character.import" as const,
@@ -389,6 +390,66 @@ describe("confirmed raid lineups", () => {
       }),
     ).toThrow("Move members");
   });
+  it("preserves standing roster positions when reducing the last group's capacity", () => {
+    const s = fixture().state;
+    s.characters = s.characters.slice(0, 4).map((c) => ({ ...c, group: 2 }));
+    expect(() =>
+      change(s, {
+        type: "team.save",
+        team: { ...s.teams[0], size: 6, tanks: 1, healers: 1 },
+      }),
+    ).toThrow("Move members");
+    expect(
+      change(s, {
+        type: "team.save",
+        team: { ...s.teams[0], size: 9, tanks: 1, healers: 1 },
+      }).teams[0].size,
+    ).toBe(9);
+  });
+  it("counts older roster members without an explicit group in the first group", () => {
+    const s = fixture().state;
+    s.characters = s.characters.slice(0, 6);
+    s.characters.forEach((c) => delete c.group);
+    delete s.characters[5].teamId;
+    expect(() =>
+      change(s, {
+        type: "team.assign",
+        characterId: s.characters[5].id,
+        teamId: s.teams[0].id,
+        group: 1,
+      }),
+    ).toThrow("full");
+    expect(
+      change(s, {
+        type: "team.assign",
+        characterId: s.characters[5].id,
+        teamId: s.teams[0].id,
+        group: 2,
+      }).characters[5].group,
+    ).toBe(2);
+  });
+  it.each([5, 6, 10, 15, 20, 25, 40])(
+    "fills a %i-player raid with complete and partial groups",
+    (size) => {
+      const s = fixture().state;
+      s.teams[0].size = size;
+      s.characters = Array.from({ length: size + 1 }, (_, i) => ({
+        ...s.characters[0],
+        id: "char-" + i,
+        group: 1,
+      }));
+      s.events[0].signups = Object.fromEntries(
+        s.characters.map((c) => [c.id, "going" as const]),
+      );
+      const lineup = change(s, { type: "event.fill", eventId: "demo-raid" })
+        .events[0].lineup!;
+      expect(Object.keys(lineup)).toHaveLength(size);
+      for (let g = 1; g <= Math.ceil(size / 5); g++)
+        expect(Object.values(lineup).filter((x) => x === g)).toHaveLength(
+          Math.min(5, size - (g - 1) * 5),
+        );
+    },
+  );
   it("enforces admin-only placement even with all relevant viewing grants", () => {
     const d = fixture();
     expect(() =>

@@ -1,5 +1,34 @@
-import { CLASSES, SLOTS, SnapshotSchema } from "./model";
-import type { Snapshot, Gear, WowClass } from "./model";
+import { CLASSES, SLOTS, SnapshotSchema, label } from "./model";
+import type { Snapshot, Gear, WowClass, Character } from "./model";
+const sameText = (a: string, b: string) =>
+  a.trim().toLowerCase() === b.trim().toLowerCase();
+export function sameImportedCharacter(
+  character: Character,
+  snapshot: Snapshot,
+) {
+  const previous = character.snapshot;
+  return (
+    previous &&
+    sameText(character.name, snapshot.name) &&
+    sameText(previous.server, snapshot.server) &&
+    sameText(previous.region, snapshot.region)
+  );
+}
+export function importMismatch(character: Character, snapshot: Snapshot) {
+  if (character.class !== snapshot.class)
+    return `You selected ${character.name} (${label(character.class)}). This export has a different character class (${label(snapshot.class)}).`;
+  const previous = character.snapshot;
+  if (
+    !sameText(character.name, snapshot.name) ||
+    (previous &&
+      (!sameText(previous.name, snapshot.name) ||
+        (previous.server && !sameText(previous.server, snapshot.server)) ||
+        (previous.region && !sameText(previous.region, snapshot.region))))
+  ) {
+    return `This export belongs to a different character or realm. You selected ${character.name}. The export is for ${snapshot.name} on ${snapshot.server || "an unspecified realm"}. Choose the matching character or import it as new.`;
+  }
+  return "";
+}
 const sensitive =
   /(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|(?:client_secret|access_token|refresh_token|password|authorization)\s*[:=]\s*\S+)/i;
 export function rejectCredentials(value: unknown) {

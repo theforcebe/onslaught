@@ -48,6 +48,8 @@ Checks:
 
 ```sh
 npm test
+npx playwright install chromium webkit
+npm run test:e2e
 npm run check:data
 npx tsc -p tsconfig.server.json
 npm run build
@@ -56,6 +58,8 @@ npm audit
 ```
 
 `npm run dev` starts at http://127.0.0.1:5173. Use **Live guild → Demo workspace** to exercise editing safely. Production uses the relative Vite base path, so project GitHub Pages URLs work without routing rewrites.
+
+The Playwright suite starts its own local app on port 5188. It runs the membership, character, raid and item journeys in desktop Chromium and iPhone-sized WebKit against fictional guild records. Each test intercepts the gateway and external requests. Linux CI installs the browser system dependencies with `npx playwright install --with-deps chromium webkit`.
 
 ## Repository layout
 
