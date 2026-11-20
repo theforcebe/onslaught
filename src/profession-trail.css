@@ -1,0 +1,223 @@
+.profession-trail {
+  --trail-line: #765966;
+  max-width: 1140px;
+  margin-inline: auto;
+  color: #f4e9e4;
+}
+.trail-release {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px;
+  padding: clamp(18px, 3vw, 34px);
+  border: 1px solid #a06466;
+  border-top: 3px solid #cf7968;
+  border-radius: 6px;
+  background: linear-gradient(110deg, #3e232a, #29202b 65%, #231c26);
+}
+.trail-map-icon {
+  align-self: start;
+  padding: 2px;
+  border: 1px solid #be956b;
+  border-radius: 5px;
+  background: #21191f;
+}
+.trail-release-title h1 {
+  font-family: "Goodmountain", Georgia, serif;
+  font-size: clamp(30px, 4vw, 48px);
+  line-height: 1.06;
+  margin: 5px 0 9px;
+  color: #fff2dc;
+}
+.trail-release-title p,
+.trail-start p,
+.trail-reference p {
+  margin: 0;
+  line-height: 1.55;
+}
+.trail-release-title p {
+  max-width: 60ch;
+  color: #ecdde0;
+}
+.trail-release-title p:first-child {
+  color: #efc3a3;
+  font-size: 0.9rem;
+}
+.trail-download {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+.trail-download a {
+  min-height: 46px;
+  text-decoration: none;
+}
+.trail-download small,
+.trail-start .trail-hint {
+  color: #d7c6cd;
+}
+.trail-start {
+  display: grid;
+  grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr);
+  border-block-end: 1px solid var(--trail-line);
+  padding: clamp(20px, 3vw, 32px) 0;
+  gap: clamp(20px, 3vw, 34px);
+}
+.trail-start section + section {
+  border-inline-start: 1px solid var(--trail-line);
+  padding-inline-start: clamp(20px, 3vw, 34px);
+}
+.profession-trail h2 {
+  font:
+    600 clamp(1.28rem, 2vw, 1.55rem)/1.2 "Barlow",
+    Tahoma,
+    sans-serif;
+  margin: 0 0 14px;
+  color: #ffeedf;
+}
+.trail-steps {
+  margin: 0;
+  padding-inline-start: 1.4em;
+}
+.trail-steps li {
+  padding-inline-start: 4px;
+  line-height: 1.55;
+}
+.trail-steps li + li {
+  margin-top: 12px;
+}
+.trail-steps li::marker {
+  color: #efb59d;
+  font-weight: 700;
+}
+.profession-trail code {
+  color: #ffdbb6;
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.trail-profession {
+  display: grid;
+  gap: 6px;
+  margin: 16px 0 8px;
+  width: fit-content;
+  max-width: 100%;
+}
+.trail-profession > span:first-child {
+  color: #e8d7df;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.trail-profession select.dropdown-trigger {
+  min-height: 44px;
+}
+.trail-command {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--trail-line);
+  border-radius: 5px;
+  padding-inline: 12px 5px;
+  background: #1c171e;
+}
+.trail-command code {
+  padding-block: 8px;
+  min-width: 0;
+}
+.trail-command button {
+  min-height: 44px;
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+}
+.trail-start .trail-hint {
+  margin-top: 10px;
+  font-size: 0.91rem;
+}
+.trail-copy-help {
+  display: block;
+  margin-top: 5px;
+}
+.trail-reference {
+  padding-block: 24px 10px;
+}
+.trail-reference details {
+  border-block-end: 1px solid var(--trail-line);
+}
+.trail-reference summary {
+  cursor: pointer;
+  padding: 13px 4px;
+  min-height: 46px;
+  font-weight: 600;
+  color: #f0d8cb;
+}
+.trail-reference summary::marker {
+  color: #e59d81;
+}
+.trail-reference p {
+  max-width: 76ch;
+  margin: 0 0 12px 1rem;
+}
+.trail-resource-fallback {
+  padding: 24px clamp(16px, 4vw, 48px);
+}
+.trail-resource-fallback > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-bottom: 10px;
+  color: #ffddbd;
+}
+@media (max-width: 1000px) {
+  .trail-release {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 12px 16px;
+  }
+  .trail-download {
+    grid-column: 2;
+    justify-items: start;
+  }
+}
+@media (max-width: 830px) {
+  .trail-start {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .trail-start section + section {
+    border-inline-start: 0;
+    padding-inline-start: 0;
+    padding-top: 18px;
+    border-top: 1px solid var(--trail-line);
+  }
+}
+@media (max-width: 500px) {
+  .trail-map-icon {
+    width: 44px;
+    height: 44px;
+  }
+  .trail-release {
+    gap: 10px;
+  }
+  .trail-release-title {
+    display: contents;
+  }
+  .trail-release-title p:first-child {
+    align-self: end;
+    font-size: 0.8rem;
+  }
+  .trail-release-title h1 {
+    grid-column: 2;
+    margin: 0;
+  }
+  .trail-map-icon {
+    grid-row: 1 / 3;
+    align-self: center;
+  }
+  .trail-release-title p:last-child,
+  .trail-download {
+    grid-column: 1 / -1;
+  }
+  .trail-download {
+    padding-top: 4px;
+  }
+}

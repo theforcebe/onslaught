@@ -56,5 +56,12 @@ export function canOpenPage(access: Access, page: string) {
   if (page === "community") return access.status === "active";
   if (privatePages[page]) return hasSection(access, privatePages[page]);
   // Roster and schedule are public; access is a personal membership screen for non-admins.
-  return ["overview", "roster", "planner", "schedule", "access"].includes(page);
+  return [
+    "overview",
+    "roster",
+    "planner",
+    "schedule",
+    "access",
+    "profession-trail",
+  ].includes(page);
 }

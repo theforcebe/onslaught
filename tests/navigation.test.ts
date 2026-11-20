@@ -40,6 +40,7 @@ describe("permission-aware navigation", () => {
         "planner",
         "schedule",
         "access",
+        "profession-trail",
       ])
         expect(canOpenPage(access, page)).toBe(true);
       for (const page of [
@@ -64,6 +65,7 @@ describe("permission-aware navigation", () => {
         sections: ["loot", "activity"],
       };
       expect(canOpenPage(access, "community")).toBe(true);
+      expect(canOpenPage(access, "profession-trail")).toBe(true);
       expect(canOpenPage(access, "loot")).toBe(true);
       for (const page of [
         "polls",
@@ -82,6 +84,7 @@ describe("permission-aware navigation", () => {
       "planner",
       "schedule",
       "access",
+      "profession-trail",
       "community",
       "polls",
       "loot",

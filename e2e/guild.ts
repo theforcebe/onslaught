@@ -82,20 +82,21 @@ export function testGuild(owned: number, approved = true) {
   const changes: RaidAction[] = [];
   const itemReads: string[] = [];
 
-  async function open(page: Page, identity: Identity, hash = "") {
-    const token = (identity.admin ? "A" : "M").repeat(43);
-    await page.addInitScript((sessionToken) => {
-      if (!sessionStorage.getItem("fixture-session-started")) {
-        sessionStorage.setItem(
-          "onslaught:session:v1",
-          JSON.stringify({
-            token: sessionToken,
-            expiresAt: Date.now() + 1200000,
-          }),
-        );
-        sessionStorage.setItem("fixture-session-started", "1");
-      }
-    }, token);
+  async function open(page: Page, identity?: Identity, hash = "") {
+    const token = (identity?.admin ? "A" : "M").repeat(43);
+    if (identity)
+      await page.addInitScript((sessionToken) => {
+        if (!sessionStorage.getItem("fixture-session-started")) {
+          sessionStorage.setItem(
+            "onslaught:session:v1",
+            JSON.stringify({
+              token: sessionToken,
+              expiresAt: Date.now() + 1200000,
+            }),
+          );
+          sessionStorage.setItem("fixture-session-started", "1");
+        }
+      }, token);
     await page.route("**/*", async (route) => {
       const request = route.request(),
         url = new URL(request.url());
@@ -131,7 +132,7 @@ export function testGuild(owned: number, approved = true) {
         });
       }
       if (path === "/api/public") return json(project(doc));
-      if (request.headers().authorization !== "Bearer " + token)
+      if (!identity || request.headers().authorization !== "Bearer " + token)
         return json({ error: "Sign in to continue." }, 401);
       try {
         switch (path) {

@@ -1,5 +1,6 @@
 import { GuildBoard } from "./GuildBoard";
 import { MembershipNotice } from "./MembershipNotice";
+import { ProfessionTrail } from "./ProfessionTrail";
 import "./mobile-roster.css";
 import { SetupGuide } from "./SetupGuide";
 import { ItemTooltip } from "./ItemTooltip";
@@ -7,6 +8,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import {
   LayoutDashboard,
+  BookOpen,
   Users,
   Swords,
   Gem,
@@ -106,6 +108,7 @@ const nav = [
   { id: "planner", name: "Raid planner", icon: Swords },
   { id: "roster", name: "Roster & gear", icon: Users },
   { id: "community", name: "Guild coordination", icon: MessageSquare },
+  { id: "profession-trail", name: "Profession Trail", icon: BookOpen },
   { id: "activity", name: "Activity", icon: History },
   { id: "access", name: "Members & access", icon: ShieldCheck },
 ];
@@ -421,6 +424,13 @@ export default function App() {
       toast((e as Error).message);
     }
   }
+  if (!state && error && page === "profession-trail")
+    return (
+      <main className="trail-resource-fallback">
+        <a href="#overview">Ønslaught overview</a>
+        <ProfessionTrail headingRef={pageHeading} />
+      </main>
+    );
   if (!state)
     return (
       <div className="loading-screen">
@@ -734,7 +744,8 @@ export default function App() {
             Award history <span>{state.loot.length - pendingLoot.length}</span>
           </button>
         </div>
-        {(pendingLoot.length > 0 || lootTab === "awarded") && addButton("loot", "Plan an item")}
+        {(pendingLoot.length > 0 || lootTab === "awarded") &&
+          addButton("loot", "Plan an item")}
       </div>
       <div className="loot-list">
         {state.loot
@@ -823,9 +834,7 @@ export default function App() {
         <Empty
           icon={<Gem size={36} />}
           title={
-            lootTab === "awarded"
-              ? "No awards yet"
-              : "No loot priorities yet"
+            lootTab === "awarded" ? "No awards yet" : "No loot priorities yet"
           }
           action={
             lootTab === "active"
@@ -1237,6 +1246,7 @@ export default function App() {
     </div>
   );
   const content: Record<string, ReactNode> = {
+    "profession-trail": <ProfessionTrail headingRef={pageHeading} />,
     community: (
       <Suspense fallback={<p className="muted">Opening guild coordination…</p>}>
         <GuildHub
@@ -1671,24 +1681,29 @@ export default function App() {
           </div>
         )}
         <main data-page={page}>
-          <div className="page-heading">
-            <div>
-              <div className="page-context">
-                <span className="realm-dot" />
-                {state.guild.realm}
+          {page !== "profession-trail" && (
+            <div className="page-heading">
+              <div>
+                <div className="page-context">
+                  <span className="realm-dot" />
+                  {state.guild.realm}
+                </div>
+                <h1 tabIndex={-1} ref={pageHeading}>
+                  {title}
+                </h1>
+                <p>{subtitle}</p>
               </div>
-              <h1 tabIndex={-1} ref={pageHeading}>
-                {title}
-              </h1>
-              <p>{subtitle}</p>
             </div>
-          </div>
-          {!demo && identity && page !== "access" && (
-            <MembershipNotice
-              status={effectiveAccess.status}
-              join={joinGuild}
-            />
           )}
+          {!demo &&
+            identity &&
+            page !== "access" &&
+            page !== "profession-trail" && (
+              <MembershipNotice
+                status={effectiveAccess.status}
+                join={joinGuild}
+              />
+            )}
           {page === "overview" &&
             !demo &&
             effectiveAccess.status === "active" &&
@@ -1710,7 +1725,7 @@ export default function App() {
                 )}
               </p>
             )}
-          {error && !demo && (
+          {error && !demo && page !== "profession-trail" && (
             <p className="notice danger" role="alert">
               {error}
             </p>
