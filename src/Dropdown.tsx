@@ -48,22 +48,46 @@ export function Dropdown({
   const choose = (index: number) => {
     if (options[index]) onChange(options[index].value);
     setOpen(false);
-    trigger.current?.focus();
+    trigger.current?.focus({ preventScroll: true });
   };
   useLayoutEffect(() => {
     if (!open || !trigger.current) return;
-    const rect = trigger.current.getBoundingClientRect();
-    const below = window.innerHeight - rect.bottom - 16;
-    const maxHeight = Math.min(320, Math.max(below, rect.top - 16));
-    const width = Math.min(Math.max(rect.width, 248), window.innerWidth - 24);
-    const height = Math.min(menu.current?.scrollHeight || 320, maxHeight);
-    setPosition({
-      top:
-        below >= height ? rect.bottom + 7 : Math.max(8, rect.top - height - 7),
-      left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)),
-      width,
-      maxHeight,
-    });
+    const anchor = trigger.current;
+    const positionMenu = (event?: Event) => {
+      if (event?.target instanceof Node && menu.current?.contains(event.target))
+        return;
+      const rect = anchor.getBoundingClientRect();
+      const viewport = window.visualViewport;
+      const top = viewport?.offsetTop ?? 0;
+      const left = viewport?.offsetLeft ?? 0;
+      const right = left + (viewport?.width ?? window.innerWidth);
+      const bottom = top + (viewport?.height ?? window.innerHeight);
+      const below = bottom - rect.bottom - 12;
+      const above = rect.top - top - 12;
+      const maxHeight = Math.max(0, Math.min(320, Math.max(below, above)));
+      const width = Math.min(Math.max(rect.width, 248), right - left - 24);
+      const height = Math.min(menu.current?.scrollHeight || 320, maxHeight);
+      setPosition({
+        top:
+          below >= height
+            ? rect.bottom + 6
+            : Math.max(top + 6, rect.top - height - 6),
+        left: Math.max(left + 12, Math.min(rect.left, right - width - 12)),
+        width,
+        maxHeight,
+      });
+    };
+    positionMenu();
+    window.addEventListener("scroll", positionMenu, true);
+    window.addEventListener("resize", positionMenu);
+    window.visualViewport?.addEventListener("resize", positionMenu);
+    window.visualViewport?.addEventListener("scroll", positionMenu);
+    return () => {
+      window.removeEventListener("scroll", positionMenu, true);
+      window.removeEventListener("resize", positionMenu);
+      window.visualViewport?.removeEventListener("resize", positionMenu);
+      window.visualViewport?.removeEventListener("scroll", positionMenu);
+    };
   }, [open]);
   useEffect(() => {
     if (!open) return;
@@ -74,24 +98,20 @@ export function Dropdown({
       )
         setOpen(false);
     };
-    const reposition = (event: Event) => {
-      if (menu.current?.contains(event.target as Node)) return;
-      setOpen(false);
-    };
     document.addEventListener("pointerdown", outside);
-    window.addEventListener("resize", reposition);
-    window.addEventListener("scroll", reposition, true);
     return () => {
       document.removeEventListener("pointerdown", outside);
-      window.removeEventListener("resize", reposition);
-      window.removeEventListener("scroll", reposition, true);
     };
   }, [open]);
   useEffect(() => {
-    if (open)
-      menu.current
-        ?.querySelector(`[data-index="${active}"]`)
-        ?.scrollIntoView({ block: "nearest" });
+    const list = menu.current;
+    const option = list?.querySelector(`[data-index="${active}"]`);
+    if (!open || !list || !option) return;
+    // Keep the active option in view without scrolling its enclosing dialog or page.
+    const item = option.getBoundingClientRect();
+    const box = list.getBoundingClientRect();
+    if (item.bottom > box.bottom) list.scrollTop += item.bottom - box.bottom;
+    else if (item.top < box.top) list.scrollTop += item.top - box.top;
   }, [active, open]);
   const keyboard = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key === "Tab") {
@@ -106,7 +126,14 @@ export function Dropdown({
     if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
       event.preventDefault();
       if (!open) {
-        show();
+        setOpen(true);
+        setActive(
+          event.key === "End"
+            ? options.length - 1
+            : event.key === "Home"
+              ? 0
+              : selectedIndex,
+        );
         return;
       }
       setActive((index) =>

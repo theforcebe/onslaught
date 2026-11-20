@@ -29,7 +29,12 @@ test("schedule, edit and export the same raid across time zones and a repeated h
   await create.getByLabel("Starts", { exact: true }).fill("2027-11-07T01:30");
   const hour = create.getByRole("combobox", { name: "Starts · repeated hour" });
   await hour.press("Enter");
+  await expect(hour).toHaveAttribute("aria-expanded", "true");
   await hour.press("End");
+  await expect(hour).toHaveAttribute("aria-activedescendant", /-1$/);
+  // A phone may scroll the modal or resize its viewport as keyboard focus settles.
+  await create.dispatchEvent("scroll");
+  await expect(hour).toHaveAttribute("aria-expanded", "true");
   await hour.press("Enter");
   await expect(hour).toContainText("Second occurrence");
   await create.getByRole("button", { name: "Schedule raid" }).press("Enter");
